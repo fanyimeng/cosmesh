@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cosmesh"
+version = "0.3.10"
+description = "Local-first documents, actions and records for people and their agents"
+requires-python = ">=3.9"
+dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<51", "pypdf==6.21.4"]
+
+[project.scripts]
+cosmesh = "cosmesh.cli:main"
+cosbase = "cosmesh.cli:base_main"
+
+[tool.setuptools.packages.find]
+include = ["cosmesh*"]
+
+[tool.setuptools.package-data]
+cosmesh = ["skills/*/SKILL.md", "manual/*.md", "resources/*.sh", "resources/*.py"]
