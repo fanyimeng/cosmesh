@@ -107,3 +107,8 @@ DSH 共用两份 Skill 和现有工作台。按用户授权推荐完全访问，
 `profile import --file cv.pdf --dry-run --json` previews local CV/intro fields; a personal Agent can propose unstructured fields with `--fields-file`. Save confirmed changes with the existing `profile set --expect`. `profile init --interactive` offers terminal questions and a final preview/confirmation. Read `guide show onboarding` for both installation paths and identity setup.
 
 已安装用户可以生成一段安装 prompt 转发给朋友，区分有账号接入 Mesh、无账号先用私人 Base。CV/简介导入先预览确认；问答填写可跳过后补。原件和私人 Profile 保持本地。
+
+
+Prepared local pages (`thread page --ready --json`) provide a single overview table, saved short names and introductions, progress and private agent-project/workspace associations. `--continue ID_OR_NAME` appends selected status in the same call. Markdown/SQLite derivatives are rebuildable; source records and privacy boundaries remain authoritative. Fast mode is on by default; `client mode normal` turns it off, `client mode fast` restores it. Per-call `--no-fast`/`--fast` does not change the saved preference.
+
+`thread create --title TEXT --english TEXT --chinese TEXT --intro TEXT` saves names with the new work; `thread name ID` updates them through ordinary creator-authored records. Old aliases remain searchable, names can be ambiguous and IDs stay stable. Existing work is not renamed in bulk. `thread bind-project` stores private Codex/DSH/OpenCode project or workspace links independently of sessions; `--kind directory` explicitly represents a directory workspace when no native project exists. Explicit project onboarding directly creates or reuses suitable private work; sharing still follows the user's authorization.

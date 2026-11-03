@@ -116,10 +116,18 @@ class Workbench:
                 self._incoming.setdefault((ref['repo'], ref['id']), []).append((item, relation, ref))
         for items in self._records.values():
             items.sort(key=lambda x: (x['doc']['meta']['created_at'], x['doc']['meta']['id']))
+        from .thread_names import rebuild
+        rebuild(self)
 
     def find(self, value, kind=None):
-        matches = [x for key, x in self.catalog.items() if (key == value or key.startswith(value) or x['doc']['meta'].get('title') == value)
-                   and (kind is None or x['doc']['meta']['kind'] == kind)]
+        allowed=[x for x in self.catalog.values() if kind is None or x['doc']['meta']['kind']==kind]
+        matches=[x for x in allowed if x['doc']['meta']['id']==value]
+        if not matches:matches=[x for x in allowed if x['doc']['meta']['id'].startswith(value)]
+        if not matches:
+            from .thread_names import normalized
+            ids=getattr(self,'_name_index',{}).get(normalized(value),set())
+            matches=[x for x in allowed if x['doc']['meta']['id'] in ids]
+        if not matches:matches=[x for x in allowed if x['doc']['meta']['title']==value]
         if len(matches) != 1:
             raise Error('NOT_FOUND' if not matches else 'AMBIGUOUS_ID', 'Choose one work or record ID.',
                         ', '.join(x['doc']['meta']['id'] for x in matches))
@@ -240,13 +248,20 @@ class Workbench:
         with store.locked():
             return apply()
 
-    def create(self, title, body='', key=None, dry_run=False):
+    def create(self, title, body='', key=None, dry_run=False, naming=None):
         def build():
             doc = {'meta': {'schema_version': 2, 'kind': 'thread', 'id': new_id('thread'),
                            'author': self.config['user'], 'created_at': now(), 'title': title}, 'body': body}
             if getattr(self,'generation',None):doc['meta']['generation']=self.generation
-            return {'documents/' + doc['meta']['id'] + '.md': encode(doc)}, public(doc)
-        return self._commit(self.base, 'create', {'title': title, 'body': body}, build, key, dry_run)
+            changes={'documents/' + doc['meta']['id'] + '.md': encode(doc)};result=public(doc)
+            if naming is not None:
+                from .thread_names import record
+                names=record(self,doc,naming);changes['documents/'+names['meta']['id']+'.md']=encode(names)
+                result['naming_record']=names['meta']['id']
+            return changes,result
+        payload={'title':title,'body':body}
+        if naming is not None:payload['naming']=naming
+        return self._commit(self.base, 'create', payload, build, key, dry_run)
 
     def append(self, value, body='', record_type='note', refs=None, request=None, work=None,
                recipient=None, supersedes=None, complete=True, state=None, key=None, dry_run=False, agent=None,lifecycle=None):
@@ -290,6 +305,9 @@ class Workbench:
                     last = previous[last]
                 meta['previous'] = last
             doc = {'meta': meta, 'body': body}
+            if record_type=='summary':
+                from .thread_names import parse
+                if parse(doc) is not None:meta['title']='工作名称登记'
             if parent['repo'] != 'local' and any(r['repo'] == 'local' for r in references(meta)):
                 raise Error('PRIVATE_REFERENCE', 'Shared records can cite only shared sources. Share the source Thread explicitly first.')
             check_record(doc, parent['doc'], self.resolve)
@@ -309,7 +327,13 @@ class Workbench:
                 doc['meta']['title'] = title
             if body is not None:
                 doc['body'] = body
-            return {'documents/' + doc['meta']['id'] + '.md': encode(doc)}, public(doc)
+            changes={'documents/' + doc['meta']['id'] + '.md': encode(doc)}
+            if title is not None and title!=item['doc']['meta']['title']:
+                from .thread_names import view,record
+                old=view(self,doc['meta']['id']);values={k:old[k] for k in ('english','chinese','intro')}
+                values['aliases']=[item['doc']['meta']['title']]
+                name=record(self,doc,values,old['heads']);changes['documents/'+name['meta']['id']+'.md']=encode(name)
+            return changes, public(doc)
         return self._commit(item['store'], 'edit', {'id': item['doc']['meta']['id'], 'expect': expect, 'title': title, 'body': body}, build, key, dry_run)
 
     def cache(self, config, space, refresh=True, remote_hint=None):
@@ -531,6 +555,7 @@ class Workbench:
         if item['doc']['meta']['kind'] == 'thread':
             state = thread_state([x['doc']['meta'] for x in self.records(item['doc']['meta']['id'])])
             extra = {key: state[key] for key in ('work_state', 'lifecycle', 'merged_into')}
+            extra['naming'] = self._thread_names[item['doc']['meta']['id']]
         from .knowledge import Knowledge
         users=Knowledge(self).data['users']
         author=next((x for x in users if x['account']==item['doc']['meta']['author']),None)

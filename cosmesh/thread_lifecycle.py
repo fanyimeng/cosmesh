@@ -145,16 +145,21 @@ def continuation(wb, value):
     return packet
 
 
-def locate(wb, workdir=None, session_id=None, host=None):
+def locate(wb, workdir=None, session_id=None, host=None, agent=None, project_id=None, project_name=None):
     """Suggest existing work from private mappings; the Agent decides semantic fit."""
     host = host or socket.gethostname()
     path = str(Path(workdir).expanduser().absolute()) if workdir else None
     found = {}
-    for binding in wb.client['bindings']:
+    from .agent_projects import active,agent_name
+    projects=[p for item in wb.catalog.values() if item['doc']['meta']['kind']=='thread' for p in active(wb,item['doc']['meta']['id'])]
+    for binding in [*projects,*wb.client['bindings']]:
         if binding['host'] != host:continue
+        if agent and agent_name(binding['agent'])!=agent_name(agent):continue
+        by_project=bool('name' in binding and ((project_id and binding.get('project_id')==project_id) or
+                        (not project_id and project_name and binding['name']==project_name)))
         by_session = bool(session_id and binding.get('session_id') == session_id)
-        by_directory = bool(path and binding['workdir'] == path)
-        if not (by_session or by_directory):continue
+        by_directory = bool(path and binding.get('workdir') == path)
+        if not (by_project or by_session or by_directory):continue
         item = wb.find(binding['thread'], 'thread')
         trail, seen = [], set()
         while state(wb, item)['merged_into']:
@@ -163,10 +168,11 @@ def locate(wb, workdir=None, session_id=None, host=None):
             item = wb.find(state(wb, item)['merged_into']['id'], 'thread')
         shown = wb.present(item)
         if shown['lifecycle'] in {'trash', 'withdrawn'}:continue
-        result = found.setdefault(shown['id'], {'thread': shown, 'bindings': [], 'continued_from': [], 'session_match': False})
+        result = found.setdefault(shown['id'], {'thread': shown, 'bindings': [], 'continued_from': [], 'session_match': False,'project_match':False})
+        result['project_match'] |= by_project
         result['session_match'] |= by_session
         result['bindings'].append(binding)
         for ref in trail:
             if ref not in result['continued_from']:result['continued_from'].append(ref)
-    candidates = sorted(found.values(), key=lambda x:(not x['session_match'], x['thread']['lifecycle']!='active', x['thread']['id']))
-    return {'private': True, 'candidates': candidates, 'basis': 'local_session_and_directory_bindings'}
+    candidates = sorted(found.values(), key=lambda x:(not x['project_match'],not x['session_match'], x['thread']['lifecycle']!='active', x['thread']['id']))
+    return {'private': True, 'candidates': candidates, 'basis': 'local_project_session_and_directory_bindings'}

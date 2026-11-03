@@ -79,7 +79,8 @@ def with_continuation(wb, view, value, mine=False):
     pool = [item for item in wb.catalog.values() if item['doc']['meta']['kind'] == 'thread' and
             (view['scope'] != 'base' or item['repo'] == 'local') and
             (not mine or item['doc']['meta']['author'] == (wb.config['user'] if item['repo'] == 'local' else wb.user))]
-    matches = [item for item in pool if item['doc']['meta']['id'].startswith(value) or item['doc']['meta']['title'] == value]
+    from .thread_names import matches as alias_match
+    matches = [item for item in pool if item['doc']['meta']['id'].startswith(value) or alias_match(wb,item,value)]
     if len(matches) != 1:
         raise Error('NOT_FOUND' if not matches else 'AMBIGUOUS_ID', 'Choose one visible Thread ID.',
                     ', '.join(item['doc']['meta']['id'] for item in matches))
@@ -219,24 +220,26 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
             (scope != 'base' or item['repo'] == 'local') and (scope != 'mesh' or item['repo'] != 'local') and
             (not mine or item['doc']['meta']['author'] == (wb.config['user'] if item['repo'] == 'local' else wb.user))]
     if value:
-        pool = [item for item in pool if item['doc']['meta']['id'].startswith(value) or item['doc']['meta']['title'] == value]
+        from .thread_names import matches as alias_match
+        pool = [item for item in pool if item['doc']['meta']['id'].startswith(value) or alias_match(wb,item,value)]
         if len(pool) != 1:
             raise Error('NOT_FOUND' if not pool else 'AMBIGUOUS_ID', 'Choose one visible Thread ID.',
                         ', '.join(item['doc']['meta']['id'] for item in pool))
     for item in pool:
         meta = item['doc']['meta']
-        if query and query.casefold() not in (meta['title'] + '\n' + item['doc']['body']).casefold():
+        if query and query.casefold() not in (meta['title'] + '\n' + item['doc']['body']+'\n'+'\n'.join(wb._thread_names[meta['id']]['aliases'])).casefold():
             continue
         shown = wb.present(item)
         if lifecycle != 'all' and shown['lifecycle'] != lifecycle:
             continue
         records = wb.records(meta['id'])
-        latest = sorted(records, key=lambda r: (r['doc']['meta']['created_at'], r['doc']['meta']['id']), reverse=True)
+        from .thread_names import parse as naming_card
+        latest = sorted([r for r in records if naming_card(r['doc']) is None], key=lambda r: (r['doc']['meta']['created_at'], r['doc']['meta']['id']), reverse=True)
         if compact:
             # Select before rendering: unshown rows need no source acceptance or excerpt work.
             selected.append((item, shown, latest))
             continue
-        row = {key: shown[key] for key in ('id', 'title', 'author', 'created_at', 'work_state', 'lifecycle', 'source', 'accepted')}
+        row = {key: shown[key] for key in ('id', 'title', 'author', 'created_at', 'work_state', 'lifecycle', 'source', 'accepted','naming')}
         if 'author_name' in shown:
             row['author_name'] = shown['author_name']
         row.update(scope='mesh' if item['repo'] != 'local' else 'base', purpose=excerpt(shown['body']),
@@ -261,7 +264,7 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
         rows = []
         for item, shown, latest in selected[:limit]:
             recent = next((r for r in latest if r['doc']['body'].strip()), None)
-            row = {key: shown[key] for key in ('id', 'title', 'author', 'work_state', 'lifecycle', 'accepted')}
+            row = {key: shown[key] for key in ('id', 'title', 'author', 'work_state', 'lifecycle', 'accepted','naming')}
             if 'author_name' in shown: row['author_name'] = shown['author_name']
             row.update(scope='mesh' if item['repo'] != 'local' else 'base', source=source(shown['source']),
                        purpose=excerpt(shown['body'], 100), progress={'record_count': len(latest), 'recent': []})
@@ -274,6 +277,8 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
                      if r['doc']['meta'].get('generation', {}).get('tool')}
             if tools: row['generation_tools'] = sorted(tools)
             if scope != 'mesh':
+                from .agent_projects import active
+                row['projects'] = active(wb,shown['id'])
                 entries = [(*execution(b), index) for index, b in enumerate(bindings.get(shown['id'], []))]
                 entries.sort(key=lambda entry: (entry[1], entry[2]), reverse=True)
                 if not entries:
@@ -311,6 +316,8 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
     rows = [row for row, _ in selected[:limit]]
     if scope != 'mesh':
         for row in rows:
+            from .agent_projects import active
+            row['projects'] = active(wb,row['id'])
             entries = [(*execution(b), index) for index, b in enumerate(bindings.get(row['id'], []))]
             entries.sort(key=lambda entry: (entry[1], entry[2]), reverse=True)
             row['execution'] = {'preferred': entries[0][0] if entries else None,

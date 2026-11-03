@@ -179,6 +179,7 @@ class Search:
             parent, state = self.parent(item)
             if not include_inactive and state['lifecycle'] in {'trash','withdrawn','merged'}: continue
             fields=[('title',meta['title'],8),('body',doc['body'],4)]
+            fields.append(('names','\n'.join(self.wb._thread_names[parent['doc']['meta']['id']]['aliases']),8))
             person=self.person(meta['author'],repo)
             fields.append(('author',meta['author']+' '+(person['name'] or ''),6))
             if meta.get('to'):

@@ -60,6 +60,9 @@ def parser(product):
         ("--offline", {"action": "store_true"}),
     ):
         common.add_argument(name, default=argparse.SUPPRESS, **options)
+    speed = common.add_mutually_exclusive_group()
+    speed.add_argument('--fast', dest='fast_override', action='store_true', default=argparse.SUPPRESS)
+    speed.add_argument('--no-fast', dest='fast_override', action='store_false', default=argparse.SUPPRESS)
     root = Parser(prog=product, description="CosMesh / CosBase document client and controlled SSH Hub", parents=[common])
     version_label = __version__ + (" (development)" if installation()["mode"] == "development" else "")
     root.add_argument("--version", action="version", version=version_label)
@@ -170,6 +173,8 @@ def parser(product):
     clients = command(commands, 'client').add_subparsers(dest='client_command', required=True)
     command(clients, 'check', 'client.check')
     command(clients, 'update', 'client.update')
+    mode = command(clients, 'mode', 'client.mode')
+    mode.add_argument('mode', nargs='?', choices=('fast','normal'))
     invitations = command(commands, 'invite').add_subparsers(dest='invite_command', required=True)
     ip = command(invitations, 'prompt', 'invite.prompt')
     ip.add_argument('--mode', choices=('server', 'github'), required=True)
@@ -325,6 +330,9 @@ def capabilities(product):
                          "thread_split_merge": True, "thread_recycle_bin": True, "thread_withdrawal": True,
                          "thread_session_lookup": True, "thread_overview": True, "compact_thread_overview": True,
                          "combined_thread_continuation": True,
+                         "status_pages": True, "status_page_cache": "markdown_sqlite",
+                         "ready_status_pages": True,
+                         "fast_mode": True, "agent_project_bindings": True,
                          "private_session_bindings": True, "maintenance_requests": True,
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,
@@ -418,6 +426,9 @@ def execute(args, product):
         return run(args.space_command, root_for(product, getattr(args, 'root', None)),
                    args.ssh, args.service, getattr(args, 'user', None)), None
     if action.startswith('client.'):
+        if action == 'client.mode':
+            from .preferences import mode
+            return mode(args.mode, getattr(args, 'dry_run', False)), None
         from . import client
         if getattr(args, 'dry_run', False) or getattr(args, 'offline', False):
             raise Error('INPUT_INVALID', 'Client check/update explicitly contacts the release server.')
@@ -697,6 +708,10 @@ def main(argv=None, product="cosmesh"):
                 print("[COSMESH:%s] %s" % (getattr(exc, "code", "HUB_VALIDATION_FAILED"), str(exc)), file=sys.stderr)
                 return 1
         data, revision = execute(args, product)
+        if args.action in {'library.add','library.revise','library.sync','library.transfer','library.reindex','user.set_name','user.manage'}:
+            from .status_pages import schedule
+            from .threads import Workbench, workspace_root
+            schedule(Workbench(workspace_root(getattr(args, 'root', None))))
     except Error as exc:
         error = exc.as_dict()
     except (OSError, UnicodeError, ValueError) as exc:
@@ -725,7 +740,7 @@ def main(argv=None, product="cosmesh"):
         except (Error, OSError, ValueError):
             pass
     client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.'))
-    if 'args' in locals() and args.action == 'thread.overview' and args.scope == 'mesh':
+    if 'args' in locals() and args.action in {'thread.overview', 'thread.page'} and args.scope == 'mesh':
         # The shared envelope must not reveal private workbench roots, counts or bindings, including on errors.
         sync_state = {"state": sync_state.get('state', 'local_only'),
                       "identity_verified": sync_state.get('identity_verified', False)}
@@ -745,8 +760,19 @@ def main(argv=None, product="cosmesh"):
               "sync": None if profile_action or guide_action or client_action else sync_state,
               "warnings": [] if profile_action or guide_action or client_action or sync_state["identity_verified"] else ["Local source has not been verified as accepted by the configured Hub."],
               "error": error}
+    # A single flag rides on the existing receipt; there is no mode preflight.
+    try:
+        from .preferences import read
+        override = getattr(args, 'fast_override', None) if 'args' in locals() else None
+        result['fast_mode'] = read()['fast_mode'] if override is None else override
+    except (Error, OSError, ValueError):
+        result['fast_mode'] = True
+        result['warnings'].append('Interaction preference unavailable; using the default fast mode for this call.')
     if error is None and args.action == 'invite.prompt' and not machine:
         print(data['prompt'], end='')
+        return 0
+    if error is None and args.action == 'thread.page' and (args.markdown or args.ready) and not machine:
+        print(data['document'] if args.ready else data['markdown'], end='')
         return 0
     print(json.dumps(result, ensure_ascii=False, indent=None if machine else 2))
     if error:

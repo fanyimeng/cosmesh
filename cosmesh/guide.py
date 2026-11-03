@@ -7,6 +7,7 @@ from . import __version__
 from .errors import Error
 
 TOPICS = {
+    'pages':'Thread 与用户分级状态页、整体介绍、MD/SQLite 成品与局部更新',
     'onboarding':'生成可转发安装 prompt、两条冷启动路径与身份填写',
     'dsh':'DeepSeek Harness 安装、完全访问与工作续接',
     'search':'个人 Agent 展开搜索、统一检索、回链与原文核验',

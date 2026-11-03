@@ -14,7 +14,9 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 可以做什么
 
-- 跨 Agent 会话和工作目录续接已有 Thread。
+- 默认快速模式：直接读取分级状态页与总览，按需展开原文。
+- 用中英文短名查工作，改名后旧名仍可检索。
+- 将 Thread 关联 Codex、DSH、OpenCode 的项目／工作区，跨会话继续。
 - 分裂、合并工作，保留原作者、记录和来源。
 - 发出请求、交付结果，沿引用核验依据。
 - 统一搜索工作、记录、知识资料及旧版工作库。
@@ -23,7 +25,7 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 本地试用
 
-当前版本 **0.3.20**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前版本 **0.3.22**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git

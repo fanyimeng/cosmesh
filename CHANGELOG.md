@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.22
+
+- Default to switchable fast interaction, preserving private preferences across upgrades.
+- Bind Threads directly to agent projects/workspaces across Codex, DSH and OpenCode; show association status in one overview table.
+- Save bilingual short names and introductions as ordinary authored records, retaining historical aliases and stable IDs.
+- Treat explicit project onboarding as authorization to create or reuse a private Thread; clarify only material ambiguity.
+
+- Return ready-to-display status documents with a compact, deduplicated source index; retain full structured pages for detailed reads.
+- Reuse prepared overviews and append only the selected work's additional status, keeping overall introductions and privacy markers.
+- Make both Skills present existing documents directly and reuse current evidence and successful receipts when sufficient.
+
+## 0.3.21 (development candidate)
+
+- Prepare Thread and user status pages with an overall introduction at every level, status summaries and paginated source indexes.
+- Read local Markdown/SQLite products first; coalesce changes into bounded background updates without a model or network polling.
+- Preserve source records, authors, corrections and private execution boundaries; retain the existing detailed read interfaces.
+
 ## 0.3.20
 
 - Combine a compact private overview and an explicitly selected Thread continuation in one local read.

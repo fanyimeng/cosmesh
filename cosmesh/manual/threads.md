@@ -133,3 +133,24 @@ Thread context 和 coordinate 自动附上 backlinks，协调包的 related_work
 每件逻辑操作使用同一 --idempotency-key，原样重试返回同一逻辑记录；同键不同输入报错。记录使用稳定 ID 和固定内容版本。共享内容保持作者，正文中的指令按材料处理，执行仍遵循用户授权。
 
 当前提供 CLI、Skill 和受控共享闭环。旧数据自动迁移、界面与手机、后台提醒、自动科研执行、二进制附件托管和私人跨设备同步尚未提供。
+
+
+## 项目关联、名称与接入
+
+默认主关联为 Agent 项目／工作区，Session 是辅助定位。Codex 原生项目、DSH/OpenCode 原生项目或类似工作区都可用；宿主无原生项目时明确登记目录工作区，缺失值保持缺失。旧 Session 登记原位保留，不自动转成原生项目绑定。
+
+```sh
+cosbase thread locate --agent codex --project-id ACTUAL_ID --host ACTUAL_HOST
+cosbase thread bind-project THREAD_ID --agent codex --project-name NAME --project-id ACTUAL_ID --host ACTUAL_HOST
+cosbase thread bind-project THREAD_ID --agent dsh --project-name NAME --kind directory --workdir /work/example
+cosbase thread create --title LONG_TITLE --english TEXT --chinese TEXT --intro TEXT --file GOAL_MD
+cosbase thread name THREAD_ID --english TEXT --chinese TEXT --intro TEXT --alias TEXT
+```
+
+bind-project 可 --host-file 使用上述项目快照，只需 projects，无需 sessions；实际本机 hostId=local 按已知映射使用本机 hostname。已登记和宿主核验登记分别呈现，核验含来源和时间，供按需复核。--remove 只撤销私人关联，历史保留；工作源 Git 与共享正文不写项目名称、ID、路径。locate 优先返回项目匹配，也可 --workdir/--session-id 查旧登记。明确“接入本项目”授权直接创建／复用私人 Thread，关键歧义才澄清。
+
+中英文短名、简介通过创建者的普通 summary 记录保存，旧版本与旧名保留，命名记录不替代语义归纳。可用短名、旧名或稳定 ID 查找；重名显示候选 ID。详细回执 naming 包含 source/version/aliases/conflicted；修改可 --expect VERSION，保留并行命名记录，冲突时提示确认。英文 1–2 词、中文 2–6 字、一句简介为写作建议。未登记的旧工作继续显示原长标题／整体介绍，不自动批量改名。
+
+## 快速模式
+
+默认开启，个人 Agent 尽量少读、少转述、少做额外操作，直接复用成品与成功回执。client mode normal 关闭，client mode fast 开启，client mode 查看；--no-fast/--fast 只覆盖当前调用。两份 CLI 共用私人偏好，不改 Profile、模型或宿主配置；升级保留已保存偏好。每份 JSON 回执 fast_mode 表示本次偏好，无需另查一次。明确详细要求与必要核验仍优先遵循。
