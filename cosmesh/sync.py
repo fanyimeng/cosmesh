@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -109,7 +110,7 @@ def system_ssh(host):
 
 def system_command(config, operation):
     arguments = shlex.join(['_remote', '--service', config['discovery'], '--repo', config['repo'], '--operation', operation])
-    return 'exec "$HOME/.local/opt/cosmesh/bin/cosmesh" ' + arguments
+    return 'exec python3 -I -B "$HOME/.local/opt/cosmesh/manager.py" launch cosmesh ' + arguments
 
 
 @networked
@@ -140,15 +141,20 @@ def clone(root, product, config, publish=True, remote_hint=None):
         raise Error("PRODUCT_MISMATCH", "Hub and client products differ.")
     if not status["revision"]:
         raise Error("REMOTE_EMPTY", "Initialize and push the first store before cloning.")
-    root.mkdir(parents=True, mode=0o700)
+    root.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.TemporaryDirectory(prefix='.' + root.name + '-clone-', dir=str(root.parent)) as staging:
+        store = Store(Path(staging))
+        store.git("init", "-q")
+        store.git("symbolic-ref", "HEAD", "refs/heads/main")
+        store.git("fetch", "--no-tags", url(config), "refs/heads/main", extra_env=git_transport(config))
+        fetched = store.git('rev-parse', 'FETCH_HEAD')
+        view(store, store.snapshot(fetched)[1], product)
+        store.git("merge", "--ff-only", "FETCH_HEAD")
+        store.save_client({"user": status["actor"], "remote": config, 'remote_revision': fetched})
+        if root.exists():
+            raise Error('STORE_EXISTS', 'Clone destination appeared while fetching; existing material is preserved.')
+        store.root.rename(root)
     store = Store(root)
-    store.git("init", "-q")
-    store.git("symbolic-ref", "HEAD", "refs/heads/main")
-    store.git("fetch", "--no-tags", url(config), "refs/heads/main", extra_env=git_transport(config))
-    fetched = store.git('rev-parse', 'FETCH_HEAD')
-    view(store, store.snapshot(fetched)[1], product)
-    store.git("merge", "--ff-only", "FETCH_HEAD")
-    store.save_client({"user": status["actor"], "remote": config, 'remote_revision': fetched})
     return synchronize(store, product, publish=publish, remote_hint={**status, 'revision': fetched})
 
 

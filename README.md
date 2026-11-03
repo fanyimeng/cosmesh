@@ -23,7 +23,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release **0.3.12**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release **0.3.13**. Requires Python 3.9+ and Git; targets macOS and Linux.
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git

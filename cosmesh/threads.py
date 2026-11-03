@@ -326,6 +326,15 @@ class Workbench:
                 sync.synchronize(store, 'cosmesh', publish=False, remote_hint=status)
         else:
             store.root.parent.mkdir(parents=True, exist_ok=True)
+            # Older failed clones left an unborn Git directory. Preserve it before retrying.
+            if (store.root.is_dir() and not store.root.is_symlink() and store.root.stat().st_uid == os.geteuid()
+                    and {p.name for p in store.root.iterdir()} == {'.git'}
+                    and not store.path('.git').is_symlink()
+                    and store.git('rev-parse', '--verify', 'HEAD', check=False).returncode != 0):
+                preserved = store.root.with_name(repo + '.interrupted-' + uuid4().hex)
+                store.root.rename(preserved)
+                self.client['preserved_clone'] = {'repo':repo, 'path':str(preserved)}
+                self.save_client()
             sync.clone(store.root, 'cosmesh', remote, publish=False, remote_hint=status)
         self.client['spaces'][repo] = {'owner': space['owner']}
         self.save_client()

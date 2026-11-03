@@ -445,10 +445,11 @@ def launch(prefix, name, arguments):
             return 2
     with locked(prefix, wait_seconds=3):
         state = load_state(prefix, required=True)
-        executable = prefix / "versions" / state["current"] / "runtime/bin" / name
+        executable = prefix / "versions" / state["current"] / "runtime/bin/python"
     env = clean_env()
     env["COSMESH_INSTALL_PREFIX"] = str(prefix)
-    os.execve(str(executable), [str(executable), *arguments], env)
+    code = 'from cosmesh.cli import main; raise SystemExit(main(product=%r))' % name
+    os.execve(str(executable), [str(executable), '-I', '-c', code, *arguments], env)
 
 
 def emit(data, error, machine):

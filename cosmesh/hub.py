@@ -30,6 +30,14 @@ def actor():
     return pwd.getpwuid(os.getuid()).pw_name
 
 
+def receive_hook(entrypoint, hub_root, name):
+    entrypoint = Path(entrypoint)
+    manager = entrypoint.parent.parent / 'manager.py'
+    launcher = (['python3', '-I', '-B', str(manager), 'launch', entrypoint.name]
+                if entrypoint.name in {'cosmesh', 'cosbase'} and manager.is_file() else [str(entrypoint)])
+    return '#!/bin/sh\nexec ' + shlex.join(launcher + ['hub', 'validate', '--hub-root', str(hub_root), '--repo', name]) + '\n'
+
+
 def git_env():
     retained = {key: os.environ[key] for key in (
         "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_QUARANTINE_PATH") if key in os.environ}
@@ -338,8 +346,7 @@ class Hub:
             store.git("config", "receive.denyNonFastForwards", "true")
             store.git("config", "receive.denyDeletes", "true")
             # A fixed entrypoint never interpolates client-provided shell fragments.
-            hook = "#!/bin/sh\nexec %s hub validate --hub-root %s --repo %s\n" % (
-                shlex.quote(str(entrypoint)), shlex.quote(str(self.root)), shlex.quote(name))
+            hook = receive_hook(entrypoint, self.root, name)
             atomic(store.root / "hooks/pre-receive", hook)
             os.chmod(store.root / "hooks/pre-receive", 0o700)
             policies[name] = {"product": product, "owner": owner, "readers": [owner], "writers": [owner]}

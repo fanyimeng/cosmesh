@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.13
+
+- Launch remote Git transport, managed commands and receive hooks through Python to avoid shared-home script execution failures.
+- Prepare clones in temporary directories, and preserve older interrupted Mesh clones before retrying.
+- Verify upgrading the previous local-first client against the live shared-home deployment.
+
 ## 0.3.12
 
 - Publish the Thread-based CosMesh / CosBase release for macOS and Linux.
