@@ -99,3 +99,11 @@ For a portable installer hosted outside the default deployment root, pass `--sou
 Install the same two Skills with `cosmesh skills install --agent dsh --only both --json`. Use `cosmesh doctor --agent dsh --json` and `cosmesh guide show dsh --json` for diagnostics and guidance. With user authorization, Full access lets DSH use the same private workbench across project directories; it relaxes the session file-write sandbox while Base/Mesh sharing rules remain in effect.
 
 DSH 共用两份 Skill 和现有工作台。按用户授权推荐完全访问，使不同项目目录能使用同一份个人工作资料；该模式放开会话文件写限制，Base 默认私有、Mesh 明确分享的规则继续保留。
+
+## Help a friend install / 给朋友安装
+
+`cosbase invite prompt --mode server --agent dsh` generates a copyable installation prompt from public Hub entry fields. The recipient uses their own SSH account. `--mode github` instead installs a fixed source tag through the existing package builder and installer, starting with private Base. Neither mode exports the inviter's Profile or credentials.
+
+`profile import --file cv.pdf --dry-run --json` previews local CV/intro fields; a personal Agent can propose unstructured fields with `--fields-file`. Save confirmed changes with the existing `profile set --expect`. `profile init --interactive` offers terminal questions and a final preview/confirmation. Read `guide show onboarding` for both installation paths and identity setup.
+
+已安装用户可以生成一段安装 prompt 转发给朋友，区分有账号接入 Mesh、无账号先用私人 Base。CV/简介导入先预览确认；问答填写可跳过后补。原件和私人 Profile 保持本地。

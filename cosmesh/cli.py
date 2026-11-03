@@ -135,7 +135,15 @@ def parser(product):
             fb.add_argument('--mine', action='store_true'); fb.add_argument('--limit', type=int, default=50)
     profiles = command(commands, 'profile').add_subparsers(dest='profile_command', required=True)
     command(profiles, 'show', 'profile.show')
-    command(profiles, 'init', 'profile.init')
+    pi = command(profiles, 'init', 'profile.init')
+    pi.add_argument('--interactive', action='store_true')
+    pi.add_argument('--encrypt-contact', action='store_true')
+    pi.add_argument('--key-fd', type=int)
+    imp = command(profiles, 'import', 'profile.import')
+    imp.add_argument('--file', required=True)
+    imp.add_argument('--fields-file', help='Agent-proposed Profile JSON; - reads stdin. Always preview only.')
+    imp.add_argument('--offset', type=int, default=0)
+    imp.add_argument('--chars', type=int, default=12000)
     personal = command(profiles, 'set', 'profile.set')
     personal.add_argument('--expect', required=True)
     for field in PROFILE_FIELDS:
@@ -162,6 +170,14 @@ def parser(product):
     clients = command(commands, 'client').add_subparsers(dest='client_command', required=True)
     command(clients, 'check', 'client.check')
     command(clients, 'update', 'client.update')
+    invitations = command(commands, 'invite').add_subparsers(dest='invite_command', required=True)
+    ip = command(invitations, 'prompt', 'invite.prompt')
+    ip.add_argument('--mode', choices=('server', 'github'), required=True)
+    ip.add_argument('--agent', choices=AGENTS, required=True)
+    ip.add_argument('--ssh', help="Recipient's own existing SSH alias; omitted uses a placeholder")
+    ip.add_argument('--source', help='Public Hub software directory')
+    ip.add_argument('--service', help='Public Hub service discovery file')
+    ip.add_argument('--target-version')
     spaces = command(commands, 'space').add_subparsers(dest='space_command', required=True)
     for verb in ('discover', 'list', 'fetch'):
         sp = command(spaces, verb, 'space.' + verb)
@@ -316,6 +332,7 @@ def capabilities(product):
                          "hub_key_mapping": True,
                          "system_identity": True, "local_gateway": True,
                          "shared_personal_profile": True, "profile_export": True, "profile_sync": False,
+                         "installation_prompts": True, "profile_import_preview": True, "profile_interactive": True,
                          "profile_field_encryption": True, "ssh_only_skills": True, "stdin_body": True,
                          "local_first": True, "portable_install": True,
                          "ssh_connection_reuse": True, "continuous_rpc": True, "batch_source_versions": True,
@@ -374,6 +391,12 @@ def read_input(file, limit):
 @networked
 def execute(args, product):
     action = args.action
+    if action == 'invite.prompt':
+        from .onboarding import installation_prompt
+        if any(getattr(args, k, None) for k in ('require_fresh', 'revision', 'expect_revision')):
+            raise Error('INPUT_INVALID', 'Installation prompts use local configuration and do not contact the Hub.')
+        return installation_prompt(args.mode, args.agent, root=getattr(args, 'root', None), source=args.source,
+                                   service=args.service, ssh=args.ssh, version=args.target_version), None
     if action.startswith(('library.','user.')):
         from .community_cli import execute as execute_community
         return execute_community(args)
@@ -460,7 +483,16 @@ def execute(args, product):
         if action == 'profile.show':
             return profile.read(), None
         if action == 'profile.init':
+            if args.interactive:
+                from .profile_onboarding import interactive
+                return interactive(profile, getattr(args, 'dry_run', False), args.encrypt_contact,
+                                   lambda: profile_password(args.key_fd)), None
+            if args.encrypt_contact or args.key_fd is not None:
+                raise Error('INPUT_INVALID', 'Use these options with --interactive or profile set.')
             return profile.init(getattr(args, 'dry_run', False)), None
+        if action == 'profile.import':
+            from .profile_onboarding import import_preview
+            return import_preview(profile, args.file, args.fields_file, args.offset, args.chars), None
         if action == 'profile.export':
             return profile.export(args.fields), None
         if action in ('profile.encrypt', 'profile.reveal', 'profile.decrypt'):
@@ -673,7 +705,7 @@ def main(argv=None, product="cosmesh"):
     sync_state = {"state": "local_only", "source_revision": revision, "remote_revision": None,
                   "last_sync_at": None, "identity_verified": False}
     try:
-        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'space.', 'thread.', 'library.','user.','search.')):
+        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'invite.', 'space.', 'thread.', 'library.','user.','search.')):
             root = root_for(product, getattr(args, "root", None))
             sync_state = state(Store(root), revision)
     except (Error, OSError, ValueError):
@@ -691,7 +723,7 @@ def main(argv=None, product="cosmesh"):
                 sync_state = workbench.status()
         except (Error, OSError, ValueError):
             pass
-    client_action = 'args' in locals() and args.action.startswith(('client.', 'space.', 'library.','user.','search.'))
+    client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.'))
     if 'args' in locals() and args.action.startswith('feedback.'):
         try:
             status = Feedback().status()
@@ -706,6 +738,9 @@ def main(argv=None, product="cosmesh"):
               "sync": None if profile_action or guide_action or client_action else sync_state,
               "warnings": [] if profile_action or guide_action or client_action or sync_state["identity_verified"] else ["Local source has not been verified as accepted by the configured Hub."],
               "error": error}
+    if error is None and args.action == 'invite.prompt' and not machine:
+        print(data['prompt'], end='')
+        return 0
     print(json.dumps(result, ensure_ascii=False, indent=None if machine else 2))
     if error:
         if error["code"] in {"STATE_CONFLICT", "IDEMPOTENCY_CONFLICT", "STORE_BUSY", "STORE_DIRTY", 'PROFILE_BUSY', 'FEEDBACK_BUSY'}:

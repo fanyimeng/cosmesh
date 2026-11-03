@@ -44,3 +44,9 @@ Python 自动调用可以用 os.pipe 创建匿名管道，以 subprocess.run(pas
 存储形如 ENC[cosmesh:v1:contact:SALT:TOKEN]。v1 固定使用 scrypt（N=32768,r=8,p=1,32 字节输出）派生 Fernet 密钥，每次随机生成 16 字节盐；盐和密文可保存，口令和派生密钥不保存。加密载荷包含字段名并验证完整性。此前独立临时实验的格式另行标识，不自动迁入正式档案。算法依据：[Fernet](https://cryptography.io/en/latest/fernet/) 与 [scrypt](https://cryptography.io/en/latest/hazmat/primitives/key-derivation-functions/#scrypt)。
 
 口令丢失后无法恢复；自行保管口令。reveal 的明文交给 Agent 后会进入其上下文。已有明文备份和聊天记录继续按其原存储方式保存，字段加密只保护当前档案中的 contact。旧版客户端可保留密文，但缺少加密操作和更新保护；回滚旧版后先升级再修改加密字段。跨设备密钥管理、钥匙串保存及其他字段加密留待后续实现。
+
+## CV / 简介导入与终端问答
+
+profile import --file CV --dry-run 复用本地资料提取器，支持 MD/TXT/PDF/DOCX，始终只预览。带标签字段由程序提议，自由文本由个人 Agent 理解，可传 --fields-file JSON 再预览 diff；本人确认后用现有 profile set --expect 保存。未确认不写入，原件保持本地；扫描 PDF 如实标记提取缺口。
+
+profile init --interactive 可问答填写，回车保留已有字段，/clear 明确清空，预览后输入 yes 或 确认才保存。可用 --dry-run 只预览。Mesh 实名另用 user me / set-name，在本人确认公开用途后登记。完整流程见 guide show onboarding。

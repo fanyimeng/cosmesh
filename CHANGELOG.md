@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.15
+
+- Generate copyable, versioned installation prompts for server and GitHub/private-Base onboarding without exporting inviter data.
+- Preview CV/intro imports with the existing document extractor, Agent-proposed fields and explicit Profile version checks.
+- Add interactive Profile filling with preview, confirmation and preservation of unanswered fields.
+
 ## 0.3.14
 
 - Support DeepSeek Harness (`dsh`) in Skill installation, diagnostics and capability discovery.

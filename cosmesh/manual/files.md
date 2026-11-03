@@ -1,5 +1,9 @@
 # 组件与文件职责
 
+## 新用户安装与资料登记
+
+onboarding.py 从已保存连接的公开入口字段生成带版本的安装 prompt；GitHub 模式使用固定源码 tag 和既有构建/安装器，生成过程不联网。profile_onboarding.py 复用 knowledge.py 的文档提取器，给出 Profile 候选与 diff，并提供终端问答；确认后仍由 profile.py 执行版本校验、加密和保存。两者由 cli.py 路由，使用同一组 Skill 和 guide，无新数据实体。
+
 ## 0.3 知识库与用户目录
 
 connections.py 管理按需建立、命令内复用的控制通道和专用 OpenSSH 控制 socket；空闲两分钟关闭 SSH 主连接，不编辑用户 SSH 配置。gateway.py 保留 Git 二进制通道，连续 RPC 使用独立有界帧；受保护 relay v2 对每条请求核验 UID/账号及 endpoint，v1 保持兼容。
