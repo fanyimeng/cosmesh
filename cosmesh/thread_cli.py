@@ -83,6 +83,12 @@ def add_commands(commands, command, body):
         if verb == 'bind':
             p.add_argument('--agent', required=True); p.add_argument('--workdir', required=True)
             p.add_argument('--session-id'); p.add_argument('--host')
+        if verb=='share':
+            p.add_argument('--attach',action='append',default=[])
+            p.add_argument('--materials',help='Private format=1 selection of explicit files and Git code reference')
+            p.add_argument('--resource',action='append',default=[],help='Reuse a fixed cosmesh://library/ reference')
+            p.add_argument('--git');p.add_argument('--commit');p.add_argument('--code-path',action='append',default=[])
+            p.add_argument('--summary-only',action='store_true');p.add_argument('--generation-file')
 
 
 def execute(args):
@@ -221,7 +227,9 @@ def execute(args):
             from .thread_names import set_names
             result = set_names(wb,args.id,args.english,args.chinese,args.intro,args.alias,args.expect,key,dry)
         elif verb == 'share':
-            result = wb.share(args.id, key, dry)
+            from .thread_materials import publish as share_materials
+            result = share_materials(wb,args,key,dry)
+            if publish and 'publication' in result:return finish(result)
         elif verb == 'edit':
             result = wb.edit(args.id, args.expect, args.title, body if hasattr(args, 'body') or hasattr(args, 'file') else None, key, dry)
         elif verb == 'bind':

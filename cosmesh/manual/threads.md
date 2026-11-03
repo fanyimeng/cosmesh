@@ -154,3 +154,8 @@ bind-project 可 --host-file 使用上述项目快照，只需 projects，无需
 ## 快速模式
 
 默认开启，个人 Agent 尽量少读、少转述、少做额外操作，直接复用成品与成功回执。client mode normal 关闭，client mode fast 开启，client mode 查看；--no-fast/--fast 只覆盖当前调用。两份 CLI 共用私人偏好，不改 Profile、模型或宿主配置；升级保留已保存偏好。每份 JSON 回执 fast_mode 表示本次偏好，无需另查一次。明确详细要求与必要核验仍优先遵循。
+
+
+## 共享配套资料
+
+普通共享默认只发Thread文本简报，不读取或上传关联文件；用户明确允许附带资料后，个人Agent准备必要说明、报告与小型结果的最小清单，thread share ID --attach FILE（可重复）--sync 或 --materials PRIVATE_JSON 完成先入库、后固定引用及Thread发布。代码可用--git/--commit，数据与压缩文件默认跳过，单文件20 MiB／整次100 MiB。显式--summary-only保留概况分享，缺资料保持partial；固定引用用library open取回打开，详见guide show sharing。

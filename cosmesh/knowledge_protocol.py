@@ -7,7 +7,7 @@ DIGEST = re.compile(r'^[0-9a-f]{64}$')
 MAX_FILE = 20 * 1024 * 1024
 MAX_TOTAL = 100 * 1024 * 1024
 CHUNK = 256 * 1024
-EXTENSIONS = {'.md', '.txt', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.html', '.htm', '.png', '.jpg', '.jpeg', '.svg', '.bib'}
+EXTENSIONS = {'.md', '.txt', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.html', '.htm', '.png', '.jpg', '.jpeg', '.svg', '.bib', '.json', '.csv', '.tsv'}
 
 
 def knowledge_id(value):

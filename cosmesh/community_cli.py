@@ -26,6 +26,7 @@ def add_commands(commands,command):
     for verb in ('show','text','history','archive-show','backlinks'):
         p=command(library,verb,'library.'+verb);p.add_argument('id')
     p=command(library,'fetch','library.fetch');p.add_argument('id');p.add_argument('--name',required=True);p.add_argument('--output',required=True)
+    p=command(library,'open','library.open');p.add_argument('reference');p.add_argument('--launch',action='store_true')
     for verb in ('add','revise'):
         p=command(library,verb,'library.'+verb)
         if verb=='revise':p.add_argument('id');p.add_argument('--expect',required=True)
@@ -102,6 +103,9 @@ def execute(args):
             if getattr(args,'sync',False):result={'result':result,'publication':kb.synchronize()}
             return result,None
         if action=='library.search':return kb.search(args.query,args.full_text,offline),None
+        if action=='library.open':
+            from .material_links import open_file
+            return open_file(kb,args.reference,offline,args.launch),None
         if action=='library.list':
             items=[kb.present(kb.versions[(k,v)]) for k,v in kb.data['heads'].items()]
             if args.archives:items=[x for x in items if x['resource_kind']=='archive']

@@ -396,7 +396,7 @@ class Workbench:
         return {'actor': actor, 'own_repo': reply['own_id'], 'spaces': results,
                 'ready': reply['own_id'] in self.stores, 'maintenance':self.client.get('maintenance')}
 
-    def share(self, value, key=None, dry_run=False):
+    def share(self, value, key=None, dry_run=False, extra=None, rewrite=None, materials=None, overview_notice=None):
         item = self.find(value, 'thread')
         if item['repo'] != 'local':
             return {**public(item['doc']), 'already_shared': True, 'saved_locally': True}
@@ -406,6 +406,7 @@ class Workbench:
         target = self.stores[repo]
         original = [item] + self.records(item['doc']['meta']['id'])
         originals = {x['doc']['meta']['id']: x['doc'] for x in original}
+        if extra is not None:originals[extra['meta']['id']]=extra
         if item['doc']['meta']['author'] not in {self.config['user'], self.user}:
             raise Error('AUTH_DENIED', 'Only your own private work can be published.')
         def build():
@@ -417,6 +418,11 @@ class Workbench:
                     raise Error('REFERENCE_INVALID', 'Cyclic private references.')
                 visiting.add(doc_id)
                 doc = copy.deepcopy(originals[doc_id])
+                if rewrite is not None:
+                    doc['body']=rewrite(doc['body'])
+                    if doc['meta'].get('generation',{}).get('instruction'):
+                        doc['meta']['generation']['instruction']=rewrite(doc['meta']['generation']['instruction'])
+                if overview_notice and doc['meta']['kind']=='thread':doc['body']=doc['body'].rstrip()+'\n\n'+overview_notice+'\n'
                 if doc['meta']['author'] not in {self.config['user'], self.user}:
                     raise Error('AUTH_DENIED', 'Private work contains another unverified author.')
                 doc['meta']['author'] = self.user
@@ -447,10 +453,12 @@ class Workbench:
                 raise Error('ID_CONFLICT', 'Shared storage already contains different content with this ID.')
             return changes, {'thread': item['doc']['meta']['id'], 'repo': repo, 'records': len(originals) - 1,
                              'publication': 'pending', 'scope': 'hub_authenticated_users', 'history': 'current_formal_records_only'}
-        return self._commit(target, 'share', {'id': item['doc']['meta']['id']}, build, key, dry_run)
+        payload={'id': item['doc']['meta']['id']}
+        if materials is not None:payload['materials']=materials
+        return self._commit(target, 'share', payload, build, key, dry_run)
 
     @networked
-    def synchronize(self, publish=True):
+    def synchronize(self, publish=True,knowledge_keys=None,publish_repos=None):
         results, errors = [], []
         versions = {}
         if self.client.get('connection'):
@@ -476,8 +484,9 @@ class Workbench:
             from .knowledge import Knowledge
             try:
                 kb=Knowledge(self)
-                update=kb.synchronize() if publish else kb.refresh()
-                if publish:errors.extend(update['errors'])
+                uploading=publish and knowledge_keys!=[]
+                update=kb.synchronize(knowledge_keys) if uploading else kb.refresh()
+                if uploading:errors.extend(update['errors'])
             except Error as exc:errors.append({'repo':'library','error':exc.as_dict()})
         for repo, store in self.stores.items():
             if repo == 'local':
@@ -491,6 +500,7 @@ class Workbench:
         if not self.client.get('spaces') and not errors:
             raise Error('HUB_CONNECTION_REQUIRED', 'Use thread discover before shared synchronization.')
         pending = {repo for repo, store in self.stores.items() if repo != 'local' and sync.state(store).get('unpushed_count')}
+        if publish_repos is not None:pending.intersection_update(publish_repos)
         if publish:
             for _ in range(len(pending) + 1):
                 progressed = False

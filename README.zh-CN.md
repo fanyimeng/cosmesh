@@ -19,13 +19,14 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 - 将 Thread 关联 Codex、DSH、OpenCode 的项目／工作区，跨会话继续。
 - 分裂、合并工作，保留原作者、记录和来源。
 - 发出请求、交付结果，沿引用核验依据。
+- 默认共享工作简报；明确允许后附带说明、报告与小型结果，以固定版本引用打开。
 - 统一搜索工作、记录、知识资料及旧版工作库。
 - 离线读写，恢复连接后按需同步共享变更。
 - 私人工作删除进回收站，共享工作撤回后保留历史与引用。
 
 ## 本地试用
 
-当前版本 **0.3.22**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前版本 **0.3.23**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git

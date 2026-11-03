@@ -48,6 +48,10 @@ bind-project ID --agent codex|dsh|opencode --project-name NAME [--project-id ID 
 
 Base 私人，Mesh 共享正式正文。share ID 沿用 Thread ID；私人历史、Profile、会话和目录绑定保留本地。向他人汇总用 overview --scope mesh，不复制私人总览。要共享的正文先检查范围，私人依据需明确分享才可作共享引用。
 
+默认只共享 Thread 的文本简报／正式文本，不主动读取或上传关联文件。用户明确要求同时上传报告／关联文件，或经后续询问同意后，才从已关联项目选择必要说明、报告、关键图表和小型 JSON/CSV 结果，用 share ID --attach FILE（可重复）或 --materials PRIVATE_JSON --sync 一次完成；已有资料可 --resource FIXED_REFERENCE。只选必要文件，不扫描／打包整个目录；先检查所选内容适合共享，私人 Profile、会话定位和其他项目保持私人。HTML 优先自包含或 PDF。默认跳过数据／压缩包，单文件20 MiB、整次100 MiB；汇总说明 skipped 与 partial，缺原件时标明资料待补。普通分享用 share ID，--summary-only 与默认相同；有需要时简短提示可以补传，不固定追问，不称关联文件已共享。代码用 --git HTTPS_URL --commit FULL_SHA [--code-path RELATIVE_PATH]，访问状态如实显示。参数和选择格式按需查 guide show sharing。
+
+固定文件引用为 cosmesh://library/K-ID@VERSION/FILENAME。收到“打开报告／资料”时用 library open FIXED_REFERENCE [--launch]，取得经摘要校验的 path，再向用户提供可打开的本机链接或查看原文；共享继续使用固定引用。打开失败说明实际缺口，避免只给作者的本机路径。
+
 首次接入用 thread discover --ssh 本人已有别名；服务器本地可 --service 指定发现文件。已知连接直接复用。用实名指定接收人时，复用已知稳定身份或 user show 查目录；重名显示候选，不猜测。首次共享若 needs_real_name=true，请本人填真名后 user set-name；改名读取 version 再 --expect，Profile 其他字段保持私人。
 
 普通协作：request THREAD_ID --to REAL_NAME --file FILE；接收人用 inbox/context 查需求，assign REQUEST_ID --work SHARED_THREAD_ID 承接；result 保存成果，deliver REQUEST_ID --result RECORD_ID 交付引用。reply/decline 由接收人授权，adopt/cancel 由请求方控制，不代人采用或完成。默认发起人的个人 Agent 汇总，委托仍走普通请求，无公共 Mesh Agent。

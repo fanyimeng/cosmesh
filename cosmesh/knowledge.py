@@ -31,7 +31,7 @@ def select_user(users,value):
 
 class Knowledge:
     def __init__(self,wb):
-        self.wb=wb;self.root=wb.base.path('.cosmesh/knowledge')
+        self.wb=wb;self.root=wb.base.path('.cosmesh/knowledge');self._uploaded=set();self._known_blobs=None
         exclude=wb.base.path('.git/info/exclude')
         if exclude.is_file() and '.cosmesh/knowledge/' not in exclude.read_text().splitlines():
             atomic(exclude,exclude.read_text()+'\n.cosmesh/knowledge/\n')
@@ -90,12 +90,14 @@ class Knowledge:
             data.update(sha256=info['sha256'],synced_at=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat())
             atomic(self.path,json.dumps(data,ensure_ascii=False,indent=2)+'\n');os.chmod(self.path,0o600)
             self.data=data;self.versions={(x['doc']['meta']['id'],x['version']):x['doc'] for x in data['versions']}
-            self.wb._knowledge_snapshot=(self.path.stat().st_mtime_ns,self.data,self.versions)
+            self.wb._knowledge_snapshot=(self.path.stat().st_mtime_ns,self.data,self.versions);self._known_blobs=None
         self.wb.client['community_enabled']=True;self.wb.save_client()
         return info
 
     @networked
     def upload(self,sha):
+        if self._known_blobs is None:self._known_blobs={s for d in self.versions.values() for f in d['meta']['files'] for s in (f['sha256'],f['text_sha256']) if s}
+        if sha in self._uploaded or sha in self._known_blobs:return
         path=self.root/sha
         if not path.is_file():raise Error('NOT_FOUND','Local document content is missing.')
         raw=path.read_bytes()
@@ -104,7 +106,7 @@ class Knowledge:
             reply=self.rpc({'method':'community_put','sha256':sha,'size':len(raw),'offset':offset,'data':base64.b64encode(raw[offset:offset+CHUNK]).decode()})
             if reply.get('sha256')!=sha or type(reply.get('complete'))is not bool:
                 raise Error('SYNC_PROTOCOL','Upload acknowledgement does not match its file.')
-            if reply['complete']:break
+            if reply['complete']:self._uploaded.add(sha);break
 
     @networked
     def apply(self,operation,value,key=None):
@@ -176,10 +178,12 @@ class Knowledge:
         return {'id':value['id'],'saved_locally':True,'publication':'pending','key':key}
 
     @networked
-    def synchronize(self):
-        self.refresh();results=[];errors=[]
+    def synchronize(self,keys=None,refresh=True):
+        if refresh:self.refresh()
+        results=[];errors=[]
         for path in sorted(self.outbox().glob('*.json')):
             request=json.loads(path.read_text());value=request['value']
+            if keys is not None and request['key'] not in keys:continue
             try:
                 for file in value.get('files',[]):
                     for sha in (file['sha256'],file['text_sha256']):
@@ -194,11 +198,15 @@ class Knowledge:
 
     def import_files(self,paths):
         files=[]
+        known={(f['sha256'],Path(f['name']).suffix.lower()):f for doc in self.versions.values() for f in doc['meta']['files']}
         for name in paths:
             path=Path(name).expanduser()
             if not path.is_file() or path.stat().st_size>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose an existing document up to 20 MiB.')
             if path.suffix.lower() not in EXTENSIONS:raise Error('INPUT_INVALID','Knowledge accepts text, office documents, PDF and simple figures.')
             raw=path.read_bytes();sha=self.cache_blob(raw)
+            previous=known.get((sha,path.suffix.lower()))
+            if previous:
+                files.append({**previous,'name':path.name});continue
             # Parsing runs in a separate process with a bounded lifetime; originals survive extraction failures.
             try:
                 result=subprocess.run([sys.executable,'-m','cosmesh.knowledge','extract',str(path.resolve())],capture_output=True,text=True,timeout=30)
@@ -285,7 +293,7 @@ class TextHTML(HTMLParser):
 
 def extract(path):
     suffix=path.suffix.lower();tool='cosmesh.text';status='extracted';text=''
-    if suffix in {'.md','.txt','.bib'}:text=path.read_text(encoding='utf-8')
+    if suffix in {'.md','.txt','.bib','.json','.csv','.tsv'}:text=path.read_text(encoding='utf-8')
     elif suffix in {'.html','.htm'}:
         parser=TextHTML();parser.feed(path.read_text(encoding='utf-8'));text=''.join(parser.parts)
     elif suffix in {'.docx','.pptx'}:

@@ -333,6 +333,7 @@ def capabilities(product):
                          "status_pages": True, "status_page_cache": "markdown_sqlite",
                          "ready_status_pages": True,
                          "fast_mode": True, "agent_project_bindings": True,
+                         "thread_share_materials": True, "fixed_knowledge_file_links": True,
                          "private_session_bindings": True, "maintenance_requests": True,
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,

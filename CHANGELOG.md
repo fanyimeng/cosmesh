@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.23
+
+- Share text briefs by default; upload related documents only when explicitly selected, through the versioned knowledge library before publishing their references.
+- Resolve fixed knowledge-file references into checksum-verified local files, with explicit system-viewer opening.
+- Default to skipping data/archive suffixes; enforce 20 MiB per file and 100 MiB per share, and label incomplete materials.
+- Preserve private originals and execution locations, existing versions and unrelated knowledge drafts; reuse unchanged materials and pin code to Git commits.
+
 ## 0.3.22
 
 - Default to switchable fast interaction, preserving private preferences across upgrades.

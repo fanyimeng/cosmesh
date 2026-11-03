@@ -4,7 +4,7 @@
 
 0.3.6 的本地读取按 Git 完整版本批量取对象，Thread 操作和状态回执复用同一工作台。当前命令内可复用未变化模型，版本变化时重新校验；每次加载继续检查路径。接受状态匹配已核验来源，旧版本引用仍沿历史查找。此缓存随命令退出释放，无新后台进程或持久索引文件。
 
-知识库是独立的组内共享空间。文献和资料使用 K- ID，可包含 Markdown、TXT、PDF、DOC/DOCX、PPT/PPTX、HTML、BibTeX 和简单图像。大型科研数据继续留在分析环境。每项资料可以有多个文件和多个固定版本，Thread 与 Base 引用同一个资料 ID 和版本。
+知识库是独立的组内共享空间。文献和资料使用 K- ID，可包含 Markdown、TXT、PDF、DOC/DOCX、PPT/PPTX、HTML、BibTeX、JSON/CSV/TSV 和简单图像。大型科研数据继续留在分析环境。每项资料可以有多个文件和多个固定版本，Thread 与 Base 引用同一个资料 ID 和版本。
 
 服务器由维护者 hub community-init --hub-root HUB --library-root LIBRARY 明确建立专用目录。catalog.sqlite3 保存用户、不可变资料版本、活动、来源和派生索引；blobs/ 保存按 SHA-256 定位的原文件和提取文字。目录 700、文件 600，客户端通过已核验的 Hub 身份访问。共享用户默认可读；正式写入前填写本人真实姓名。
 
@@ -65,3 +65,10 @@ Thread 生成内容可用 --generation-file JSON 提供 tool、model、instructi
 每次生成、导入、修订、交接和归档都有版本化产物或操作记录。服务器核验账号与稳定 person ID，客户端提供的模型信息单独标明来源。工作正文、原文件、输入引用、候选状态、采用与更正各自可追溯。贡献归属根据内容来源继承，综合者、原贡献者、上传者和原文作者分别展示。
 
 user overview/contributions REAL_NAME 查看共享工作、请求状态、资料版本与活动。记录链包含前序摘要，可校验关联完整性；系统维护者仍承担备份与恢复职责。数据库和 blobs 必须一起备份，检索索引可以重建。
+
+
+## 与 Thread 配套共享和固定打开
+
+默认share只共享文本简报；明确要求附件后，thread share ID --attach FILE --sync 将选定必要资料入库后发布普通资料索引与固定引用；--materials 可给私人选择清单，--resource 复用已有资料，--git/--commit 定位代码。后缀默认跳过数据／压缩文件，单文件20 MiB、整次新原件100 MiB；缺项明确为partial。详见 guide show sharing。
+
+固定文件引用为 cosmesh://library/K-ID@VERSION/FILENAME。library open FIXED_REFERENCE 校验并取回本机私有缓存，--launch 明确启动系统查看器；回执提供本人可打开的path，共享继续使用固定reference。Markdown配套相对引用按需准备同项资料中的已选附件，缺失依赖如实返回。JSON/CSV/TSV作为有界UTF-8文字保留原件和可检索文本，不新增分析引擎。
