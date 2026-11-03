@@ -38,6 +38,12 @@ thread edit ID --expect VERSION 修改本人的标题和概况。thread state ID
 
 ## 工作总览与私人接续定位
 
+同时需要总览和继续一个已明确目标时，可用 `thread overview --mine --compact --continue ID_OR_EXACT_TITLE --json`。一次本地调用、一次 Workbench.load 返回两份视图，避免 Agent 读完总览后再次发起相同续接读取。目标名称/前缀有歧义时返回候选；--mine 和 --scope 同时限定总览与目标，目标可以已归并或不在列表上限内。仅在明确恢复或执行时按需核验宿主与目录。
+
+组合格式为 thread.overview.continue.v1，continuation 保留原 continue 的工作、全部记录、引用、更正、请求、回链、归并去向和私人绑定；其 source 字段也使用同一 source_index。所选工作在总览中的 purpose.from、进展的 text_from 是回执内 JSON Pointer，指向 continuation 中已提供的原文。完整正文仅一份，作者、固定版本和接受状态保持；来源的同步状态复用共同 sync.spaces，不再重复返回顶层 sources。原始 continue/context 接口不变，缺失来源和后续变化仍需按需核验。
+
+组合读取包含私人执行定位，只允许 --compact 及 all/base 本人视图，--scope mesh 在加载前明确拒绝。单独共享总览继续用 overview --scope mesh --compact。旧的已知目标单独续接、普通总览、详细接口保持原有行为；用户尚未选定目标时也保持先总览、后按选择读取。
+
 0.3.18 起，两份 Skill 默认用 `thread overview --mine --compact --json` 一次本地快览。紧凑视图每条提供目的短句、一条近期非空原文摘录、状态、一个私人接续入口与绑定数量；不探测绑定目录，也不查询宿主。Agent 先显示所需字段，缺项标为仅登记／缺失，概括结论或下一步时再按需读原文和更正。原有默认详细 JSON 与 --details 保持，--compact 和 --details 互斥。
 
 紧凑回执 format=thread.overview.compact.v1，行及记录的 source 是顶层 source_index 的整数下标；固定 repo/id/version 只存一次，作者与 accepted 分别保留。顶层统一解释证据状态，避免逐行重复来源和通用说明。execution 的 agent/host、session、project、directory 及 binding_count 保留私人定位；缺绑定时 status=missing。显式 --host-file 可提供已核验元数据，host_observation 给出来源/时间；project.verified_absence=true 表示宿主已核验该会话未归属项目，目录始终只登记。scope mesh 同样排除全部私人执行定位。

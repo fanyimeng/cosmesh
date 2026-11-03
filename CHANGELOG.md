@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.20
+
+- Combine a compact private overview and an explicitly selected Thread continuation in one local read.
+- Share pinned sources and canonical text between the views while preserving complete continuation evidence.
+- Route combined requests through both Skills without a second Agent tool round trip; retain separate reads and Mesh privacy boundaries.
+
 ## 0.3.19
 
 - Keep private paths out of shared-overview failure diagnostics while preserving error codes.

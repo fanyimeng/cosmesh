@@ -324,6 +324,7 @@ def capabilities(product):
                          "legacy_search_sources": True, "bounded_search_batch": True,
                          "thread_split_merge": True, "thread_recycle_bin": True, "thread_withdrawal": True,
                          "thread_session_lookup": True, "thread_overview": True, "compact_thread_overview": True,
+                         "combined_thread_continuation": True,
                          "private_session_bindings": True, "maintenance_requests": True,
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,

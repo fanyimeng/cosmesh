@@ -9,6 +9,8 @@ description: 管理 Thread 共享工作串、实名请求、知识资料、贡�
 
 ## 工作总览先本地快览，续接再核验
 
+用户同时要总览并继续一个已明确的目标时，直接用 thread overview --mine --compact --continue ID_OR_EXACT_TITLE --json，一次取得两份材料。组合回执已包含完整 continuation，直接据此回答，不再机械调用同一 continue/context；只有变化或未取得的依据才补读。source 均查 source_index，purpose.from/text_from 是本回执内 JSON Pointer，指向已返回原文，避免重复展示。该组合只用于本人私人视图（all/base），scope mesh 仅给普通共享总览。目标不明确时先普通总览，待用户选定后续接；已知 ID 直接续接，无需先列工作。
+
 问“我的 threads / 工作总览 / 继续哪个工作”时，直接用 thread overview --mine --compact --json，一次本地查询后给简表：工作/目的、状态与近期进展、Agent/项目、接续会话、目录、私人/共享。缺项也显示。总览不额外 locate、context、刷新 Mesh、探测目录或查询宿主。source 是 source_index 下标；顶层 evidence 解释已核验、仅登记、缺失。进展是摘录，结论或下一步需要时再核验原文、更正。更多绑定用 overview ID --details，与 --compact 分开使用。
 
 明确继续已有 ID 时直接 thread continue ID --json 或 context；复用本轮已知定位。目标未知才 thread locate --workdir ACTUAL_PATH [--session-id ACTUAL_ID] [--host ACTUAL_HOST]，结合实际事项判断。目录匹配仅为候选；关键歧义才问。用户明确续接已授权本次补充实际新增记录/绑定，新建或调整划分才讨论。一个 Session 可关联多条 Thread，一条 Thread 可接续多个 Session。

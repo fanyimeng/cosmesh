@@ -72,6 +72,60 @@ def directory_exists(path):
     return Path(path).is_dir()
 
 
+def with_continuation(wb, view, value, mine=False):
+    """Combine two read views at one Workbench revision; retain the complete context."""
+    if not view['private']:
+        raise Error('INPUT_INVALID', 'Continuation includes private execution metadata; use a private overview.')
+    pool = [item for item in wb.catalog.values() if item['doc']['meta']['kind'] == 'thread' and
+            (view['scope'] != 'base' or item['repo'] == 'local') and
+            (not mine or item['doc']['meta']['author'] == (wb.config['user'] if item['repo'] == 'local' else wb.user))]
+    matches = [item for item in pool if item['doc']['meta']['id'].startswith(value) or item['doc']['meta']['title'] == value]
+    if len(matches) != 1:
+        raise Error('NOT_FOUND' if not matches else 'AMBIGUOUS_ID', 'Choose one visible Thread ID.',
+                    ', '.join(item['doc']['meta']['id'] for item in matches))
+    from .thread_lifecycle import continuation
+    packet = continuation(wb, matches[0]['doc']['meta']['id'])
+    if view['scope'] == 'base' and packet['thread']['shared']:
+        raise Error('PRIVATE_REFERENCE', 'The continuation destination is outside the selected Base scope.')
+    sources = list(view['source_index'])
+    keys = {(ref['repo'], ref['id'], ref['version']): index for index, ref in enumerate(sources)}
+    def normalized(value):
+        if isinstance(value, list): return [normalized(item) for item in value]
+        if not isinstance(value, dict): return value
+        result = {}
+        for name, item in value.items():
+            if name == 'source' and isinstance(item, dict) and set(item) == {'repo', 'id', 'version'}:
+                identity = (item['repo'], item['id'], item['version'])
+                if identity not in keys:
+                    keys[identity] = len(sources); sources.append(item)
+                result[name] = keys[identity]
+            else: result[name] = normalized(item)
+        return result
+    rows = []
+    documents = {(doc['source']['repo'], doc['source']['id'], doc['source']['version']): index
+                 for index, doc in enumerate(packet['records'])}
+    for row in view['threads']:
+        if row['id'] != packet['thread']['id'] or sources[row['source']] != packet['thread']['source']:
+            rows.append(row); continue
+        recent = []
+        for record in row['progress']['recent']:
+            ref = sources[record['source']]
+            index = documents.get((ref['repo'], ref['id'], ref['version']))
+            if index is None:
+                recent.append(record); continue
+            entry = {key: item for key, item in record.items() if key not in {'text', 'truncated'}}
+            entry['text_from'] = '/continuation/records/' + str(index) + '/body'
+            recent.append(entry)
+        rows.append({**row, 'purpose': {'from': '/continuation/thread/body'},
+                     'progress': {**row['progress'], 'recent': recent}})
+    context = normalized(packet)
+    # The common response envelope already carries these per-repository states.
+    context.pop('sources', None)
+    return {**view, 'format': 'thread.overview.continue.v1', 'threads': rows,
+            'source_index': sources, 'continuation': context,
+            'read_hint': 'source 为 source_index 下标，包括 continuation 中的 source；purpose.from/text_from 是本回执内 JSON Pointer。目标接续材料已返回，避免重复读取相同 continue/context；变化或缺失来源按需核验。'}
+
+
 def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='all',
              details=False, limit=20, host=None, compact=False):
     if not 1 <= limit <= 100:
