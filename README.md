@@ -23,7 +23,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release **0.3.13**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release **0.3.14**. Requires Python 3.9+ and Git; targets macOS and Linux.
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git
@@ -52,7 +52,7 @@ Install the two standard Skills for Codex or OpenCode:
 
 ```sh
 cosmesh skills install --agent codex --only both --json
-# For OpenCode, use --agent opencode.
+# For OpenCode, use --agent opencode; for DeepSeek Harness, use --agent dsh.
 ```
 
 Then ask: “Use CosBase to organize this work. Check existing Threads first and suggest what to continue or create.”

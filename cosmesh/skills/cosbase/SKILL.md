@@ -107,6 +107,10 @@ profile 与 guide 为共用入口。Profile 私有且独立于 --root；先 show
 
 具体流程按需查询 guide show threads。个人 Agent 下次启动读取 inbox 或 coordinate 即可继续，尚无后台通知或自动唤醒。
 
+## DeepSeek Harness 接入
+
+DSH 共用本 Skill 和本机 CLI；安装用 skills install --agent dsh --only both，检查用 doctor --agent dsh。按用户授权推荐 Full access（完全访问），以便不同项目访问同一份个人工作资料；该模式会放开整个会话的本机文件写限制。遇到明确指向安装锁或个人数据目录的工作区拒绝时，沿用当前授权请求或选择完全访问，用原参数和幂等键重试一次；仍失败则保留输入并报告实际错误。具体路径和步骤按需查 guide show dsh。DSH 的 Session ID 只填实际可获得的值，agent 可记为 dsh。
+
 ## 本机执行入口
 
 使用安装器写在本 Skill 末尾的实际 CLI 路径，或宿主已发现的本地程序入口。可选 SSH-only 模式以末尾说明为准；该模式的 --root 和工作路径属于服务器。程序/Skill 升级仍使用 client check/update，保持用户自定义内容和其他 Agent 配置。

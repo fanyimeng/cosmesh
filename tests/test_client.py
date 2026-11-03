@@ -329,7 +329,7 @@ class CLITests(LocalCase):
             self.assertEqual(self.cli("doc", "list", "--json", expected=2)["error"]["code"], "PATH_INVALID")
 
     def test_both_agent_skill_installs_preserve_existing_files(self):
-        for agent in ("codex", "opencode"):
+        for agent in ("codex", "opencode", "dsh"):
             target = Path(self.tmp.name) / agent
             preview = install(agent, ["cosbase", "cosmesh"], target, dry_run=True)
             self.assertFalse(target.exists())

@@ -19,6 +19,7 @@ from pathlib import Path
 
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 NAMES = ("cosmesh", "cosbase")
+AGENTS = ("codex", "opencode", "dsh")
 MARKER = {"product": "cosmesh", "installation_format": 1}
 
 
@@ -430,7 +431,7 @@ def launch(prefix, name, arguments):
         return main(arguments[1:], fixed_prefix=prefix)
     if arguments[:2] == ["skills", "install"]:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--agent", choices=("codex", "opencode"), required=True)
+        parser.add_argument("--agent", choices=AGENTS, required=True)
         parser.add_argument("--only", choices=(*NAMES, "both"), default=name)
         parser.add_argument("--dest")
         parser.add_argument("--dry-run", action="store_true")
@@ -497,7 +498,7 @@ def main(argv=None, fixed_prefix=None):
     parser.add_argument("--release", help="已解压的发布包目录")
     parser.add_argument("--skills", choices=(*NAMES, "both", "none"))
     parser.add_argument("--skills-dir")
-    parser.add_argument("--agent", choices=("codex", "opencode"))
+    parser.add_argument("--agent", choices=AGENTS)
     parser.add_argument("--version", help="回滚到已安装版本")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")

@@ -2,7 +2,7 @@
 
 ## 本地源码与用户安装
 
-源码试用需要 Python 3.9+ 与 Git：在虚拟环境执行 python -m pip install -e .，用 thread init 初始化私人工作台。两份 Skill 可通过 skills install --agent codex --only both 安装；OpenCode 使用 --agent opencode。以宿主实际发现和调用结果判断是否可用。
+源码试用需要 Python 3.9+ 与 Git：在虚拟环境执行 python -m pip install -e .，用 thread init 初始化私人工作台。两份 Skill 可通过 skills install --agent codex --only both 安装；OpenCode 使用 --agent opencode，DeepSeek Harness 使用 --agent dsh。DSH 的完全访问与核验流程见 dsh 主题。以宿主实际发现和调用结果判断是否可用。
 
 维护者用 tools/build_release.py 构建当前平台的固定包。用户解压后运行 python3 install.py install --skills both，默认程序位于 ~/.local/opt/cosmesh，两份 Skill 位于 ~/.agents/skills。--prefix 和 --skills-dir 可选择独立预览位置。
 

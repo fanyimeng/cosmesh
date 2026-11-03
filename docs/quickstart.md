@@ -93,3 +93,9 @@ The Hub maintainer registers one ordinary shared Thread. Requests, replies, assi
 For a portable installer hosted outside the default deployment root, pass `--source /srv/team/agent`; discovery follows `/srv/team/service.json`, or use `--service` to select another file. Existing installations can use `cosmesh client check --json` and `cosmesh client update --json` when the maintainer has configured a channel.
 
 通用安装器支持自定义服务器目录，并记住匹配的发现文件；已配置更新渠道的安装可用 client check/update 检查或更新。安装不会自动发布私人 Base。
+
+## DeepSeek Harness / DSH
+
+Install the same two Skills with `cosmesh skills install --agent dsh --only both --json`. Use `cosmesh doctor --agent dsh --json` and `cosmesh guide show dsh --json` for diagnostics and guidance. With user authorization, Full access lets DSH use the same private workbench across project directories; it relaxes the session file-write sandbox while Base/Mesh sharing rules remain in effect.
+
+DSH 共用两份 Skill 和现有工作台。按用户授权推荐完全访问，使不同项目目录能使用同一份个人工作资料；该模式放开会话文件写限制，Base 默认私有、Mesh 明确分享的规则继续保留。

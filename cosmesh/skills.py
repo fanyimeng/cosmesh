@@ -12,7 +12,19 @@ from pathlib import Path
 from .errors import Error
 from .store import safe_path
 
-AGENTS = ("codex", "opencode")
+AGENTS = ("codex", "opencode", "dsh")
+
+
+def agent_executable(agent):
+    found = shutil.which(agent)
+    if found or agent != 'dsh' or sys.platform != 'darwin':
+        return found
+    # Desktop includes the ordinary DSH CLI even when its shell link is absent.
+    for root in (Path('/Applications'), Path.home() / 'Applications'):
+        entry = root / 'DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh'
+        if entry.is_file() and os.access(entry, os.X_OK):
+            return str(entry)
+    return None
 
 
 def source(name):
@@ -47,7 +59,7 @@ def inspect(agent, names, dest=None):
         records.append({"name": name, "path": str(path), "status": status,
                         "version": record["version"] if managed else None})
     return {"agent": agent, "destination": str(target) if target else "managed_installation", "skills": records,
-            "agent_binary": shutil.which(agent), "host_discovery": "not_verified",
+            "agent_binary": agent_executable(agent), "host_discovery": "not_verified",
             "natural_language_trigger": "not_verified"}
 
 

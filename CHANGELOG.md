@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.14
+
+- Support DeepSeek Harness (`dsh`) in Skill installation, diagnostics and capability discovery.
+- Detect the bundled macOS DSH launcher when it is not on PATH.
+- Share the existing two Skills and CLI with DSH, with Full access guidance for work across directories.
+
 ## 0.3.13
 
 - Launch remote Git transport, managed commands and receive hooks through Python to avoid shared-home script execution failures.
