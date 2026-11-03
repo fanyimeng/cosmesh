@@ -7,7 +7,7 @@ Use Python 3.9+ and Git on macOS or Linux. Run commands from an activated develo
 ```sh
 cosbase thread init --json
 cosbase thread create --title 'Example work' --body 'Goal, current facts, next step.' --json
-cosbase thread list --json
+cosbase thread overview --mine --compact --json
 cosbase thread context THREAD_ID --json
 cosbase thread note THREAD_ID --body 'Progress or a decision.' --json
 ```

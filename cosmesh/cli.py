@@ -323,7 +323,7 @@ def capabilities(product):
                          "unified_search": True, "agent_search_workflow": True, "versioned_search_sources": True,
                          "legacy_search_sources": True, "bounded_search_batch": True,
                          "thread_split_merge": True, "thread_recycle_bin": True, "thread_withdrawal": True,
-                         "thread_session_lookup": True,
+                         "thread_session_lookup": True, "thread_overview": True, "compact_thread_overview": True,
                          "private_session_bindings": True, "maintenance_requests": True,
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,
@@ -724,6 +724,12 @@ def main(argv=None, product="cosmesh"):
         except (Error, OSError, ValueError):
             pass
     client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.'))
+    if 'args' in locals() and args.action == 'thread.overview' and args.scope == 'mesh':
+        # The shared envelope must not reveal private workbench roots, counts or bindings, including on errors.
+        sync_state = {"state": sync_state.get('state', 'local_only'),
+                      "identity_verified": sync_state.get('identity_verified', False)}
+        if error and error['code'] not in {'INPUT_INVALID', 'NOT_FOUND', 'AMBIGUOUS_ID', 'STORE_BUSY', 'FRESHNESS_UNAVAILABLE'}:
+            error = {'code': error['code'], 'message': 'Shared overview is unavailable. Inspect this workbench privately for details.'}
     if 'args' in locals() and args.action.startswith('feedback.'):
         try:
             status = Feedback().status()

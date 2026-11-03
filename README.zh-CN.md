@@ -23,7 +23,7 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 本地试用
 
-当前版本 **0.3.16**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前版本 **0.3.19**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git
@@ -35,7 +35,7 @@ python -m pip install -e .
 
 cosbase thread init --json
 cosbase thread create --title '我的第一条工作' --body '目标、背景和下一步。' --json
-cosbase thread list --json
+cosbase thread overview --mine --compact --json
 ```
 
 Base 无需服务器即可使用。需要协作时，用本人已有的 SSH 别名连接已配置的兼容 Hub：

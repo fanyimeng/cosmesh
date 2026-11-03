@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.19
+
+- Keep private paths out of shared-overview failure diagnostics while preserving error codes.
+- Publish the compact overview and thin Skill workflow validated in the 0.3.18 candidate.
+
+## 0.3.18
+
+- Make both Skills use one local compact overview, with target-specific host checks when continuing work.
+- Deduplicate pinned sources and common explanations, bound progress excerpts and retain private execution evidence.
+- Preserve the detailed overview contract and exclude private bindings from shared compact views.
+
+## 0.3.17
+
+- Add a read-only Thread overview with progress, private Agent/session/directory bindings and optional supported-host project metadata.
+- Label verified, registered and missing execution evidence; keep directory project matches as candidates.
+- Make both Skills proactively show compact overviews; exclude all private execution metadata from Mesh overview responses.
+
 ## 0.3.16
 
 - Upgrade pip, setuptools and wheel explicitly in GitHub cold-start prompts; diagnose missing project-wheel metadata with a recovery command.

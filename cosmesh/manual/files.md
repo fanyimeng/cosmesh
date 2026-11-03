@@ -1,5 +1,9 @@
 # 组件与文件职责
 
+## Thread 总览
+
+thread_overview.py 从现有 Thread、进展记录和私人绑定生成只读总览。可选的个人 Agent 宿主元数据只在本次调用中核验会话与实际项目归属，目录检查按主机/路径去重；不联网、不写绑定或源历史。thread_cli.py 路由 overview，cli.py 为 --scope mesh 去除私人同步定位信息。两份 Skill 负责按宿主能力取元数据、解释证据并简短展示。
+
 ## 新用户安装与资料登记
 
 onboarding.py 从已保存连接的公开入口字段生成带版本的安装 prompt；GitHub 模式使用固定源码 tag 和既有构建/安装器，生成过程不联网。profile_onboarding.py 复用 knowledge.py 的文档提取器，给出 Profile 候选与 diff，并提供终端问答；确认后仍由 profile.py 执行版本校验、加密和保存。两者由 cli.py 路由，使用同一组 Skill 和 guide，无新数据实体。

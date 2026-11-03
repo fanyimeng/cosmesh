@@ -23,7 +23,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release **0.3.16**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release **0.3.19**. Requires Python 3.9+ and Git; targets macOS and Linux.
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git
@@ -35,7 +35,7 @@ python -m pip install -e .
 
 cosbase thread init --json
 cosbase thread create --title "My first Thread" --body "Goal, context, and next step." --json
-cosbase thread list --json
+cosbase thread overview --mine --compact --json
 ```
 
 Base works immediately without a Hub. For collaboration, connect using your existing SSH alias:

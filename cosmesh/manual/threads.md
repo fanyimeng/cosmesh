@@ -36,6 +36,40 @@ thread edit ID --expect VERSION 修改本人的标题和概况。thread state ID
 
 启用用户目录后，request --to 接受本人填写的完整实名、账号或稳定用户 ID；重名明确返回候选。展示优先使用 author_name/to_name。共享写入前本人需 user set-name，私人工作不受该条件约束。知识资料使用 K-ID@VERSION 作为 --ref，正文按需 library text 获取。
 
+## 工作总览与私人接续定位
+
+0.3.18 起，两份 Skill 默认用 `thread overview --mine --compact --json` 一次本地快览。紧凑视图每条提供目的短句、一条近期非空原文摘录、状态、一个私人接续入口与绑定数量；不探测绑定目录，也不查询宿主。Agent 先显示所需字段，缺项标为仅登记／缺失，概括结论或下一步时再按需读原文和更正。原有默认详细 JSON 与 --details 保持，--compact 和 --details 互斥。
+
+紧凑回执 format=thread.overview.compact.v1，行及记录的 source 是顶层 source_index 的整数下标；固定 repo/id/version 只存一次，作者与 accepted 分别保留。顶层统一解释证据状态，避免逐行重复来源和通用说明。execution 的 agent/host、session、project、directory 及 binding_count 保留私人定位；缺绑定时 status=missing。显式 --host-file 可提供已核验元数据，host_observation 给出来源/时间；project.verified_absence=true 表示宿主已核验该会话未归属项目，目录始终只登记。scope mesh 同样排除全部私人执行定位。
+
+用户明确继续某条工作时，Agent 复用本轮已知 ID 直接读取 continue/context，只有目标未知才 locate；需要恢复旧会话或进入目录执行时再定点核验该工作所需会话与目录。宿主只提供列表 API 时批量一次，在工具侧筛出目标；宿主不可用则从 Thread 上下文继续，不为填满总览而扫描所有会话。一般查询的首次入口、版本和能力已知时直接使用。
+
+对个人 Agent 说“我的工作总览”或“继续哪个工作”。Agent 主动显示工作目的、进展、执行 Agent、实际所属项目、可接续会话及关联目录，缺失项也明确列出。默认简短展示，每条优先一个接续入口，更多会话和目录按需展开。生成内容的工具单独记为 generation_tools，执行 Agent 来自私人绑定与宿主核验。
+
+`thread overview --mine --json` 离线读取自己的工作与私人定位，按最近记录排序，默认最多 20 条，total/truncated 提示是否还有更多。`--limit 1..100`、`--query`、`--all` 和 `--lifecycle` 沿用列表筛选。`thread overview ID --details --json` 展开最多 100 个绑定并标明截断；同一 Thread 可关联多个会话，同一会话可关联多个 Thread。旧 list 契约保持。
+
+`--scope base` 仅私人工作；`--scope mesh` 仅共享正文与进展，整个回执均不含私人执行定位、绑定数量或工作台路径，也不接受 --host-file。默认 scope all 是本人的私人总览，可包含本人对共享工作的私人绑定，不能直接复制进共享结果。普通读取不联网；--require-fresh 只显式拉取共享内容，Base 总览保持离线。
+
+证据状态：verified（已核验）附来源和时间，宿主会话以列出时刻为准，尚未执行恢复；registered（仅登记）来自既有记录/绑定；missing（缺失）说明原因。宿主元数据由当前个人 Agent 报告，不代替 Hub 身份校验。宿主未提供、列表未覆盖或失联时保留仅登记，不推断会话已删除。归档会话标明需在宿主恢复。详细视图可检查本机目录存在性，紧凑视图只登记；远端目录不自动 SSH。绑定目录表示工作关联，数据/产物用途未登记时留空。
+
+### 宿主元数据
+
+有受支持的会话/项目 API 时，个人 Agent 批量读取元数据，按以下格式生成临时私人 JSON，传给 `thread overview --mine --host-file FILE --json`。CLI 不扫描 Agent 数据库，也不持久保存这份快照。仅取必要元数据，不附聊天正文、摘要、Profile 或凭证；临时文件设为 600，使用后删除。
+
+```json
+{"format":1,"source":"supported_host_api","observed_at":"2026-01-02T12:00:00+00:00",
+ "sessions":[{"agent":"codex","host":"actual-host","id":"actual-session-id",
+ "title":"宿主原生会话标题","project_id":null,"cwd":"/work/example","status":"idle",
+ "updated_at":"2026-01-02T11:00:00+00:00"}],
+ "projects":[{"agent":"codex","host":"actual-host","id":"actual-project-id","name":"示例项目","path":"/work/example"}]}
+```
+
+format=1；source 与带时区的 observed_at 必填。sessions 最多 1000 条，必填 agent/host/id/project_id/status；可选 title/cwd/updated_at/url。status 为 active/idle/notLoaded/archived/unavailable。projects 最多 200 条，必填 agent/host/id/name，可选 path。单字符串最多 2000 字符，文件受既有 1 MiB 限额约束；未知字段拒绝，空列表允许。url 只填宿主实际返回的地址，不拼接猜测协议链接。
+
+Codex 宿主可用 list_projects/list_threads：projectId/label/path 映射到项目 id/name/path；会话 id/title/projectId/cwd/status/updatedAt 映射到上表。hostId=local 仅对实际本机映射为本机 hostname，其他宿主需已知映射。updatedAt 按接口实际秒/毫秒换成带时区 ISO 时间，不把数字原样传入。只规范化所需绑定及项目；查询不到时不遍历私人数据库。缺少单个会话可按需用受支持的定点查询补核验，仍失败则说明缺口。
+
+会话真实 project_id 决定所属项目。明确为 null 时，显示“未归属项目”；即使 cwd 匹配已登记项目目录，也只返回 project_candidates 候选。会话 ID 按 agent+host 匹配，目录匹配不会自动建立会话绑定。本次观察不改绑定；新增绑定沿用既有 bind 和用户授权。进展摘录保留原文、固定来源与接受状态，Agent 需要概括下一步时按需读取 context，核验更正和适用条件。
+
 ## 接入和同步
 
 首次共享用 thread discover --ssh EXISTING_ALIAS；服务器本地可省略 SSH 或用 --service 指定服务发现。Hub 必须支持 0.2 的专用 Thread 空间。复用已有账号，不需要新的注册或密钥。thread status 显示本地/远端账号、缓存空间和各来源截至版本。

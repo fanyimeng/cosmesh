@@ -18,6 +18,14 @@ def add_commands(commands, command, body):
     p = command(group, 'locate', 'thread.locate');p.add_argument('--workdir');p.add_argument('--session-id');p.add_argument('--host')
     p = command(group, 'list', 'thread.list'); p.add_argument('--query'); p.add_argument('--mine', action='store_true');p.add_argument('--all',action='store_true')
     p.add_argument('--lifecycle', choices=('active', 'archived', 'trash', 'withdrawn', 'merged', 'all'))
+    p = command(group, 'overview', 'thread.overview'); p.add_argument('id', nargs='?')
+    p.add_argument('--mine', action='store_true'); p.add_argument('--query'); p.add_argument('--all', action='store_true')
+    p.add_argument('--lifecycle', choices=('active', 'archived', 'trash', 'withdrawn', 'merged', 'all'))
+    p.add_argument('--scope', choices=('all', 'base', 'mesh'), default='all')
+    view = p.add_mutually_exclusive_group()
+    view.add_argument('--details', action='store_true'); view.add_argument('--compact', action='store_true')
+    p.add_argument('--limit', type=int, default=20)
+    p.add_argument('--host-file', help='Private, bounded metadata from supported host APIs; see guide show threads')
     p = command(group, 'inbox', 'thread.inbox'); p.add_argument('--sent', action='store_true'); p.add_argument('--all', action='store_true')
     for verb in ('show', 'context', 'continue', 'coordinate', 'backlinks'):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id')
@@ -71,8 +79,10 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Offline Thread operations cannot contact the Hub.')
     if dry and (publish or fresh or verb in {'discover', 'sync'}):
         raise Error('INPUT_INVALID', 'Dry-run previews local changes and cannot synchronize.')
-    if fresh and verb not in {'list', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status', 'maintenance'}:
+    if fresh and verb not in {'list', 'overview', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status', 'maintenance'}:
         raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
+    if verb == 'overview' and ((args.scope == 'mesh' and args.host_file) or (args.scope == 'base' and fresh)):
+        raise Error('INPUT_INVALID', 'Mesh overview excludes host metadata; Base overview stays local without --require-fresh.')
     if verb == 'request' and bool(args.id) == args.maintenance:
         raise Error('INPUT_INVALID', 'Choose a Thread ID or --maintenance.')
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
@@ -88,6 +98,14 @@ def execute(args):
         def finish(result, reload=False):
             if reload: wb.load()
             args._thread_sync_state = wb.status()
+            if verb == 'overview' and args.compact:
+                status = args._thread_sync_state
+                repos = {ref['repo'] for ref in result['source_index']}
+                args._thread_sync_state = {key: status[key] for key in ('state', 'identity_verified', 'last_sync')}
+                args._thread_sync_state['spaces'] = [
+                    {key: space[key] for key in ('repo', 'local_revision', 'remote_revision', 'last_sync_at',
+                                                'state', 'identity_verified', 'unpushed_count') if key in space}
+                    for space in status['spaces'] if space['repo'] in repos]
             return result, wb.base.head
         if getattr(args,'generation_file',None):
             import json
@@ -114,6 +132,12 @@ def execute(args):
             if not args.workdir and not args.session_id:
                 raise Error('INPUT_INVALID', 'Use the actual current workdir or Session ID.')
             result = locate(wb,args.workdir,args.session_id,args.host)
+        elif verb == 'overview':
+            import json
+            from .thread_overview import overview
+            host = json.loads(read_input(args.host_file, MAX_DOCUMENT)) if args.host_file else None
+            result = overview(wb, args.id, args.mine, args.query, args.lifecycle or ('all' if args.all else 'active'),
+                              args.scope, args.details, args.limit, host, args.compact)
         elif verb == 'list':
             result = []
             for item in wb.catalog.values():
@@ -200,4 +224,4 @@ def execute(args):
         if publish:
             wb.load()
             result = {'result': result, 'publication': wb.synchronize()}
-        return finish(result, reload=verb not in {'status','maintenance','list','locate','inbox','show','context','continue','backlinks','coordinate'} and not publish)
+        return finish(result, reload=verb not in {'status','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'} and not publish)
