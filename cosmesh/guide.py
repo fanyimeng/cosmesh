@@ -9,11 +9,11 @@ from .errors import Error
 TOPICS = {
     'search':'个人 Agent 展开搜索、统一检索、回链与原文核验',
     'knowledge':'知识库、文献、归档与贡献来源','users':'实名用户目录与进度总览',
-    'threads': 'Thread 工作串、跨人请求与个人 Agent 协调', 'mesh-agent': '可选实验：服务器 Mesh Agent',
+    'threads': 'Thread 工作串、跨人请求与个人 Agent 协调',
     'overview': '系统概览与能力边界', 'usage': '日常使用与命令',
     'architecture': '系统架构、数据与身份', 'files': '组件、源文件与运行文件',
     'operations': '安装升级、部署与故障排查', 'profile': '私人档案与问答填写',
-    'feedback': '系统反馈、共享范围与离线恢复',
+    'feedback': '维护 Thread、普通请求与旧反馈兼容',
 }
 
 

@@ -38,4 +38,4 @@ Task Lead 用 task state T_ID --to STATUS --reason TEXT --expect-revision REV �
 
 --expect VERSION 检查对象内容，--expect-revision REV 检查控制动作来源，来自最近一次读取。一次逻辑操作使用稳定 --idempotency-key；重试沿用原 key 和完整参数。STATE_CONFLICT 先保留输入再重新读取，IDEMPOTENCY_CONFLICT 表示同 key 的内容不同，STORE_DIRTY 表示手改现场需要保留诊断。
 
-Base init 和日常读写均不需要服务器。Mesh 首次在线克隆缓存后，--offline 明确只用本地，支持查询、创建任务和追加记录；恢复连接后显式 sync。回执提供上次同步时间、remote_revision 和 unpushed_count。网络失败保留提交；同步重试有上限。系统反馈的 --require-fresh 只拉取反馈，提交另用 feedback sync 或 add/reply --sync。Profile 与说明读取不联系 Hub。
+Base init 和日常读写均不需要服务器。Mesh 首次在线克隆缓存后，--offline 明确只用本地，支持查询、创建任务和追加记录；恢复连接后显式 sync。回执提供上次同步时间、remote_revision 和 unpushed_count。网络失败保留提交；同步重试有上限。维护入口用 thread maintenance 查询，新反馈用 thread request --maintenance，--sync 明确发布；详见 feedback 主题。Profile 与说明读取不联系 Hub。

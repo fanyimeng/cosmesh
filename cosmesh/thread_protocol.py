@@ -121,6 +121,7 @@ def validate(doc):
         raise Error('SCHEMA_INVALID', 'The body must be text.')
     if kind == 'entry':
         identifier(meta.get('thread'), 'W')
+        # Retain parsing of historical records from the retired coordinator.
         if meta.get('agent') is not None and meta['agent'] != 'mesh-agent':
             raise Error('SCHEMA_INVALID', 'Unknown generated-record agent label.')
         if meta.get('type') not in TYPES:

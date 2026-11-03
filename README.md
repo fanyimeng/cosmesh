@@ -23,7 +23,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Source preview **0.3.10**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release **0.3.12**. Requires Python 3.9+ and Git; targets macOS and Linux.
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git
@@ -57,7 +57,7 @@ cosmesh skills install --agent codex --only both --json
 
 Then ask: “Use CosBase to organize this work. Check existing Threads first and suggest what to continue or create.”
 
-For versioned user installations, maintainers can build independent release packages; see the [quick start](docs/quickstart.md). This repository is the source preview, with a CLI and an optional in-memory TUI demo. Native Windows, private cross-device sync, and background notifications are future work.
+For an independent user installation or upgrade, use a verified release package from your Hub maintainer; see the [quick start](docs/quickstart.md). This repository provides the CLI, standard Skills, build tools, and an optional in-memory TUI demo. Native Windows, private cross-device sync, and background notifications are future work.
 
 ## Development
 

@@ -112,7 +112,9 @@ def parser(product):
     get = command(guides, 'show', 'guide.show')
     get.add_argument('topic', choices=tuple(guide.TOPICS))
     get.add_argument('--section', type=int)
-    feedbacks = command(commands, 'feedback').add_subparsers(dest='feedback_command', required=True)
+    legacy_feedback = command(commands, 'feedback')
+    legacy_feedback.description = 'Legacy feedback history and pending queue compatibility; use thread request --maintenance for new feedback.'
+    feedbacks = legacy_feedback.add_subparsers(dest='feedback_command', required=True)
     for verb in ('status', 'connect', 'add', 'reply', 'list', 'show', 'pull', 'sync', 'discard'):
         fb = command(feedbacks, verb, 'feedback.' + verb)
         if verb == 'connect':
@@ -178,10 +180,12 @@ def parser(product):
         p.add_argument('--service', help='Local service discovery; defaults to the shared service')
         p.add_argument('--ssh', help='Use an existing SSH host alias and its normal system login')
     hub = command(commands, "hub").add_subparsers(dest="verb", required=True)
-    for verb in ("init", "repo-create", "grant", "key-add", "key-revoke", "status", "serve", "validate", 'run','community-init'):
+    for verb in ("init", "repo-create", "grant", "key-add", "key-revoke", "status", "serve", "validate", 'run','community-init','maintenance'):
         p = command(hub, verb, "hub." + verb)
         p.add_argument("--hub-root", required=True)
         if verb=='community-init':p.add_argument('--library-root',required=True)
+        if verb=='maintenance':
+            p.add_argument('--repo');p.add_argument('--thread');p.add_argument('--clear',action='store_true')
         if verb in {"repo-create", "grant", "status", "validate"}:
             p.add_argument("--repo", required=True)
         if verb in {"repo-create", "key-add"}:
@@ -221,8 +225,6 @@ def parser(product):
     se.add_argument('--bootstrap', default='/srv/cosmesh/agent/bootstrap.py')
     from .thread_cli import add_commands
     add_commands(commands, command, body)
-    from .mesh_agent import add_commands as add_agent_commands
-    add_agent_commands(commands, command)
     from .community_cli import add_commands as add_community_commands
     add_community_commands(commands,command)
     from .search import add_commands as add_search_commands
@@ -306,7 +308,7 @@ def capabilities(product):
                          "legacy_search_sources": True, "bounded_search_batch": True,
                          "thread_split_merge": True, "thread_recycle_bin": True, "thread_withdrawal": True,
                          "thread_session_lookup": True,
-                         "private_session_bindings": True, "mesh_agent_ready": True,
+                         "private_session_bindings": True, "maintenance_requests": True,
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,
                          "personal_lifecycle": product == "cosbase", "local_control_updates": product == "cosmesh",
@@ -377,9 +379,6 @@ def execute(args, product):
         return execute_community(args)
     if action=='hub.community-init':
         return Hub(args.hub_root).initialize_community(args.library_root),None
-    if action.startswith("mesh-agent."):
-        from .mesh_agent import execute as execute_agent
-        return execute_agent(args)
     if action.startswith("thread."):
         from .thread_cli import execute as execute_thread
         return execute_thread(args)
@@ -498,6 +497,8 @@ def execute(args, product):
         verb = action.split(".")[1]
         if verb == "init":
             return hub.initialize(), None
+        if verb == 'maintenance':
+            return hub.maintenance(args.repo, args.thread, args.clear), None
         if verb == "repo-create":
             return hub.create_repo(args.repo, args.product, args.entrypoint, args.owner, args.system_feedback), None
         if verb == "grant":
@@ -672,7 +673,7 @@ def main(argv=None, product="cosmesh"):
     sync_state = {"state": "local_only", "source_revision": revision, "remote_revision": None,
                   "last_sync_at": None, "identity_verified": False}
     try:
-        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'space.', 'thread.', 'mesh-agent.','library.','user.','search.')):
+        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'space.', 'thread.', 'library.','user.','search.')):
             root = root_for(product, getattr(args, "root", None))
             sync_state = state(Store(root), revision)
     except (Error, OSError, ValueError):
@@ -690,7 +691,7 @@ def main(argv=None, product="cosmesh"):
                 sync_state = workbench.status()
         except (Error, OSError, ValueError):
             pass
-    client_action = 'args' in locals() and args.action.startswith(('client.', 'space.', 'mesh-agent.','library.','user.','search.'))
+    client_action = 'args' in locals() and args.action.startswith(('client.', 'space.', 'library.','user.','search.'))
     if 'args' in locals() and args.action.startswith('feedback.'):
         try:
             status = Feedback().status()

@@ -17,12 +17,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--wheel', type=Path, help='Reuse an already verified application wheel')
     args = p.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.portable-', dir=args.output) as folder:
         stage = Path(folder)
-        subprocess.run([sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
-                        '--wheel-dir', str(stage), str(ROOT)], check=True)
+        if args.wheel:
+            shutil.copy2(args.wheel, stage / args.wheel.name)
+        else:
+            subprocess.run([sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
+                            '--wheel-dir', str(stage), str(ROOT)], check=True)
         wheel = next(stage.glob('cosmesh-*.whl'))
         version = wheel.name.split('-')[1]
         target = args.output / ('cosmesh-' + version + '-portable.tar.gz')
@@ -43,6 +47,7 @@ def main():
             lock.append(row + ' ' + ' '.join('--hash=sha256:' + sha for sha in hashes))
         (content / 'requirements.lock').write_text('\n'.join(lock) + '\n')
         info = {'format': 1, 'version': version, 'wheel': wheel.name,
+                'thread_lifecycle_version': 2 if tuple(map(int,version.split('.'))) >= (0,3,7) else 1,
                 'schema_write': [1,2,3] if tuple(map(int,version.split('.'))) >= (0,3,0) else [1,2] if tuple(map(int,version.split('.'))) >= (0,2,0) else [1],
                 'files': {f.name: hashlib.sha256(f.read_bytes()).hexdigest() for f in content.iterdir()}}
         (content / 'portable.json').write_text(json.dumps(info, indent=2) + '\n')

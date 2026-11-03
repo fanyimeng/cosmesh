@@ -14,6 +14,7 @@ def add_commands(commands, command, body):
     discover.add_argument('--ssh'); discover.add_argument('--service')
     p = command(group, 'sync', 'thread.sync'); p.add_argument('--pull', action='store_true')
     command(group, 'status', 'thread.status')
+    command(group, 'maintenance', 'thread.maintenance')
     p = command(group, 'locate', 'thread.locate');p.add_argument('--workdir');p.add_argument('--session-id');p.add_argument('--host')
     p = command(group, 'list', 'thread.list'); p.add_argument('--query'); p.add_argument('--mine', action='store_true');p.add_argument('--all',action='store_true')
     p.add_argument('--lifecycle', choices=('active', 'archived', 'trash', 'withdrawn', 'merged', 'all'))
@@ -28,14 +29,15 @@ def add_commands(commands, command, body):
     body(p);p.add_argument('--sync',action='store_true')
     p = command(group, 'delete', 'thread.delete');p.add_argument('id');body(p);p.add_argument('--sync',action='store_true')
     for verb in ('note', 'result', 'request', 'reply', 'assign', 'decline', 'deliver', 'adopt', 'cancel', 'correct', 'link', 'state', 'archive','restore','share', 'edit', 'bind'):
-        p = command(group, verb, 'thread.' + verb); p.add_argument('id')
+        p = command(group, verb, 'thread.' + verb); p.add_argument('id', **({'nargs':'?'} if verb == 'request' else {}))
         if verb != 'bind':
             p.add_argument('--sync', action='store_true')
         if verb in ('note', 'result', 'request', 'reply', 'assign', 'decline', 'deliver', 'adopt', 'cancel', 'correct', 'link', 'edit'):
             body(p)
         if verb == 'request':
-            p.add_argument('--to', required=True)
-        if verb in ('note', 'result'):
+            p.add_argument('--to', help='Recipient account, stable ID or real name; defaults to the Thread creator')
+            p.add_argument('--maintenance', action='store_true', help='Use the Hub maintenance Thread')
+        if verb in ('note', 'result', 'request'):
             p.add_argument('--ref', action='append', default=[], help='Cite ID or pinned ID@VERSION; repeat for multiple sources')
         if verb in ('note','result','edit'):p.add_argument('--generation-file')
         if verb == 'assign':
@@ -69,8 +71,10 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Offline Thread operations cannot contact the Hub.')
     if dry and (publish or fresh or verb in {'discover', 'sync'}):
         raise Error('INPUT_INVALID', 'Dry-run previews local changes and cannot synchronize.')
-    if fresh and verb not in {'list', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status'}:
+    if fresh and verb not in {'list', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status', 'maintenance'}:
         raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
+    if verb == 'request' and bool(args.id) == args.maintenance:
+        raise Error('INPUT_INVALID', 'Choose a Thread ID or --maintenance.')
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
     if prefix and (root == Path(prefix).resolve() or Path(prefix).resolve() in root.parents):
         raise Error('PATH_INVALID', 'Keep the workbench outside the application installation.')
@@ -103,6 +107,8 @@ def execute(args):
         body = read_input(args.file, MAX_DOCUMENT) if hasattr(args, 'file') else getattr(args, 'body', '')
         if verb == 'status':
             result = wb.status()
+        elif verb == 'maintenance':
+            result = wb.maintenance_entry()
         elif verb == 'locate':
             from .thread_lifecycle import locate
             if not args.workdir and not args.session_id:
@@ -161,19 +167,23 @@ def execute(args):
             from .thread_lifecycle import merge
             result=merge(wb,args.sources,args.into,body,key,dry)
         elif verb in {'note', 'result', 'request', 'link', 'state'}:
+            target = args.id
             options = {'record_type': verb, 'key': key, 'dry_run': dry}
-            if verb in ('note', 'result'): options['refs'] = [wb.citation(x) for x in args.ref]
+            if verb in ('note', 'result', 'request'): options['refs'] = [wb.citation(x) for x in args.ref]
             if verb == 'request':
+                if args.maintenance:
+                    target = wb.maintenance_entry()['source']['id']
+                recipient = args.to or wb.find(target, 'thread')['doc']['meta']['author']
                 if wb.client.get('community_enabled'):
                     from .knowledge import Knowledge
-                    person=Knowledge(wb).user(args.to)
+                    person=Knowledge(wb).user(recipient)
                     if person['status']!='active':raise Error('USER_DISABLED','The requested person is disabled.')
                     if not person['name']:raise Error('REAL_NAME_REQUIRED','The recipient must first fill in their real name.')
                     options['recipient']=person['account']
-                else:options['recipient'] = args.to
+                else:options['recipient'] = recipient
             if verb == 'link': options['refs'] = [wb.ref(wb.find(args.target, 'thread'))]
             if verb == 'state': options['state'] = args.to
-            result = wb.append(args.id, body, **options)
+            result = wb.append(target, body, **options)
         elif verb == 'correct':
             old = wb.find(args.id, 'entry')
             result = wb.append(old['doc']['meta']['thread'], body, 'correction', supersedes=wb.ref(old), key=key, dry_run=dry)
@@ -190,4 +200,4 @@ def execute(args):
         if publish:
             wb.load()
             result = {'result': result, 'publication': wb.synchronize()}
-        return finish(result, reload=verb not in {'status','list','locate','inbox','show','context','continue','backlinks','coordinate'} and not publish)
+        return finish(result, reload=verb not in {'status','maintenance','list','locate','inbox','show','context','continue','backlinks','coordinate'} and not publish)

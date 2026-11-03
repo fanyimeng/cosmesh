@@ -29,7 +29,9 @@ def root_for(product, explicit=None):
 
 def connection(root, ssh=None, service=None):
     if ssh:
-        return {'kind': 'ssh-system', 'host': ssh, 'discovery': service or DEFAULT_DISCOVERY, 'repo': 'spaces'}
+        saved = settings()
+        remembered = saved.get('discovery') if saved.get('ssh') == ssh else None
+        return {'kind': 'ssh-system', 'host': ssh, 'discovery': service or remembered or os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY), 'repo': 'spaces'}
     if service or Path(os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY)).is_file():
         return {'kind': 'system', 'discovery': service or os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY), 'repo': 'spaces'}
     if root.joinpath('.cosmesh/config.json').is_file():
@@ -38,7 +40,7 @@ def connection(root, ssh=None, service=None):
             return dict(remote, repo='spaces')
     saved = settings()
     if saved.get('ssh'):
-        return {'kind': 'ssh-system', 'host': saved['ssh'], 'discovery': DEFAULT_DISCOVERY, 'repo': 'spaces'}
+        return {'kind': 'ssh-system', 'host': saved['ssh'], 'discovery': saved.get('discovery', DEFAULT_DISCOVERY), 'repo': 'spaces'}
     raise Error('HUB_CONNECTION_REQUIRED', 'Use space discover --ssh with your existing server connection once.')
 
 

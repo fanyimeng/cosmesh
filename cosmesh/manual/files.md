@@ -48,7 +48,7 @@ gateway.py 的 receive/send 读写有界握手；request 限定客户端字段�
 
 Hub.initialize 创建受保护目录，create_repo 建 bare repo 和 hook，grant 管理仓库权限，policy/status 查询授权。serve 解析受限 SSH 请求，dispatch 取得仓库锁并运行 Git，validate_push 检查逐提交历史，audit 记录接受意向与完成。validate_change 负责源变更的作者、动作和历史规则；BareStore/view 以固定快照校验。
 
-key-add/key-revoke 等兼容原公钥入口，普通用户沿用既有系统身份。system_feedback 是指定仓库的共享策略，blocked 与显式只读覆盖默认授权。
+key-add/key-revoke 等兼容原公钥入口，普通用户沿用既有系统身份。旧 system_feedback 是兼容反馈仓库的共享策略，blocked 与显式只读覆盖默认授权。
 
 ## profile.py 私人资料
 
@@ -60,7 +60,7 @@ PersonalProfile.crypt 提供 contact 的加密保存、临时 reveal 与明确�
 
 guide.py 的 listing/show/search 提供主题、全文/段落和词项检索，document 从资源生成标题、行号和 SHA-256。manual/overview.md 解释定位与边界，usage.md 讲日常命令，architecture.md 讲数据和信任路径，files.md 就是此文件，operations.md 讲部署维护，profile.md 讲个人资料，feedback.md 讲反馈流转。资源随版本固定。
 
-## feedback.py 反馈留存
+## feedback.py 旧反馈兼容
 
 Feedback.queue 先把用户输入保存到私人 outbox 并核验幂等键。infer/connect/ensure_cache 选择既有 Hub、核对专用反馈标志并建隔离 clone。pull 只刷新共享反馈，sync 按回复依赖顺序把待提交材料变为 Update、同步并保存回执。read 合并已接受快照和本地待提交项；discard 只取消尚未转成提交的本地草稿，保留本地记录。
 
@@ -82,7 +82,7 @@ examples/local_roundtrip.py 是隔离业务闭环；release_lifecycle.py 验证�
 
 业务空间 documents/ID.md 是源文档；.cosmesh/config.json 是版本化源配置，operations/*.json 是源操作回执。client.json、lock、pending.json、conflict.json 是私人连接、锁、恢复和冲突材料。
 
-~/.config/cosmesh/profile.md 和 profile.lock 属于私人用户配置。~/.local/share/cosmesh/feedback/outbox/*.json 是待提交输入及本地回执，connection.json 是专用反馈连接，repo/ 是共享反馈缓存，network.lock/outbox.lock 分别控制网络过程与短写入。共同元数据不嵌入普通业务仓库。
+~/.config/cosmesh/profile.md 和 profile.lock 属于私人用户配置。~/.local/share/cosmesh/feedback/outbox/*.json 是待提交输入及本地回执，connection.json 是专用反馈连接，repo/ 是共享反馈缓存，network.lock/outbox.lock 分别控制网络过程与短写入。这些旧兼容文件保持原位；新反馈使用普通 Thread 和请求，无新专用队列。
 
 Hub 的 hub.json、policy/repos.json、policy/keys.json、gateway.json、repos/*.git、locks/ 和 audit/*.jsonl 由维护者管理。公共 service.json 只含发现信息，releases/ 保存不可变发布物；control/ 保存维护脚本与日志。
 
@@ -92,7 +92,7 @@ client.py 提供显式 client check/update，读取安装目录 client.json 中�
 
 spaces.py 管理本人自动空间、公开空间发现及只拉取缓存，复用 sync/gateway。root_for 读取保存的活动 Mesh root，显式 --root 与隔离数据目录优先。gateway 的 cosmesh-space 请求只传 ensure/list，由内核身份决定账号；不接受客户自报空间所有者。
 
-## Thread 0.2 内核与协调器
+## Thread 内核与个人 Agent 协调
 
 thread_lifecycle.py 按本机目录和会话定位既有工作，实现同库分裂与归并、Base 回收站、Mesh 撤回及保留来源的续接入口。结构操作保持作者与原 ID，归并和来源通过固定引用追溯；跨空间综合沿普通结果引用处理。
 
@@ -105,5 +105,3 @@ thread_protocol.py 负责 schema 2 的 Thread/entry 字段、固定版本引用�
 threads.py 的 Workbench 组织私人 Base、专用 Mesh 缓存、明确分享、请求关联、来源先于交付的同步、本地 Session/目录映射和引用上下文。thread_cli.py 给两份 CLI 注册同一 thread 命令，旧 schema 1 的 Service 路径保留。
 
 threads.py 的 coordination 只读导出请求、分配工作、来源和更正，供当前个人 Agent 汇总；note/result 的 --ref 保存固定版本依据。协调结果仍是普通工作记录。
-
-mesh_agent.py 保留可选实验公共协调器：私有配置、SQLite 队列、领取租约、去重和有限重试、兼容 HTTP 接口。tools/mesh_agent_control.py 管理 tmux 生命周期；tools/prepare_thread_preview.py 默认只准备独立 Hub 和工作台，显式 --start-agent 才准备并启动公共协调器。

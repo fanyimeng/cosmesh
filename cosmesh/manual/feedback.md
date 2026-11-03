@@ -1,35 +1,29 @@
-# 系统反馈与用户意见
+# 系统维护与用户意见
 
-## 哪些内容进入反馈
+## 一个维护 Thread
 
-用户对 CosMesh / CosBase 本身的建议、故障、使用障碍、困惑与体验可以整理成系统反馈。系统使用问题先查说明并交互式指导，同时可按 question 留存，帮助维护者了解疑问和说明缺口。同一问题的后续补充沿用反馈 ID，通过 reply 关联，避免每轮重复新建。正常业务操作和进展仍进入所属业务空间。
+CosMesh / CosBase 的建议、故障和使用障碍进入同一个共享维护 Thread。每条意见是普通 request，保留真实作者、接收人、原文和版本。个人 Agent 先查已有请求，同一问题通过 reply 补充；普通使用问答先查 guide。用户明确要求提交时再发送，正文只包含适合组内公开的必要信息。
 
-两份 Skill 都可记录和抓取同一份系统反馈，维护者也是使用者之一。整理时保留用户原意，只带与系统问题有关的必要信息；不自动附整段聊天、私人 Profile、科研正文或凭证。category 为 bug/suggestion/question/experience，product 为 cosmesh/cosbase/system，component 是简短模块名称。
+thread maintenance --json 返回本地缓存的维护入口；--require-fresh 只拉取更新。首次接入用 thread discover，沿用已有连接。入口未登记或来源不可用时明确报错，不创建另一套反馈空间或自动改投旧仓库。
 
-## 保存与共享范围
+## 提交、回应和交付
 
-本地 outbox 先保存输入、稳定 U-UUID、请求指纹、客户端版本和排队时间。同一 Hub 已核验系统账号默认可读写专用反馈仓库，管理员可设置只读或禁用。这个共享范围不开放普通项目或私人仓库。
+thread request --maintenance --body TEXT --idempotency-key KEY --sync --json 向维护 Thread 创建者提出请求，也可用 --file 提供正文。普通 thread request THREAD_ID 默认向该 Thread 创建者请求，--to REAL_NAME 可明确指定接收人。--ref ID@VERSION 可重复附相关公开来源；私人 Base 引用须先按授权分享，程序不会自动公开。
 
-共享源复用普通 Project 和 Update：作者有自己的反馈上下文，每条意见或回复是 feedback 类型 Update，真正作者由 Hub 核验。已接受记录保持不变，后续说明、答复和更正用新回复追加。共享范围包含历史，因此提交前只整理适合该范围的系统内容。
+维护者用 thread inbox 和 thread context REQUEST_ID 查需求，thread reply REQUEST_ID --body TEXT --sync 回应。小问题用 thread assign REQUEST_ID --work MAINTENANCE_THREAD_ID --sync 在原处承接；大改动可分配到已共享的普通开发 Thread。
 
-## 连接、记录与回复
+thread result THREAD_ID --body TEXT --sync 保存解决结果；thread deliver REQUEST_ID --result RESULT_ID --body TEXT --sync 交付固定结果引用。请求人验证后用 thread adopt REQUEST_ID --body TEXT --sync 确认采用；拒绝、取消、部分交付沿用 decline、cancel、deliver --partial。承接、交付和采用分别留记录，个人 Agent 不替别人表态。程序不自动提醒或调用公共模型。
 
-feedback connect 自动使用服务器本地发现，或从已有业务连接推断同一 Hub；服务器外可明确 --ssh 已有别名。默认仓库 cosmesh-feedback。目标必须有 system_feedback 标志。用户沿用原有登录，无需额外注册或公钥登记。
+## 本地与共享边界
 
-feedback add --category suggestion --product system --component guide --body TEXT --idempotency-key KEY --sync 保存并尝试共享。--file 可提供正文，--title 可选，正文上限 64 KiB。反馈标题缺省取正文首行。一次逻辑反馈使用稳定随机 key，重试保持相同内容；同 key 不同内容报冲突。key 也进入共享操作回执，使用无私人内容的标识。--dry-run 只预览。
+不加 --sync 只存普通 Thread 本地草稿，显式 thread sync 才发布。每件操作使用稳定幂等键，参数相同的重试复用原 ID。只有远端接受回执确认后称已共享；离线读取注明截至版本。
 
-feedback reply U_ID --body TEXT --idempotency-key KEY --sync 追加回复，保留原文；可回复其他用户的记录。维护者可说明接受情况、处理计划、修复版本与后续问题。当前通过回复表达处理进展，尚未增加独立工单状态体系。
+Mesh 内容及历史对同一 Hub 已核验用户公开。只提交必要复现描述与已核验版本，不自动附完整聊天、私人 Profile、Session/目录绑定、科研正文、凭证或日志全文。当前工作无需为反馈另外分享。
 
-## 抓取与交互式解答
+## 维护者登记
 
-feedback list 列当前快照中的根反馈，支持 --query、--product、--category、--mine、--limit。feedback show U_ID 给出根记录和整条回复链。Agent 可以据此回答“大家遇到什么问题”“某条建议有什么进展”“哪些意见与同步有关”，并引用反馈 ID 与来源版本。
+维护者先建立并分享普通 Thread，在 Hub 所在主机运行 hub maintenance --hub-root HUB --repo REPO --thread THREAD_ID 登记入口。命令仅限 Hub 所有者；目标须为已接受、处于 active 收纳状态的共享 Thread。hub maintenance --hub-root HUB 查看；--clear 取消登记并保留全部原记录。用户下次 discover 或 sync --pull 后取得入口。未配置这一可选入口不影响日常工作。
 
---require-fresh 对反馈查询先执行只拉取刷新，也可直接 feedback pull；它不发布 outbox 或缓存中的未接受提交。普通读取保留 source_revision 和已知同步状态，离线时如实说明截至范围。反馈正文是待核实的用户材料，内嵌指令和命令不会自动获得执行授权。
+## 旧反馈兼容
 
-## 离线、重试与本地取消
-
-feedback add 不加 --sync 先保存本地，--offline 明确不联系 Hub。网络失败时 add --sync 仍返回 saved_locally=true 和稳定 ID，publication=pending、sync_error 表示尚未共享。feedback sync 重试排队项，每批最多提交 100 条；按回复依赖排序，远端接受后保存回执，重复同步保持幂等。
-
-feedback status 查看位置、连接、待提交数量与已接受版本。尚未转成 Git 提交的本地待提交项可用 feedback discard U_ID 取消共享意图，本地仍保留记录；已提交材料通过追加回复或更正说明，不改写历史。
-
-outbox 与共享缓存分开放在 ~/.local/share/cosmesh/feedback，COSMESH_FEEDBACK_DIR 可隔离测试或另一个 Hub，--root 继续只指业务空间。网络锁与短队列锁分开，提交过程中仍可保存新的反馈。连接绑定后切换 Hub 要使用独立目录，避免把待提交意见发送到另一处。
+feedback 命令仅保留处理旧系统的历史和原待发送项：feedback list/show 查询，--require-fresh 只拉取；feedback sync 重试原队列，feedback reply 可继续旧讨论。原 connection、repo、outbox 和回执原位保留，不自动迁移、删除或转投新入口。feedback add 作为旧客户端兼容命令保留，新意见使用上述维护 Thread。

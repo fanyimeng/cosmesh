@@ -78,3 +78,18 @@ python3 install.py upgrade
 The default prefix is `~/.local/opt/cosmesh`. Use `--prefix` and `--skills-dir` for isolated previews. Versioned programs and managed Skills are separate from workbench/Profile data; compatible upgrades and uninstallation retain user data. Dependency wheels are bundled per platform. Public source publication does not set up a hosted Hub or a release-update channel.
 
 默认程序目录与用户数据分开。维护者按平台构建、验证后再分发固定包；发布源码本身不创建托管 Hub 或更新渠道。
+
+## Maintenance requests / 系统维护请求
+
+```sh
+cosmesh thread maintenance --json
+cosmesh thread request --maintenance --body 'Please clarify this behavior.' --sync --json
+```
+
+The Hub maintainer registers one ordinary shared Thread. Requests, replies, assignments, results, delivery and requester adoption reuse the same Thread workflow. Legacy feedback history and pending queues remain available.
+
+维护者登记一个普通共享 Thread。用户直接向它发普通请求，后续回应、分配、结果交付和确认采用均沿用 Thread 流程；旧反馈历史和未发送项保留。
+
+For a portable installer hosted outside the default deployment root, pass `--source /srv/team/agent`; discovery follows `/srv/team/service.json`, or use `--service` to select another file. Existing installations can use `cosmesh client check --json` and `cosmesh client update --json` when the maintainer has configured a channel.
+
+通用安装器支持自定义服务器目录，并记住匹配的发现文件；已配置更新渠道的安装可用 client check/update 检查或更新。安装不会自动发布私人 Base。

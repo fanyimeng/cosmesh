@@ -26,7 +26,7 @@ Base 可独立离线运行；已缓存的 Mesh 可离线读写。--sync 或 thre
 
 AUTH_DENIED 检查已核验账号和权限。STATE_CONFLICT 刷新 context 并保留原输入。STORE_DIRTY 保留手工修改与恢复日志。IDEMPOTENCY_CONFLICT 要核对同键输入，避免换键重复写入。
 
-反馈可通过 feedback add 先保存本地，显式 sync 后提交到已配置的反馈仓库。未核验远端接受时，只说明已存本地。具体命令以当前 --help 和 guide 为准。
+系统意见使用 thread request --maintenance 保存普通请求，显式 --sync 后提交到维护 Thread；维护者登记方法见 feedback 主题。旧 feedback 队列保留兼容。未核验远端接受时，只说明已存本地。具体命令以当前 --help 和 guide 为准。
 
 ## 备份与恢复
 

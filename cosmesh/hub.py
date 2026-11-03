@@ -398,6 +398,46 @@ class Hub:
                            'public_read': True, 'initialized': revision.returncode == 0})
         return {'spaces': result, 'own_id': 'u-' + hashlib.sha256(user.encode()).hexdigest()[:24]}
 
+    def _maintenance_entry(self, target):
+        if target is None:
+            return None
+        from .thread_protocol import identifier, content_version, thread_state
+        if not isinstance(target, dict) or set(target) != {'repo', 'id'}:
+            raise Error('INPUT_INVALID', 'Maintenance entry requires a shared repo and Thread ID.')
+        identifier(target['id'], 'W')
+        if not isinstance(target['repo'], str) or not REPO.fullmatch(target['repo']):
+            raise Error('INPUT_INVALID', 'Invalid maintenance repository.')
+        policy = json.loads((self.root / 'policy/repos.json').read_text()).get(target['repo'])
+        if not policy or not policy.get('thread_format'):
+            raise Error('POLICY_DENIED', 'Maintenance must point to a shared Thread space.')
+        store = self.repo(target['repo'])
+        revision = store.git('rev-parse', 'refs/heads/main')
+        model = view(store, store.snapshot(revision)[1], 'cosmesh')
+        doc = model.docs.get(target['id'])
+        if not doc or doc['meta']['kind'] != 'thread':
+            raise Error('NOT_FOUND', 'Maintenance Thread is not published in that space.')
+        records = [d['meta'] for d in model.docs.values() if d['meta'].get('thread') == target['id']]
+        if thread_state(records)['lifecycle'] != 'active':
+            raise Error('STATE_CONFLICT', 'Maintenance Thread must be active.')
+        return {'source': {**target, 'version': content_version(doc)},
+                'maintainer': doc['meta']['author'], 'title': doc['meta']['title']}
+
+    def maintenance(self, repo=None, thread=None, clear=False):
+        with self.locked('maintenance-entry'):
+            settings = self.settings()
+            if clear and (repo or thread):
+                raise Error('INPUT_INVALID', 'Choose a target or --clear.')
+            if (repo is None) != (thread is None):
+                raise Error('INPUT_INVALID', 'Provide both --repo and --thread.')
+            target = {'repo': repo, 'id': thread} if repo is not None else settings.get('maintenance_thread')
+            if clear: target = None
+            entry = self._maintenance_entry(target)
+            if clear or repo is not None:
+                if target is None: settings.pop('maintenance_thread', None)
+                else: settings['maintenance_thread'] = target
+                atomic(self.root / 'hub.json', json.dumps(settings, indent=2) + '\n')
+            return {'configured': entry is not None, 'maintenance': entry}
+
     def thread_spaces(self, payload, user):
         name = 'w-' + hashlib.sha256(user.encode()).hexdigest()[:24]
         if payload['method'] == 'ensure_threads':
@@ -415,7 +455,11 @@ class Hub:
         versions = {}
         for space in spaces:
             with self.locked(space['id']): versions[space['id']] = self.status(space['id'], user)
-        return {'community_enabled':bool(self.community()), 'own_id':name, 'spaces':spaces, 'versions':versions}
+        result = {'community_enabled':bool(self.community()), 'own_id':name, 'spaces':spaces, 'versions':versions,
+                  'maintenance':None}
+        try: result['maintenance'] = self._maintenance_entry(self.settings().get('maintenance_thread'))
+        except Error as exc: result['maintenance_error'] = exc.code
+        return result
 
     def validate_thread_references(self, name, model, before, after):
         from .thread_protocol import check_record, content_version

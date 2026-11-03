@@ -18,7 +18,7 @@ CosMesh 保存共享上下文、行动与记录；CosBase 整理个人事务。�
 
 Project 保存目标、背景和范围；Task 表达需要推进的行动、责任与日期；Update 保存进展、想法、决定、反馈、更正与交接。源文件是 Markdown 正文和少量 YAML 元数据。文档有稳定 UUIDv4 ID、内容版本和 Git 历史。
 
-Inbox、Agenda、context、任务当前状态是派生视图。Session 是 Update 的定位元数据。Profile 是私人用户配置；系统反馈复用专用仓库中的 Project 上下文和 feedback 类型 Update，核心业务文档仍为三种。
+Inbox、Agenda、context、任务当前状态是派生视图。Session 是 Update 的定位元数据。Profile 是私人用户配置；旧系统反馈历史同样沿用原 Project 和 feedback 类型 Update。
 
 ## 当前已有能力
 
@@ -26,7 +26,7 @@ CosBase 支持独立记录、默认个人项目、全部六向文档转换、派
 
 CosMesh 支持项目和任务、初始及追加邀请、本人接受或拒绝、进展与反馈、更正与回复、Session、Lead 控制的状态和日期。共享 Update 被 Hub 接受后保持不变，更正与回复追加新记录。
 
-共用能力包括稳定 JSON、版本前提、幂等、仓库锁、写入恢复、固定 Git 快照、显式同步、既有系统身份、私人 Profile 与问答填写、离线系统说明、持久系统反馈及回复。反馈可先排队，提交后由同一 Hub 的已核验用户读取。
+共用能力包括稳定 JSON、版本前提、幂等、仓库锁、写入恢复、固定 Git 快照、显式同步、既有系统身份、私人 Profile 与问答填写、离线系统说明、维护 Thread 中的普通请求与回应。新意见使用 thread request --maintenance，原专用反馈仅保留兼容。
 
 Profile 联系方式可选择字段加密；普通读取保留密文，按需 reveal 临时获取选定明文，明确 decrypt 可解除加密。口令通过隐藏终端或临时管道输入，不写档案和文档。使用方式见 profile 主题。
 

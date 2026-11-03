@@ -92,7 +92,7 @@ def main():
         agent = payload/'agent'
         agent.mkdir()
         shutil.copy2(ROOT/'tools/remote_bootstrap.py',agent/'bootstrap.py')
-        for helper in ('mesh_agent_control.py', 'prepare_thread_preview.py'):
+        for helper in ('prepare_thread_preview.py',):
             shutil.copy2(ROOT/'tools'/helper, agent/helper)
         shutil.copy2(ROOT/'cosmesh/resources/remote-install.sh',agent/'install.sh')
         instructions = '''# CosMesh / CosBase 用户发布包 %s

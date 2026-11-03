@@ -27,7 +27,7 @@ def request(body='希望说明更清楚', category='suggestion', reply_to=None):
 
 class GuideTests(unittest.TestCase):
     def test_resources_sections_and_code_coverage(self):
-        self.assertEqual(len(guide.listing()['topics']), 12)
+        self.assertEqual(set(guide.TOPICS), {p.stem for p in (Path(guide.__file__).parent/'manual').glob('*.md')})
         self.assertIn('search', {x['topic'] for x in guide.listing()['topics']})
         for topic in guide.TOPICS:
             doc = guide.document(topic)

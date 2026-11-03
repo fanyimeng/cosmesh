@@ -83,9 +83,13 @@ description: 管理 Thread 共享工作串、实名请求、知识资料、贡�
 
 ## 个人资料与系统支持
 
-profile、guide 和 feedback 仍为共用入口。Profile 私有且独立于 --root；先 show 再用 --expect 更新，只填写用户明确回答的字段。联系方式加密/读取按 guide show profile 的口令通道执行，口令只在隐藏终端或临时管道输入。普通 Thread 发布不包含档案。
+profile 与 guide 为共用入口。Profile 私有且独立于 --root；先 show 再用 --expect 更新，只填写用户明确回答的字段。联系方式加密/读取按 guide show profile 的口令通道执行，口令只在隐藏终端或临时管道输入。普通 Thread 发布不包含档案。
 
-系统用法查 guide search/show。系统反馈按当前用户授权进入 feedback，正常工作记录进入 Thread；保留来源和必要复现信息，不附私人材料或凭证。只有远端确认后称已共享。
+系统用法查 guide search/show。用户明确要求提交系统意见、故障或建议时，先 thread maintenance --json 定位维护 Thread，按需读 context/已有请求，避免重复提交。首次尚未接入时用 thread discover；需要最新时只刷新一次。用 thread request --maintenance --file FILE --idempotency-key KEY --sync --json 向维护者发送普通请求，接收人默认为 Thread 创建者，无需为反馈创建私人 Thread。保留用户原意、必要复现信息与已核验的版本；不附私人 Profile、完整聊天、目录绑定、科研正文或凭证。相关公开来源可用 --ref ID@VERSION，私人来源不得自动分享。
+
+同一问题沿 REQUEST_ID 用 thread reply 补充。维护者用 inbox/context 查看、reply 回应；小问题可 assign 到维护 Thread，本 Thread 写 result 再 deliver；较大改动关联普通开发 Thread 并交付结果引用。维护者承接与用户 adopt 确认分别记录，不替对方表态。每件操作沿用稳定幂等键，只有远端确认后称已共享。普通使用问答先查 guide，不自动提交反馈。
+
+入口未登记或离线无缓存时明确说明；不自动回退旧专用反馈仓库。旧 feedback 命令仅兼容历史和原待发送项，按 guide show feedback 查询或处理；新反馈统一进入维护 Thread。
 
 ## 由个人 Agent 按需协调
 
@@ -101,7 +105,7 @@ profile、guide 和 feedback 仍为共用入口。Profile 私有且独立于 --r
 
 找到候选后用 thread context RECORD_ID --json 读取该条记录、所属工作背景、原始依据和更正。根据当前需求、数据版本和适用条件判断能否复用，引用关系只说明关联。保留原作者和固定来源；回应请求时可直接 deliver 原结果，补充分析再另写 result --ref。检查 accepted 和 sources；默认只查已有缓存，--require-fresh 只拉取。共享回链不含私人 Base 记录或执行映射。
 
-具体流程按需查询 guide show threads。个人 Agent 下次启动读取 inbox 或 coordinate 即可继续，尚无后台通知或自动唤醒。mesh-agent 仅保留为显式启用的公共协调实验，不是日常依赖；用户明确要求实验时再查 guide show mesh-agent。
+具体流程按需查询 guide show threads。个人 Agent 下次启动读取 inbox 或 coordinate 即可继续，尚无后台通知或自动唤醒。
 
 ## 本机执行入口
 

@@ -9,12 +9,14 @@ case "$cosmesh_host" in ''|-*|*[!a-zA-Z0-9_.-]*) fail 'Use an existing SSH alias
 cosmesh_prefix=${COSMESH_LOCAL_PREFIX:-"$HOME/.local/opt/cosmesh"}
 cosmesh_skills=${COSMESH_SKILLS_DIR:-"$HOME/.agents/skills"}
 cosmesh_source=/srv/cosmesh/agent
+cosmesh_service=''
 while [ "$#" -gt 0 ]; do
     [ "$#" -ge 2 ] || fail 'Missing option value.'
     case "$1" in
         --prefix) cosmesh_prefix=$2;;
         --dest) cosmesh_skills=$2;;
         --source) cosmesh_source=$2;;
+        --service) cosmesh_service=$2;;
         --remote-prefix|--bootstrap) : ;; # Accepted from the old SSH-only update entry.
         *) fail 'Unknown installer option.';;
     esac
@@ -25,7 +27,8 @@ case "$cosmesh_source" in *[!a-zA-Z0-9_./-]*) fail 'Invalid source directory.';;
 cosmesh_temp=$(mktemp -d)
 trap 'rm -rf "$cosmesh_temp"' EXIT HUP INT TERM
 # The existing SSH transport uses this user's small server-side identity entry.
-ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=8 "$cosmesh_host" "python3 '$cosmesh_source/bootstrap.py' ensure"
+cosmesh_releases=${cosmesh_source%/*}/releases
+ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=8 "$cosmesh_host" "python3 '$cosmesh_source/bootstrap.py' ensure --releases-dir '$cosmesh_releases'"
 ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=8 "$cosmesh_host" "cat '$cosmesh_source/local-first.tar.gz'" > "$cosmesh_temp/package.tar.gz"
 tar -xzf "$cosmesh_temp/package.tar.gz" -C "$cosmesh_temp"
 cosmesh_python=''
@@ -46,4 +49,6 @@ if [ -z "$cosmesh_python" ]; then
     cosmesh_python=$(UV_PYTHON_INSTALL_DIR="$cosmesh_runtime/python" "$cosmesh_runtime/uv" python find --managed-python 3.12)
 fi
 command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1 || fail 'Git is required. Ask your Agent to install Git, then rerun this installer.'
-"$cosmesh_python" "$cosmesh_temp/local-first/local_bootstrap.py" --prefix "$cosmesh_prefix" --skills-dir "$cosmesh_skills" --ssh "$cosmesh_host" --source "$cosmesh_source"
+set --
+[ -z "$cosmesh_service" ] || set -- --service "$cosmesh_service"
+"$cosmesh_python" "$cosmesh_temp/local-first/local_bootstrap.py" --prefix "$cosmesh_prefix" --skills-dir "$cosmesh_skills" --ssh "$cosmesh_host" --source "$cosmesh_source" "$@"

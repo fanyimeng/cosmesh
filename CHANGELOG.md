@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.12
+
+- Publish the Thread-based CosMesh / CosBase release for macOS and Linux.
+- Keep custom Hub discovery paths through portable installation and updates.
+- Preserve lifecycle compatibility metadata in portable installations and reuse verified wheels.
+- Include maintenance requests, unified legacy search, knowledge backlinks and personal Agent coordination.
+
+## 0.3.11
+
+Unreleased maintenance Thread candidate.
+
+- Discover a registered maintenance Thread and submit ordinary requests to its creator.
+- Reuse replies, assignments, results, delivery and requester adoption for system feedback.
+- Guide new feedback through Threads; retain legacy feedback history and pending queues.
+- Remove the retired experimental Mesh Agent, its controls and deployment options.
+
 ## 0.3.10
 
 Initial public source preview.

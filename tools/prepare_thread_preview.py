@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a Thread Hub for personal Agents, with an explicit experimental coordinator opt-in."""
+"""Prepare an independent Thread Hub for personal Agents."""
 import argparse
 import hashlib
 import json
@@ -16,7 +16,6 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--base',type=Path,required=True)
     p.add_argument('--prefix',type=Path,required=True)
-    p.add_argument('--start-agent',action='store_true',help='Explicitly initialize/start the experimental public Mesh Agent')
     args=p.parse_args()
     base=args.base.expanduser().absolute();prefix=args.prefix.expanduser().absolute()
     if base.is_symlink() or prefix.is_symlink() or prefix==Path.home()/'.local/opt/cosmesh':
@@ -67,25 +66,9 @@ def main():
     work=base/'workbench'
     if not (work/'.cosmesh/config.json').exists():cli('thread','init','--root',work)
     connected=cli('thread','discover','--root',work,'--service',discovery)
-    agent=base/'mesh-agent'
-    ready=None
-    running=False
-    if args.start_agent:
-        if not (agent/'config.json').exists():cli('mesh-agent','init','--root',agent,'--workbench',work)
-        ready=cli('mesh-agent','once','--root',agent,'--refresh')
-        agent_session='cosmesh-thread-agent-020'
-        running=subprocess.run(['tmux','has-session','-t',agent_session],capture_output=True).returncode==0
-        if not running:
-            log=agent/'service.log';log.touch(exist_ok=True);os.chmod(log,0o600)
-            command=shlex.join([str(entry),'mesh-agent','serve','--root',str(agent),'--interval','30','--refresh','--json'])
-            subprocess.run(['tmux','new-session','-d','-s',agent_session,'exec '+command+' >>'+shlex.quote(str(log))+' 2>&1'],check=True)
-            time.sleep(.5)
-            running=subprocess.run(['tmux','has-session','-t',agent_session],capture_output=True).returncode==0
-        if not running:raise SystemExit('Mesh Agent exited; inspect '+str(agent/'service.log'))
     result={'base':str(base),'prefix':str(prefix),'host':socket.gethostname(),'discovery':str(discovery),
             'gateway_session':session,'workbench':str(work),'coordination':'personal_agents',
-            'mesh_agent':ready['data'] if ready else None,'library':library['data'],
-            'agent_session':'cosmesh-thread-agent-020' if args.start_agent else None,'agent_running':running,
+            'library':library['data'],
             'connection':connected['data']}
     (control/'ready.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n');os.chmod(control/'ready.json',0o600)
     print(json.dumps(result,ensure_ascii=False))

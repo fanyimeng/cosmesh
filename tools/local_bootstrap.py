@@ -54,6 +54,7 @@ def materialize(source, cache):
         meta = {'format': 1, 'product': 'cosmesh', 'version': version, 'release_id': release_id,
                 'platform': sys.platform, 'machine': platform.machine(), 'python': '%d.%d' % sys.version_info[:2],
                 'schema_write': info.get('schema_write', [1]), 'wheel': 'wheels/' + Path(info['wheel']).name,
+                'thread_lifecycle_version': info.get('thread_lifecycle_version', 1),
                 'wheels': ['wheels/' + p.name for p in sorted(wheels.glob('*.whl'))], 'files': files}
         (stage / 'release.json').write_text(json.dumps(meta, indent=2) + '\n')
         stage.rename(target)
@@ -66,7 +67,11 @@ def main():
     parser.add_argument('--skills-dir', type=Path, required=True)
     parser.add_argument('--ssh', required=True)
     parser.add_argument('--source', required=True)
+    parser.add_argument('--service', help='Absolute service discovery path on the server')
     args = parser.parse_args()
+    discovery = args.service or str(Path(args.source).parent / 'service.json')
+    if not discovery.startswith('/'):
+        raise ValueError('Use an absolute server discovery path.')
     source = Path(__file__).resolve().parent
     cache = Path(os.environ.get('COSMESH_INSTALL_CACHE', str(Path.home() / '.cache/cosmesh/install'))).expanduser().resolve()
     bundle = materialize(source, cache)
@@ -104,10 +109,10 @@ def main():
             if not (skills / name).exists():shutil.move(str(backup / name), skills / name)
         raise
     saved = json.loads((prefix / 'client.json').read_text()) if (prefix / 'client.json').is_file() else {}
-    saved.update(format=1, execution='local', ssh=args.ssh, source=args.source, skills=str(skills))
+    saved.update(format=1, execution='local', ssh=args.ssh, source=args.source, skills=str(skills), discovery=discovery)
     manager.atomic(prefix / 'client.json', manager.json_bytes(saved))
     discovery_group = 'thread' if tuple(map(int, result['to'].split('.'))) >= (0, 2, 0) else 'space'
-    check = subprocess.run([str(prefix / 'bin/cosmesh'), discovery_group, 'discover', '--ssh', args.ssh, '--json'],
+    check = subprocess.run([str(prefix / 'bin/cosmesh'), discovery_group, 'discover', '--ssh', args.ssh, '--service', discovery, '--json'],
                            text=True, capture_output=True)
     try:
         mesh = json.loads(check.stdout)

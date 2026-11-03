@@ -14,7 +14,7 @@
 
 cli.py 解析命令与稳定信封。service.py 管理业务规则、状态重建与视图。protocol.py 处理 Markdown/YAML 和内容版本。store.py 提供 Git 快照、显式文件提交、原子替换、锁与恢复。sync.py 管理有界同步与合并。hub.py 接受并核验候选历史。gateway.py/access.py 取得可信系统身份和传递 Git 字节流。
 
-说明 guide.py 读取安装包内 manual/*.md；Profile 在 profile.py 的私人文件中；系统反馈 feedback.py 组合私人 outbox、专用共享缓存与现有 Update 存储。这些适配复用同一 CLI、发布和身份设施。
+说明 guide.py 读取安装包内 manual/*.md；Profile 在 profile.py 的私人文件中；系统维护复用普通 Thread 请求；feedback.py 仅兼容旧 outbox、专用缓存与 Update 历史。这些适配复用同一 CLI、发布和身份设施。
 
 ## 源记录、状态与快照
 
@@ -36,7 +36,7 @@ cli.py 解析命令与稳定信封。service.py 管理业务规则、状态重�
 
 Base 私有，CosMesh 仓库及历史对全部已核验用户公开读取。原 writer 与已声明的项目协作者可按业务规则写入，Lead/Member、作者和任务接受仍由 hook 核验。私人 CosBase 仓库只有单一所有者。显示名与偏好不改变身份。
 
-系统反馈专用仓库显式启用 system_feedback 策略，同一 Hub 已核验系统账号默认可读写；维护者可单独设只读或禁用。这个策略只作用于指定反馈仓库，普通项目和私人资料继续按原 ACL。每位作者的反馈上下文只承载自己的提交，回复通过 reply_to 跨上下文关联。
+系统维护使用已登记的普通共享 Thread；意见、回应、分配、交付与采用均复用 Thread 请求和记录。Hub 配置只保存入口的 repo/ID，不复制正文；作者与请求角色由同一套校验约束。旧 system_feedback 仓库策略仅兼容原历史与队列。
 
 ## Hub 接受与恢复
 

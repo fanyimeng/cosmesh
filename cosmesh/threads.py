@@ -128,6 +128,24 @@ class Workbench:
     def ref(self, item):
         return {'repo': item['repo'], 'id': item['doc']['meta']['id'], 'version': content_version(item['doc'])}
 
+    def maintenance_entry(self):
+        """Resolve the discovered entry through the ordinary local shared snapshot."""
+        entry = self.client.get('maintenance')
+        if not entry:
+            raise Error('MAINTENANCE_UNAVAILABLE', 'No maintenance Thread is cached; run thread discover or ask the Hub maintainer to register one.')
+        ref = entry['source']
+        self.resolve(ref, accepted=True)
+        item = self.find(ref['id'], 'thread')
+        if item['repo'] == 'local' or item['repo'] != ref['repo'] or item['doc']['meta']['author'] != entry['maintainer']:
+            raise Error('REFERENCE_INVALID', 'The cached maintenance Thread differs from the registered source.')
+        if thread_state([x['doc']['meta'] for x in self.records(ref['id'])])['lifecycle'] != 'active':
+            raise Error('MAINTENANCE_UNAVAILABLE', 'The maintenance Thread is inactive; refresh discovery or contact its maintainer.')
+        result = {**entry, 'source': self.ref(item), 'title': item['doc']['meta']['title']}
+        if self.client.get('community_enabled'):
+            from .knowledge import Knowledge
+            result['maintainer_name'] = Knowledge(self).user(entry['maintainer'])['name']
+        return result
+
     def citation(self, value):
         """Resolve an ID or ID@VERSION supplied by the personal Agent."""
         if value.startswith('K-'):
@@ -327,11 +345,14 @@ class Workbench:
         self.user = actor
         self.client.update(actor=actor, connection=config, own_repo=reply['own_id'])
         self.client['community_enabled']=bool(reply.get('community_enabled'))
+        self.client['maintenance']=reply.get('maintenance')
         self.save_client()
         results = []
         for space in reply['spaces']:
             try:
-                self.cache(config, space, refresh=False, remote_hint=reply.get('versions', {}).get(space['id']))
+                maintenance_repo = (reply.get('maintenance') or {}).get('source', {}).get('repo')
+                self.cache(config, space, refresh=space['id'] == maintenance_repo,
+                           remote_hint=reply.get('versions', {}).get(space['id']))
                 results.append({'repo': space['id'], 'cached': True})
             except Error as exc:
                 results.append({'repo': space['id'], 'cached': False, 'error': exc.as_dict()})
@@ -340,7 +361,7 @@ class Workbench:
             from .knowledge import Knowledge
             Knowledge(self).refresh()
         return {'actor': actor, 'own_repo': reply['own_id'], 'spaces': results,
-                'ready': reply['own_id'] in self.stores}
+                'ready': reply['own_id'] in self.stores, 'maintenance':self.client.get('maintenance')}
 
     def share(self, value, key=None, dry_run=False):
         item = self.find(value, 'thread')
@@ -408,6 +429,7 @@ class Workbench:
                 versions = reply.get('versions', {})
                 if not isinstance(versions, dict): raise Error('SYNC_PROTOCOL', 'Invalid batch versions.')
                 self.client['community_enabled']=bool(reply.get('community_enabled'))
+                self.client['maintenance']=reply.get('maintenance')
                 self.save_client()
                 for space in reply['spaces']:
                     try:
