@@ -77,7 +77,10 @@ def main():
         else:
             build_dir = staging/'built'
             run([sys.executable,'-m','pip','wheel','--no-deps','--no-build-isolation','--wheel-dir',build_dir,ROOT])
-            wheel = next(build_dir.glob('cosmesh-*.whl'))
+            wheel = next(build_dir.glob('cosmesh-*.whl'), None)
+            if wheel is None:
+                raise RuntimeError('Project wheel metadata is missing. In the build environment run: '
+                                   'python -m pip install --upgrade pip "setuptools>=61" wheel')
         version = wheel_version(wheel)
         release_id = 'cosmesh-%s-%s-%s-py%d%d' % (version,sys.platform,platform.machine(),*sys.version_info[:2])
         target = args.output/release_id

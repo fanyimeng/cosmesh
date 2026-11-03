@@ -39,6 +39,7 @@ class OnboardingTests(unittest.TestCase):
             self.assertIsNone(github['server'])
             self.assertIn('v'+__version__, github['prompt'])
             self.assertIn('requirements-release.txt', github['prompt'])
+            self.assertIn("--upgrade pip 'setuptools>=61' wheel", github['prompt'])
             self.assertIn('tools/build_release.py', github['prompt'])
             self.assertIn('install.py install --agent '+agent, github['prompt'])
 

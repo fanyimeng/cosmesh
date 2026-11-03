@@ -23,7 +23,7 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 本地试用
 
-当前版本 **0.3.15**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前版本 **0.3.16**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git

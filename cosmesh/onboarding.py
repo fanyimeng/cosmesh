@@ -73,7 +73,7 @@ def installation_prompt(mode, agent, *, root=None, source=None, service=None, ss
 GitHub 当前提供源码；这条路径复用源码中的固定包构建器和安装器，不依赖预先发布的 GitHub 二进制附件。
 
 1. 检查 Git、Python 3.9–3.13、venv/pip 和联网能力；缺少时先准备专用运行环境。取得 v{version} 到新的源码目录；已有目录先核验并保留。tag 不存在时停止，说明尚未发布，不换用不明版本。
-2. 在专用构建虚拟环境准备 setuptools / wheel，按 requirements-release.txt 安装固定依赖，再安装该源码，运行 python tools/build_release.py --output dist/candidates。根据构建回执取得本机匹配的发布包路径。
+2. 在专用构建虚拟环境先执行 python -m pip install --upgrade pip 'setuptools>=61' wheel，避免系统附带的旧构建工具把项目识别为 UNKNOWN。按 requirements-release.txt 安装固定依赖，再安装该源码，运行 python tools/build_release.py --output dist/candidates。根据构建回执取得本机匹配的发布包路径。
 3. 从该固定包运行 python3 install.py install --agent {agent} --skills both；已有托管安装按实际版本使用 upgrade，保留其 prefix 和托管 Skill 目录。使用匹配该包的 Python。
 4. 使用安装回执给出的绝对 CLI 路径，执行 doctor --agent {agent} --json、thread init --json、thread list --mine --all --json。询问我第一件要记录的工作，复用已有事项，确认后再建立私人 Thread。私人 Profile 可选，可导入简介或交互填写。
 5. 这条路径不设置服务器连接。以后取得自己的账号和 SSH 别名，再 thread discover --ssh YOUR_SSH_ALIAS --service PUBLIC_SERVICE_FILE --json，user me / set-name，thread status 验证；公开服务文件位置由 Hub 维护者提供。

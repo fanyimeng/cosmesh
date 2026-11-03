@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.16
+
+- Upgrade pip, setuptools and wheel explicitly in GitHub cold-start prompts; diagnose missing project-wheel metadata with a recovery command.
+
 ## 0.3.15
 
 - Generate copyable, versioned installation prompts for server and GitHub/private-Base onboarding without exporting inviter data.
