@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.26
+
+- Prepare older or incomplete derived caches on the first read after an upgrade; subsequent overviews use the finished product without manual refresh.
+- Retain valid previous products while normal content updates are prepared in the background.
+
 ## 0.3.25
 
 - Prepare cached products after pulled or accepted content changes, while keeping request-time reads free of extra Git or workbench loading.

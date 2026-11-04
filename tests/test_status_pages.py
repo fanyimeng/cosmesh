@@ -97,6 +97,35 @@ class StatusPagesTests(PageMixin, unittest.TestCase):
         self.assertEqual(ready['record_preview']['records'][0]['basis'],'interaction_summary')
         self.assertNotIn('仅原文可见',ready['record_preview']['records'][0]['text'])
 
+    def test_upgrade_from_older_cache_prepares_once_without_manual_refresh(self):
+        self.page('--ready')
+        from cosmesh.status_pages import put_meta
+        root=cache_root(self.w)
+        with self.w.base.locked():
+            self.w.load();self.w.append(self.tid,'升级后应自动读到的合成进展。')
+        with database(root) as con:
+            put_meta(con,'cache_format',5)
+            put_meta(con,'tokens',{'all':'old','base':'old','mesh':'old'})
+            con.execute("DELETE FROM pages WHERE key LIKE '%/ready'");con.commit()
+        with patch.dict(os.environ,COSMESH_PAGE_BACKGROUND='1'):
+            upgraded=self.page('--ready')
+        self.assertIn('升级后应自动读到',upgraded['document'])
+        with patch.dict(os.environ,COSMESH_PAGE_BACKGROUND='1'), \
+             patch.object(Workbench,'load',side_effect=AssertionError('upgrade must only rebuild once')), \
+             patch('cosmesh.status_pages.stamp',side_effect=AssertionError('warm read must not scan Git')):
+            self.assertTrue(self.page('--ready')['cache_hit'])
+
+    def test_incomplete_preparation_never_serves_previous_ready_product(self):
+        self.page('--ready')
+        from cosmesh.status_pages import put_meta,stamp
+        with self.w.base.locked():
+            self.w.load();self.w.append(self.tid,'准备中断后的新进展。')
+        with database(cache_root(self.w)) as con:
+            put_meta(con,'tokens',stamp(self.w));con.commit()
+        with patch.dict(os.environ,COSMESH_PAGE_BACKGROUND='1'):
+            current=self.page('--ready')
+        self.assertIn('准备中断后的新进展',current['document'])
+
     def test_summary_provenance_stale_next_step_and_local_rebuild_only(self):
         w = self.w
         with w.base.locked():

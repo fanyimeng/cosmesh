@@ -545,7 +545,9 @@ def read_page(wb, args):
     recovered = False
     try:
         with database(root) as con:
-            ready = meta(con, 'tokens', {}).get(args.scope) == token[args.scope]
+            tokens = meta(con, 'tokens', {})
+            complete = meta(con, 'cache_format') == FORMAT and meta(con, 'prepared_tokens') == tokens
+            ready = complete and tokens.get(args.scope) == token[args.scope]
     except (sqlite3.DatabaseError, json.JSONDecodeError) as exc:
         if isinstance(exc, sqlite3.OperationalError):
             raise Error('STORE_BUSY', 'Status pages are being updated; retry shortly.')
@@ -560,7 +562,9 @@ def read_page(wb, args):
     if not ready and fast_product and os.environ.get('COSMESH_PAGE_BACKGROUND')!='0' and not args.refresh and not getattr(args,'require_fresh',False):
         with database(root) as con:
             identity=meta(con,'identity',{})
-            keep_prepared=bool(meta(con,'tokens')) and identity.get('actor')==wb.client.get('actor',identity.get('local'))
+            tokens=meta(con,'tokens',{})
+            complete=meta(con,'cache_format')==FORMAT and meta(con,'prepared_tokens')==tokens
+            keep_prepared=bool(tokens) and complete and identity.get('actor')==wb.client.get('actor',identity.get('local'))
     if (not ready and not keep_prepared) or args.refresh:
         update = refresh(wb, root)
     with database(root) as con:
