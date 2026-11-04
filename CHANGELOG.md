@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.27
+
+- Capture Agent-authored project increments in ordinary Thread records, deduplicate exact repeats, retain private checkpoints and publish only the selected shared update.
+- Add prepared private inbox/outbox messages for request interactions and corrections, with explicit per-user seen state, frozen pagination and historical initialization.
+- Preserve the request-inbox JSON contract; ordinary project progress does not notify others or upload attachments.
+- Update both Skills with project capture, message routing and on-demand source reading.
+
 ## 0.3.26
 
 - Prepare older or incomplete derived caches on the first read after an upgrade; subsequent overviews use the finished product without manual refresh.

@@ -96,6 +96,8 @@ def build(hub):
     from .thread_chat import document
     path=root(hub);generation=json.loads((path/'dirty.json').read_text())['generation'] if (path/'dirty.json').is_file() else now()
     wb,users=public_workbench(hub);index=cache_root(wb);rebuild(wb,index)
+    from .thread_mail import rebuild as rebuild_mail
+    rebuild_mail(hub,wb,users,generation)
     pairs=set()
     for item in wb.catalog.values():
         m=item['doc']['meta']

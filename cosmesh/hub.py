@@ -381,6 +381,10 @@ class Hub:
                 schedule(self)
             return result
         if self.community():self.community().check(user)
+        if payload.get('method') in {'thread_mail', 'thread_mail_mark'}:
+            if not self.community():raise Error('FEATURE_UNAVAILABLE', 'Mail requires the existing shared user directory.')
+            from .thread_mail import fetch, mark
+            return mark(self,payload,user) if payload['method']=='thread_mail_mark' else fetch(self,payload,user)
         if payload.get('method')=='thread_chat_ready':
             from .hub_pages import fetch
             return fetch(self,payload,user)
@@ -544,6 +548,9 @@ class Hub:
         value=Community(root,self.settings()['admin']).initialize()
         atomic(self.root/'community.json',json.dumps({'format':1,'root':str(root)})+'\n')
         os.chmod(self.root/'community.json',0o600)
+        if existing is None:
+            from .thread_mail import initialize as initialize_mail
+            initialize_mail(self)
         return value
 
     def resolve_shared_reference(self,ref):

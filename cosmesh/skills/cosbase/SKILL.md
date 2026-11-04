@@ -1,6 +1,6 @@
 ---
 name: cosbase
-description: 从会话续接或初始化 Thread，管理私人工作、拆分合并、回收恢复与会话目录关联，按需分享、协调及接续；也支持私人 Profile、可转发安装 prompt 与 CV/简介预览登记；支持模糊查找工作、旧记录和资料，自动展开问法、沿回链核验原文。
+description: 从会话续接或初始化 Thread，管理私人工作、拆分合并、回收恢复与会话目录关联，按需分享、协调及接续；也支持私人 Profile、可转发安装 prompt 与 CV/简介预览登记；支持模糊查找工作、旧记录和资料，按需查找并复用已知来源。
 ---
 
 ## 快速响应，够用即停
@@ -15,13 +15,29 @@ description: 从会话续接或初始化 Thread，管理私人工作、拆分合
 | 某项进展／总览并继续已知工作 | thread page ID --level status --ready --json／thread page --continue ID --ready --json |
 | 我和某人聊了什么 | thread chat --with REAL_NAME --json，默认最近五轮；查最新同次 --require-fresh |
 | 某个请求／Thread 的回应与资料状态 | thread chat REQUEST_OR_THREAD_ID --json；仅需合并状态可 thread check ID --json |
-| 收到哪些请求／抓反馈 | thread inbox --ready --json，查最新同次 --require-fresh；发出的加 --sent |
+| CosBase 更新／记录本项目进展 | 复用目标Thread；必要时一次locate，整理本次增量，thread update ID --file FILE --interaction-summary TEXT --ready --json |
+| 新消息／互动更新 | thread inbox --view messages --require-fresh --ready --json；普通收件箱回看可读缓存 |
+| 我发出了什么 | thread outbox --ready --json；已有成功回执足够就直接回答 |
+| 收到的待办请求／维护待办 | thread inbox --view requests --ready --json；发出的请求加 --sent |
+| 展开消息／标记查看 | thread mail show MESSAGE_ID --json；全文按source用thread read；明确标记才mail mark MESSAGE_ID ... --seen或--unseen |
 | 记事、请求、回应、承接、交付 | 完成获准写入，加 --ready 返回紧凑回执，直接据此回答 |
 | 明确展开原文／打开资料 | thread read ID@VERSION --repo REPO --json；library open FIXED_FILE_REFERENCE [--launch] |
 
 短入口保留工作在做什么、当前进展和待办的简洁概括，不硬卡句数。总览保留整体介绍与进展的区分，一张表显示短名、简介、状态与进展、Agent 项目／工作区关联、私人／共享；Session、目录和原文按需展开。已保存命名优先，缺失、截断、仅登记与已核验如实标明。直接复用 document，不重排相同表格，不重复贴 record_preview；basis 区分交互摘要和原文摘录；body_complete 仅表示目标记录正文已覆盖，不包括命名记录和引用资料全文，不因其为 false 自动补读全文。
 
 快速模式由回执 fast_mode 随行，无需 preflight。用户要求切换时 client mode normal/fast；--no-fast/--fast 只覆盖本次。普通模式允许充分展开，仍复用已有材料。
+
+## 项目进展更新与收发件箱
+
+用户在项目里说“CosBase 更新”时，更新本次工作内容；软件升级仍由“更新程序／升级客户端”等明确表达触发。优先复用已知且适用的Thread ID；目标未知时一次thread locate，用真实Agent、主机和项目ID，必要时已知目录／Session。多候选按本次事项选择，关键歧义才问；未关联时保留更新草稿并说明接入缺口，不扩大为全库搜索或批量新建。
+
+根据当前已掌握工作整理尚未记录的进展、结果、验证范围、产物与未决事项。复用已读记录和回执；必要时只读目标近期摘要，缺关键事实才展开。一个工作阶段通常一条note，独立成果用--kind result；不重复写相同事实，不顺手重写整体介绍或改变业务状态。更正用原correct关系。thread update ID --file FILE --interaction-summary TEXT --idempotency-key KEY --ready --json默认私人留本地、已共享目标自动同步本次记录；--local-only明确只保存。相同输入可重复调用，Mesh失败续传原记录。程序只做精确去重，语义重复由Agent判断；无新增进展直接回答，不为运行命令凑记录。
+
+更新不扫描其他目录、不读取聊天数据库、不上传附件、不自动通知他人。共享记录正文省略私人定位，私人依据不得变成共享引用。若UNRELATED_PENDING，说明本次已保存、其他草稿保留且未同步；不能改用全量sync绕过拦截。直接使用update回执说明新增／已有记录及本地／Mesh状态，不再查一轮确认。
+
+收件箱messages展示与本人有明确请求／回应／更正关系的已接受互动；requests仅为待办请求，requests为空不表示没有新消息。发件箱显示本人发出的互动。普通Thread进展不会自动通知，明确推送时才按授权用普通request/reply发送。历史初始化消息标历史，不灌入未查看。
+
+直接展示已有交互摘要，长内容按需定位固定source原文，不用search或逐个Thread扫描寻找回复。列表／同步／预取不改变查看状态；明确要求才mail mark选定消息，分页中未展示内容不批量清除。“新／已查看”和“待处理／已交付／已采用”独立。缓存截至时间和updating如实显示；首次准备或旧Hub缺消息能力时说明覆盖不足，不称暂无新消息。普通读写不额外发送重复通知。
 
 ## 交互摘要与对话
 
@@ -51,7 +67,7 @@ Base 私人；Mesh 使用 --scope mesh，只展示共享内容。他人页用 th
 
 - 项目接入：先 thread locate 用实际 Agent 项目／工作区 ID，必要时目录。明确接入授权下唯一合适就复用，缺少则 create 私人 Thread，再 bind-project；关键歧义才问。项目独立于 Session，Codex/DSH/OpenCode 使用实际原生概念，无原生项目时 --kind directory，不造 ID；宿主项目 API 按需核验，不查私人数据库。新结构、分享及向他人请求沿实际授权。命名推荐英文短名、中文短名、一句简介，旧名与稳定 ID 保留；不批量改名。guide show threads。
 - 生命周期：split/merge/delete/restore 按授权执行，保留来源、作者和旧 ID；Base 删除进回收站，Mesh 撤回留历史。其他作者／空间只引用，不改状态；归并后 continue 跟随去向。guide show threads。
-- 模糊查找：search query ORIGINAL --query VARIANT ... --json 一次查工作、记录、知识库与已缓存旧库。当前推理中展开少量问法，先给有界候选；只找入口够用即停，需要内容解释／复用／执行才 search read 固定来源并核验作者、版本、更正与适用条件。沿必要回链一两层，已读来源去重；scope mesh 排除私人旧库，旧源只读不迁移，缺材料如实说明。guide show search。
+- 模糊查找：search query ORIGINAL --query VARIANT ... --json 一次查工作、记录、知识库与已缓存旧库。当前推理中展开少量问法，先给有界候选；只找入口够用即停，需要内容解释／复用／执行才 search read 固定来源并核验作者、版本、更正与适用条件。只有当前缺口需要时沿相关回链读取，已读来源去重；scope mesh 排除私人旧库，旧源只读不迁移，缺材料如实说明。guide show search。
 - 系统反馈：明确提交时 thread maintenance 定位，request --maintenance --file FILE --interaction-summary TEXT --sync；同一问题 reply。维护者 assign/result/deliver 在原请求交付，不代 adopt；普通问答不自动提交，旧 feedback 兼容历史。guide show feedback。
 - 安装与个人资料：invite prompt --mode server|github --agent codex|dsh|opencode；朋友用自己的账号／SSH。profile import --file FILE --dry-run 始终先预览，确认后 profile set --expect；可 init --interactive。CV 原件和其他 Profile 保持私人。guide show onboarding/profile。
 - DSH 共用标准两份 Skill；按既有授权 Full access 跨目录，实际权限失败保留输入，必要时重试一次，仍失败报告。Session ID 只填真实值。guide show dsh。

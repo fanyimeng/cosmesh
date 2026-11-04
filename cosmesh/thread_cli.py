@@ -56,6 +56,22 @@ def add_commands(commands, command, body):
     p.add_argument('--offset',type=int,default=0);p.add_argument('--chars',type=int,default=8000)
     p = command(group, 'inbox', 'thread.inbox'); p.add_argument('--sent', action='store_true'); p.add_argument('--all', action='store_true')
     p.add_argument('--ready', action='store_true'); p.add_argument('--limit', type=int, default=10)
+    p.add_argument('--view', choices=('requests', 'messages'), default='requests')
+    p.add_argument('--unread', action='store_true'); p.add_argument('--before'); p.add_argument('--with', dest='contact'); p.add_argument('--thread')
+    p = command(group, 'outbox', 'thread.outbox')
+    p.add_argument('--ready', action='store_true'); p.add_argument('--limit', type=int, default=10)
+    p.add_argument('--before'); p.add_argument('--with', dest='contact'); p.add_argument('--thread')
+    mail = command(group, 'mail').add_subparsers(dest='mail_action', required=True)
+    p = command(mail, 'show', 'thread.mail'); p.add_argument('id'); p.add_argument('--sent', action='store_true')
+    p = command(mail, 'mark', 'thread.mail'); p.add_argument('ids', nargs='+')
+    seen = p.add_mutually_exclusive_group(required=True)
+    seen.add_argument('--seen', dest='seen', action='store_true'); seen.add_argument('--unseen', dest='seen', action='store_false')
+    p = command(group, 'update', 'thread.update'); p.add_argument('id'); body(p)
+    p.add_argument('--kind', choices=('note','result'), default='note'); p.add_argument('--local-only', action='store_true')
+    p.add_argument('--basis', help='Optional Thread record-set signature from a previous update receipt.')
+    p.add_argument('--ref', action='append', default=[]); p.add_argument('--ready', action='store_true'); p.add_argument('--generation-file')
+    brief = p.add_mutually_exclusive_group()
+    brief.add_argument('--interaction-summary'); brief.add_argument('--interaction-summary-file')
     for verb in ('show', 'context', 'continue', 'coordinate', 'backlinks'):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id')
     p = command(group, 'create', 'thread.create'); p.add_argument('--title', required=True); body(p)
@@ -124,7 +140,7 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Offline Thread operations cannot contact the Hub.')
     if dry and (publish or fresh or verb in {'discover', 'sync'}):
         raise Error('INPUT_INVALID', 'Dry-run previews local changes and cannot synchronize.')
-    if fresh and verb not in {'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status', 'maintenance'}:
+    if fresh and verb not in {'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'outbox', 'mail', 'status', 'maintenance'}:
         raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
     if verb == 'overview' and ((args.scope == 'mesh' and args.host_file) or (args.scope == 'base' and fresh)):
         raise Error('INPUT_INVALID', 'Mesh overview excludes host metadata; Base overview stays local without --require-fresh.')
@@ -147,6 +163,14 @@ def execute(args):
     if verb == 'discover' and not root.exists():
         initialize(root, system_user()['user'])
     wb = Workbench(root)
+    if verb in {'outbox', 'mail'} or (verb == 'inbox' and args.view == 'messages'):
+        from .thread_mail import execute as mailbox
+        result = mailbox(wb, args)
+        args._thread_sync_state = {'state': 'cached' if result.get('freshness',{}).get('validation')=='cached' else 'synced',
+                                  'identity_verified': bool(wb.client.get('actor'))}
+        return result, None
+    if verb == 'inbox' and any((args.unread, args.before, args.contact, args.thread)):
+        raise Error('INPUT_INVALID', 'Message filters require --view messages; request inbox keeps its original contract.')
     if verb=='read':
         if dry:raise Error('INPUT_INVALID','Source reads do not use --dry-run.')
         from .thread_protocol import reference
@@ -216,7 +240,7 @@ def execute(args):
             if not dry and not publish and verb not in {'status','sync','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'}:
                 from .status_pages import schedule
                 schedule(wb)
-            if getattr(args,'ready',False) and verb not in {'overview','inbox'}:
+            if getattr(args,'ready',False) and verb not in {'overview','inbox','update'}:
                 from .thread_checks import ready_write
                 result = ready_write(result,verb)
                 args._thread_sync_state = {key: args._thread_sync_state[key] for key in ('state','identity_verified','last_sync')}
@@ -242,6 +266,9 @@ def execute(args):
         if brief is not None:
             from .thread_chat import with_summary
             body = with_summary(body,brief)
+        if verb == 'update':
+            from .thread_updates import update as project_update
+            return finish(project_update(wb,args,body,key,dry))
         if verb == 'status':
             result = wb.status()
         elif verb == 'maintenance':

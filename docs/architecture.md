@@ -66,3 +66,9 @@ Personal Agents write concise interaction summaries in the body of ordinary vers
 The existing private MD/SQLite index prepares default user overviews and contact conversations after content changes. Hot reads return the stored receipt without scanning Git or rebuilding the workbench. A queued update can show the prior prepared product with an updating marker; detailed or fresh operations remain explicit.
 
 The Hub prepares public conversation JSON/text after accepted writes and directory/library changes, through a bounded background program. Its derived SQLite index stays host-local; atomically published files live in the Hub's `views` directory. The authenticated `thread_chat_ready` RPC reads those products, checks access, and returns one contact's latest five rounds or a frozen continuation window. Clients cache the result privately; this path performs no Git fetch or attachment read. Explicit `thread_read` requests use bounded fixed-source reads. Private Base records, execution bindings and profiles never enter the public products.
+
+## Project capture and interaction mail
+
+An explicit “CosBase update” asks the working Agent to capture the current project's increment in an existing Thread. The client deduplicates exact inputs, retains private continuation checkpoints, and limits automatic Mesh publication to that update. Ordinary progress does not notify other users or upload files.
+
+Accepted request/reply/control/correction records produce a private, rebuildable delivery index. Inbox/outbox reads use prepared summaries and fixed original references; explicit seen state is private Hub metadata and remains independent of task state. Legacy request-inbox JSON remains available.

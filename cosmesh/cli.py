@@ -332,6 +332,7 @@ def capabilities(product):
                          "combined_thread_continuation": True,
                          "status_pages": True, "status_page_cache": "markdown_sqlite",
                          "ready_status_pages": True,
+                         "project_thread_updates": True, "private_interaction_mail": True, "explicit_mail_seen": True,
                          "quick_thread_checks": True, "compact_thread_inbox": True, "compact_thread_writes": True,
                          "interaction_summaries": True, "thread_chat": True, "thread_chat_tui": True,
                          "prepared_contact_documents": True, "content_update_preparation": True, "bounded_thread_source_reads": True,
@@ -781,6 +782,9 @@ def main(argv=None, product="cosmesh"):
         return 0
     if error is None and args.action == 'thread.check' and not machine:
         print(data['document'], end='')
+        return 0
+    if error is None and isinstance(data, dict) and data.get('format') == 'thread.mail.v1' and not machine:
+        print(data['document'])
         return 0
     if error is None and args.action == 'thread.chat' and not machine:
         if args.tui or (not args.plain and sys.stdin.isatty() and sys.stdout.isatty()):

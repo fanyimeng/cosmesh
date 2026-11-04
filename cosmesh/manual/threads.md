@@ -159,3 +159,11 @@ bind-project 可 --host-file 使用上述项目快照，只需 projects，无需
 ## 共享配套资料
 
 普通共享默认只发Thread文本简报，不读取或上传关联文件；用户明确允许附带资料后，个人Agent准备必要说明、报告与小型结果的最小清单，thread share ID --attach FILE（可重复）--sync 或 --materials PRIVATE_JSON 完成先入库、后固定引用及Thread发布。代码可用--git/--commit，数据与压缩文件默认跳过，单文件20 MiB／整次100 MiB。显式--summary-only保留概况分享，缺资料保持partial；固定引用用library open取回打开，详见guide show sharing。
+
+## Project capture and messages (0.3.27)
+
+用户在项目中说“CosBase 更新”，个人Agent复用已知Thread或一次locate定位，按当前工作整理增量；必要时有界读取近期记录去重。thread update ID --body TEXT --interaction-summary TEXT --idempotency-key KEY --ready --json追加普通note，--kind result用于独立成果。私人目标留本地，共享目标默认只同步本次记录；--local-only只保存。精确重复复用记录，语义去重由Agent负责；同步失败原输入重试，UNRELATED_PENDING保留其他草稿并阻止捎带发布。--basis可使用上次update回执的记录集合签名检测并发变化。私人检查点保存在不入Git的本机目录，正文中私人路径在共享前省略，不自动上传附件或通知。
+
+thread inbox --view messages --ready --json列与本人相关的请求、回应、承接、交付和更正；thread outbox --ready --json列本人发出的互动。首次历史标历史，之后新接受的互动进入新消息；时间顺序依据服务器索引，作者时间保留。--unread筛新消息，--limit限制数量，--before接续next_cursor固定窗口，--with实名与--thread ID筛选；最新同次--require-fresh。普通查询读本机缓存，最新一次RPC读预存通知索引，不先Git全量拉取。首次准备／更新中不能据空缓存断言无新消息。
+
+thread mail show M-ID --json查看消息，发出的加--sent。原文使用返回source的thread read ID@VERSION --repo REPO。mail mark M-ID ... --seen或--unseen显式改变本人的查看状态，跨设备保存；列表／同步不标已查看。请求状态独立。thread inbox默认及--view requests保留旧请求JSON，--sent仍查询本人发出的请求。旧Hub无消息能力时明确报告，不用空请求列表代替新消息结果。所有私有收件／查看状态由认证身份决定，不接受代查他人参数。
