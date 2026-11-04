@@ -7,6 +7,7 @@ from . import __version__
 from .errors import Error
 
 TOPICS = {
+    'chat':'作者交互摘要、按人跨 Thread 的五轮对话、左右 TUI 与游标展开',
     'sharing':'Thread 配套资料入库、固定打开引用、后缀与大小预检、Git 代码定位',
     'pages':'Thread 与用户分级状态页、整体介绍、MD/SQLite 成品与局部更新',
     'onboarding':'生成可转发安装 prompt、两条冷启动路径与身份填写',

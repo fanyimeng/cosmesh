@@ -332,6 +332,9 @@ def capabilities(product):
                          "combined_thread_continuation": True,
                          "status_pages": True, "status_page_cache": "markdown_sqlite",
                          "ready_status_pages": True,
+                         "quick_thread_checks": True, "compact_thread_inbox": True, "compact_thread_writes": True,
+                         "interaction_summaries": True, "thread_chat": True, "thread_chat_tui": True,
+                         "prepared_contact_documents": True, "content_update_preparation": True, "bounded_thread_source_reads": True,
                          "fast_mode": True, "agent_project_bindings": True,
                          "thread_share_materials": True, "fixed_knowledge_file_links": True,
                          "private_session_bindings": True, "maintenance_requests": True,
@@ -741,7 +744,8 @@ def main(argv=None, product="cosmesh"):
         except (Error, OSError, ValueError):
             pass
     client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.'))
-    if 'args' in locals() and args.action in {'thread.overview', 'thread.page'} and args.scope == 'mesh':
+    if 'args' in locals() and (args.action in {'thread.check','thread.chat'} or (args.action=='thread.read' and args.repo!='local') or
+                              (args.action in {'thread.overview', 'thread.page'} and args.scope == 'mesh')):
         # The shared envelope must not reveal private workbench roots, counts or bindings, including on errors.
         sync_state = {"state": sync_state.get('state', 'local_only'),
                       "identity_verified": sync_state.get('identity_verified', False)}
@@ -774,6 +778,49 @@ def main(argv=None, product="cosmesh"):
         return 0
     if error is None and args.action == 'thread.page' and (args.markdown or args.ready) and not machine:
         print(data['document'] if args.ready else data['markdown'], end='')
+        return 0
+    if error is None and args.action == 'thread.check' and not machine:
+        print(data['document'], end='')
+        return 0
+    if error is None and args.action == 'thread.chat' and not machine:
+        if args.tui or (not args.plain and sys.stdin.isatty() and sys.stdout.isatty()):
+            if not sys.stdin.isatty() or not sys.stdout.isatty():
+                print('交互 TUI 需要终端；可用 --plain 或 --json。',file=sys.stderr)
+                return 2
+            from .thread_chat import tui
+            def refresh_chat():
+                if getattr(args,'offline',False): raise Error('INPUT_INVALID','离线模式下请退出后联网刷新。')
+                args.require_fresh = True
+                args.before = None
+                return execute(args,product)[0]
+            def older_chat(cursor):
+                args.before = cursor;args.require_fresh = False
+                return execute(args,product)[0]
+            def detail(message,sources):
+                wb=Workbench(workspace_root(getattr(args,'root',None)))
+                refs=[sources[part['source']] for part in message.get('parts',[])] or [sources[message['source']]]
+                if not getattr(args,'offline',False) and wb.client.get('connection'):
+                    from .spaces import rpc
+                    result=[]
+                    for offset in range(0,len(refs),5):
+                        group=refs[offset:offset+5]
+                        reply=rpc(wb.client['connection'],{'method':'thread_read','sources':group,'chars':32000//len(group)})
+                        if reply.get('actor')!=wb.client.get('actor'):raise Error('AUTH_DENIED','Source read identity differs.')
+                        result.extend(r['source']['id']+'\n'+r['body']+('\n〔原文截断，可用 thread read 分页〕' if r['truncated'] else '') for r in reply['records'])
+                    return '\n\n'.join(result)
+                with wb.base.locked():
+                    wb.load()
+                    return '\n\n'.join(ref['id']+'\n'+wb.resolve(ref)['body'] for ref in refs)
+            from .threads import Workbench, workspace_root
+            import curses
+            try:tui(data,refresh_chat,detail,older_chat if args.contact else None)
+            except KeyboardInterrupt:return 130
+            except (curses.error,OSError):
+                from .thread_chat import document
+                print(document(data),end='')
+        else:
+            from .thread_chat import document
+            print(document(data),end='')
         return 0
     print(json.dumps(result, ensure_ascii=False, indent=None if machine else 2))
     if error:

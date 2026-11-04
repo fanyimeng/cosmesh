@@ -16,6 +16,21 @@ status.page.ready.v1 仅含 document 成品正文、去重的 source_index 与�
 
 同一对话已经读到且没有新变化的材料可直接复用，注明截至时间；用户要求最新、材料变化或实际执行时，定点核验对应来源。成功写入使用回执回答，不固定再读一次。
 
+## 请求与资料短入口
+
+```sh
+cosmesh thread check REQUEST_ID_OR_THREAD_ID --json
+cosmesh thread check REQUEST_ID --require-fresh --json
+cosmesh thread inbox --ready --json
+cosmesh thread inbox --sent --ready --require-fresh --json
+```
+
+check 保留工作整体介绍、当前状态、接收人的最近回应及资料登记，个人 Agent 先用两三句话概括工作、进展和待办。默认只读已有成品；问“有没有新回应／现在怎么样”时同次 --require-fresh，只拉取一次。已有回应与正式 pending 可以同时成立，reply 不改变交付状态。请求较多时默认显示最近五项，--limit 1–100 可调整；已知请求 ID 可直接定位旧请求。
+
+资料状态仅来自固定版本的知识库元数据及作者的资料索引，保留缺项与登记来源，verification=metadata_only；默认不下载原件、校验字节、渲染报告或展开引用全文。真正要求打开或核验时，直接用回执里的固定引用 library open。缓存命中不加载工作台；来源变化后沿用现有局部更新，不新增后台服务。
+
+inbox --ready 给出有界请求清单、正式状态与 has_response，默认最多十项，可 --limit 调整。普通 inbox 完整契约保持。create、note/result/summary、request/reply、assign/deliver/adopt 等写入可 --ready 保留 ID、固定版本、必要引用、资料及同步错误，省略重复正文与逐仓库同步明细；成功回执足够就结束。原接口省略 --ready 仍给完整结果。
+
 ```sh
 cosbase thread page --json
 cosbase thread page --continue THREAD_ID_OR_SAVED_NAME --json

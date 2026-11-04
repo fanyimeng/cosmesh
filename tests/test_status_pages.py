@@ -64,6 +64,39 @@ class StatusPagesTests(PageMixin, unittest.TestCase):
         self.assertEqual(w.base.head, head);self.assertEqual(w.path.read_bytes(), client)
         self.assertEqual(w.base.git('status', '--porcelain'), '')
 
+    def test_prepared_overview_skips_git_checks_and_shows_pending_update(self):
+        self.page('--ready')
+        from cosmesh.store import atomic
+        root=cache_root(self.w)
+        with self.w.base.locked():
+            self.w.load();self.w.append(self.tid,'新的进展已登记，成品后台准备。')
+        atomic(root/'queued.json','{"at":"new-update"}')
+        with patch.dict(os.environ,COSMESH_PAGE_BACKGROUND='1'), \
+             patch.object(Workbench,'load',side_effect=AssertionError('no request-time load')), \
+             patch('cosmesh.status_pages.stamp',side_effect=AssertionError('no Git revision scan')):
+            old=self.page('--ready')
+        self.assertTrue(old['freshness']['updating'])
+        self.assertIn('上次成品',old['document'])
+        self.page('--ready','--refresh')
+        with patch.dict(os.environ,COSMESH_PAGE_BACKGROUND='1'), \
+             patch.object(Workbench,'load',side_effect=AssertionError('no load')), \
+             patch('cosmesh.status_pages.stamp',side_effect=AssertionError('no Git scan')):
+            current=self.page('--ready')
+        self.assertFalse(current['freshness']['updating'])
+        self.assertIn('新的进展',current['document'])
+
+    def test_authored_summary_is_human_progress_but_not_full_original_body(self):
+        from cosmesh.thread_chat import with_summary
+        with self.w.base.locked():
+            self.w.load();self.w.append(self.tid,with_summary('仅原文可见的具体参数。','已经完成核对。下一步整理报告。'))
+        overview=self.page('--ready')
+        self.assertIn('已经完成核对',overview['document'])
+        self.assertNotIn('## 交互摘要',overview['document'])
+        ready=self.page('--continue',self.tid,'--ready')
+        self.assertFalse(ready['record_preview']['body_complete'])
+        self.assertEqual(ready['record_preview']['records'][0]['basis'],'interaction_summary')
+        self.assertNotIn('仅原文可见',ready['record_preview']['records'][0]['text'])
+
     def test_summary_provenance_stale_next_step_and_local_rebuild_only(self):
         w = self.w
         with w.base.locked():

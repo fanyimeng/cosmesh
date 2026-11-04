@@ -21,7 +21,7 @@ from .store import Store, atomic, safe_path
 from .threads import Workbench, now
 from .thread_protocol import REPO, reference_edges
 
-FORMAT = 5
+FORMAT = 10
 LEVELS = ('brief', 'status', 'index')
 
 
@@ -75,6 +75,14 @@ def database(root):
         CREATE TABLE IF NOT EXISTS pages (
           key TEXT PRIMARY KEY, version TEXT, body TEXT);
         ''')
+        if len(con.execute('PRAGMA table_info(entries)').fetchall())!=5:
+            # Only pre-release derived indexes used extra columns. Keep the
+            # original five-column table compatible with the previous client.
+            con.executescript('DROP TABLE entries; CREATE TABLE entries (thread TEXT,id TEXT PRIMARY KEY,kind TEXT,created TEXT,data TEXT);')
+        con.executescript('''CREATE INDEX IF NOT EXISTS entry_parent ON entries(thread,created,id);
+          CREATE TABLE IF NOT EXISTS entry_meta (id TEXT PRIMARY KEY,thread TEXT,author TEXT,request_id TEXT,created TEXT);
+          CREATE INDEX IF NOT EXISTS entry_request ON entry_meta(request_id,created,id);
+          CREATE INDEX IF NOT EXISTS entry_author ON entry_meta(author,created,id);''')
         yield con
     finally:
         con.close()
@@ -91,6 +99,7 @@ def put_meta(con, key, value):
 
 def stamp(wb):
     """Cheap committed-version checks; no snapshots, bound paths or network."""
+    if hasattr(wb,'public_tokens'):return wb.public_tokens
     client = wb.read_client()
     config = json.loads(wb.base.path('.cosmesh/config.json').read_text())
     sources = {}
@@ -131,10 +140,15 @@ def introduction(text):
 def reference_item(wb, item, corrected, names=None):
     doc, m = item['doc'], item['doc']['meta']
     from .thread_names import parse
+    from .thread_chat import summary
+    brief=summary(doc['body'])
+    preview=snippet(brief['text'] if brief['origin']=='author' else doc['body'],220)
+    preview['basis']='interaction_summary' if brief['origin']=='author' else 'record_body'
     return {'id': m['id'], 'kind': 'naming' if parse(doc) is not None else m.get('type', 'thread'), 'author': m['author'],
             'author_name': (names or {}).get(m['author'], m['author']),
             'created_at': m['created_at'], 'title': m['title'], 'source': wb.ref(item),
-            'excerpt': snippet(doc['body'], 220), 'superseded_by': corrected.get(m['id'], []),
+            'excerpt': preview, 'superseded_by': corrected.get(m['id'], []),
+            'interaction_summary': brief, 'accepted': wb.accepted(item) if item['repo'] != 'local' else False,
             'refs': [{'relation': relation, 'source': ref} for relation, ref in reference_edges(m)]}
 
 
@@ -167,11 +181,13 @@ def input_signature(wb, item, users):
                 parent = wb.find(source['doc']['meta']['thread'], 'thread')
                 related.append([wb.ref(source), relation, ref, wb.ref(parent)])
     contributors = {x['doc']['meta']['author'] for x in docs}
+    contributors.update(x['doc']['meta']['to'] for x in docs if x['doc']['meta'].get('to'))
     from .agent_projects import active
+    from .thread_checks import material_status
     return digest([FORMAT, inputs, related,
                    [u for u in users if u['account'] in contributors],
                    [b for b in wb.client['bindings'] if b['thread'] == item['doc']['meta']['id']],
-                   active(wb,item['doc']['meta']['id'])])
+                   active(wb,item['doc']['meta']['id']), material_status(wb,item,docs[1:])])
 
 
 def thread_data(wb, item, users):
@@ -218,11 +234,15 @@ def thread_data(wb, item, users):
                 next_step=section(summary['doc']['body'], '下一步') if summary and not pending else None,
                 summary_state='pending' if pending else ('recorded' if summary else 'not_recorded'))
     requests = []
+    indexed = {r['id']: r for r in index}
     for r in records:
         if r['doc']['meta']['type'] == 'request':
-            state = wb.request_state(r)
+            from .thread_checks import request_status
+            state = request_status(wb, r, names)
+            recipient = r['doc']['meta']['to']
+            indexed[r['doc']['meta']['id']].update(to=recipient, to_name=names.get(recipient, recipient), request_status=state)
             requests.append({'id': r['doc']['meta']['id'], 'to': r['doc']['meta']['to'],
-                             'source': wb.ref(r), 'state': state['state'], 'confirmed': state['confirmed']})
+                             'to_name': names.get(recipient, recipient), 'source': wb.ref(r), **state})
     card['counts'] = {'records': len(index),
                       'results': sum(r['kind'] in {'result','correction'} and not r['superseded_by'] for r in index),
                       'open_requests': sum(r['state'] not in {'declined','adopted','cancelled'} for r in requests)}
@@ -242,6 +262,8 @@ def thread_data(wb, item, users):
               'details': {'total': len(index), 'by_kind': groups, 'read': 'thread page ' + m['id'] + ' --level index'},
               'dependencies': dependencies[:20], 'dependency_count': len(dependencies),
               'backlinks': backlinks[:20], 'backlink_count': len(backlinks)}
+    from .thread_checks import material_status
+    status['materials'] = material_status(wb, item, active)
     # Personal execution data is stored separately and never enters Mesh pages.
     from .agent_projects import active
     execution = {'sessions':[b for b in wb.client['bindings'] if b['thread'] == m['id']],
@@ -322,8 +344,10 @@ def rebuild(wb, root):
             con.execute('DELETE FROM aliases WHERE thread=?',(tid,))
             con.executemany('INSERT OR IGNORE INTO aliases VALUES (?,?)',[(tid,normalized(a)) for a in card['naming']['aliases']])
             con.execute('DELETE FROM entries WHERE thread=?', (tid,))
-            con.executemany('INSERT INTO entries VALUES (?,?,?,?,?)',
-                            [(tid, r['id'], r['kind'], r['created_at'], encoded(r)) for r in index])
+            con.execute('DELETE FROM entry_meta WHERE thread=?',(tid,))
+            con.executemany('INSERT INTO entries VALUES (?,?,?,?,?)',[(tid,r['id'],r['kind'],r['created_at'],encoded(r)) for r in index])
+            con.executemany('INSERT INTO entry_meta VALUES (?,?,?,?,?)',
+                            [(r['id'],tid,r['author'],next((ref['source']['id'] for ref in r['refs'] if ref['relation']=='request'),None),r['created_at']) for r in index])
             for scope in ('all', 'base', 'mesh'):
                 if (scope == 'mesh' and item['repo'] == 'local') or (scope == 'base' and item['repo'] != 'local'): continue
                 shown = execution_card(card, execution if scope != 'mesh' else [])
@@ -340,6 +364,7 @@ def rebuild(wb, root):
                 con.execute('DELETE FROM threads WHERE id=?', (row['id'],));con.execute('DELETE FROM entries WHERE thread=?', (row['id'],))
                 con.execute('DELETE FROM aliases WHERE thread=?',(row['id'],))
                 con.execute('DELETE FROM pages WHERE key LIKE ?', ('%/' + row['id'] + '/%',))
+        con.execute('DELETE FROM entry_meta WHERE id NOT IN (SELECT id FROM entries)')
         # Only owners whose cards changed need aggregate pages replaced.
         for owner in owners:
             display = next((u['name'] for u in users if u['account'] == owner and u['name']), owner)
@@ -354,14 +379,95 @@ def rebuild(wb, root):
         put_meta(con, 'sync', wb.status());put_meta(con, 'generated_at', now())
         result = {'threads_rebuilt': rebuilt, 'threads_removed': removed, 'users_rebuilt': sorted(owners)}
         put_meta(con, 'last_update', result)
+    # Prepare the high-frequency products on updates, rather than on queries.
+    prepare_products(root)
     atomic(root / 'last-update.json', encoded(result))
     return result
+
+
+def prepare_products(root):
+    from types import SimpleNamespace
+    from .contact_chat import read
+    from .status_receipts import ready_receipt
+    with database(root) as con:
+        tokens=meta(con,'tokens');identity=meta(con,'identity');users=meta(con,'users',[])
+        sync=meta(con,'sync');generated=meta(con,'generated_at')
+        for scope in ('all','base','mesh'):
+            rows=select_rows(con,scope,(identity['local'],identity['actor']),False,None,20,0)
+            cards=[personal_card(row,scope) for row in rows]
+            name=next((u['name'] for u in users if u['account']==identity['actor'] and u['name']),identity['actor'])
+            body=md_user(name,cards,'brief',scope!='mesh')
+            value={'target':'user','scope':scope,'private':scope!='mesh','level':'brief','threads':cards,'offset':0,
+                   'total':select_rows(con,scope,(identity['local'],identity['actor']),False,None,0,0,count=True),
+                   'cache':{'generated_at':generated,'local_sources_current':True,'remote_checked_at':(sync.get('last_sync') or {}).get('at'),
+                            'hit':True,'page_version':hashlib.sha256(body.encode()).hexdigest()}}
+            value['truncated']=value['total']>len(cards)
+            result=ready_receipt(value,body,timezone=identity.get('timezone','UTC'))
+            key=scope+'/user-'+identity['actor']+'/ready'
+            con.execute('INSERT OR REPLACE INTO pages VALUES (?,?,?)',(key,tokens[scope],encoded(result)))
+        con.commit()
+        peers=set()
+        for row in con.execute("SELECT data FROM entries WHERE kind='request'"):
+            r=json.loads(row[0])
+            if r['source']['repo']=='local':continue
+            if r['author']==identity['actor']:peers.add(r['to'])
+            if r['to']==identity['actor']:peers.add(r['author'])
+        peers.discard(identity['actor'])
+        for peer in peers:
+            args=SimpleNamespace(contact=peer,rounds=5,before=None,date=None,include_progress=False)
+            try:
+                product=read(con,args,identity,users,{'generated_at':generated,'source_token':tokens['mesh'],
+                     'local_sources_current':True,'remote_checked_at':(sync.get('last_sync') or {}).get('at')})
+                key='mesh/contact-ready-'+digest([identity['actor'],peer])
+                con.execute('INSERT OR REPLACE INTO pages VALUES (?,?,?)',(key,tokens['mesh'],encoded(product)));con.commit()
+            except Error as error:
+                if error.code!='USER_NOT_FOUND':raise
+        put_meta(con,'prepared_tokens',tokens);put_meta(con,'cache_format',FORMAT);con.commit()
 
 
 def refresh(wb, root):
     with wb.base.locked():
         wb.load()
-        return rebuild(wb, root)
+        queued=(root/'queued.json').read_bytes() if (root/'queued.json').is_file() else None
+        result=rebuild(wb,root)
+        if queued is not None and (root/'queued.json').read_bytes()==queued:atomic(root/'applied.json',queued.decode())
+        return result
+
+
+def prepared_read(wb,args):
+    """Default high-frequency reads do not even scan Git revisions."""
+    if (os.environ.get('COSMESH_PAGE_BACKGROUND')=='0' or getattr(args,'require_fresh',False) or
+            getattr(args,'refresh',False)):return None
+    overview=(getattr(args,'ready',False) and not args.id and not args.continue_id and not args.user and
+              args.level=='brief' and not args.query and not args.all and args.limit==20 and args.offset==0)
+    contact=getattr(args,'chat',False) and args.contact and not args.before and not args.date and not args.include_progress and args.rounds==5
+    if not overview and not contact:return None
+    root=cache_root(wb,create=False)
+    if not (root/'index.sqlite3').is_file():return None
+    try:
+        with database(root) as con:
+            identity=meta(con,'identity',{})
+            if meta(con,'cache_format')!=FORMAT or meta(con,'prepared_tokens')!=meta(con,'tokens'):return None
+            if identity.get('actor')!=wb.client.get('actor',identity.get('local')):return None
+            if contact:
+                from .knowledge import select_user
+                peer=select_user(meta(con,'users',[]),args.contact)['account']
+                key='mesh/contact-ready-'+digest([identity['actor'],peer])
+            else:key=args.scope+'/user-'+identity['actor']+'/ready'
+            row=con.execute('SELECT body FROM pages WHERE key=?',(key,)).fetchone()
+            if not row:return None
+            value=json.loads(row[0]);sync=meta(con,'sync')
+    except (sqlite3.DatabaseError,json.JSONDecodeError):return None
+    queued=(root/'queued.json').read_bytes() if (root/'queued.json').is_file() else None
+    applied=(root/'applied.json').read_bytes() if (root/'applied.json').is_file() else None
+    updating=queued is not None and queued!=applied
+    value['freshness'].update(validation='update_receipt',updating=updating)
+    if updating:
+        value['freshness']['local_sources_current']=False
+        if overview:value['document']+='\n〔有更新正在准备，当前为上次成品〕\n'
+    if overview:value['cache_hit']=True
+    args._thread_sync_state={k:sync[k] for k in ('state','identity_verified','last_sync')}
+    return value,None
 
 
 def select_rows(con, scope, user, all_states, query, limit, offset, count=False):
@@ -407,10 +513,16 @@ def target_page(con, args, value, level):
         raise Error('NOT_FOUND' if not rows else 'AMBIGUOUS_ID', 'Choose one visible Thread ID.', ', '.join(r['id'] for r in rows))
     row = rows[0];card = personal_card(row, args.scope);status = json.loads(row['status'])
     conditions, values = 'thread=?', [row['id']]
+    if getattr(args,'chat',False):
+        conditions += " AND kind!='naming'"
+        if getattr(args,'chat_request',None):
+            conditions += ' AND (id=? OR id IN (SELECT id FROM entry_meta WHERE request_id=?))'; values.extend([args.chat_request,args.chat_request])
     if args.query: conditions += ' AND instr(lower(data),?)>0';values.append(args.query.casefold())
     total = con.execute('SELECT count(*) FROM entries WHERE ' + conditions, values).fetchone()[0]
+    order = 'created DESC,id DESC' if getattr(args,'chat',False) else 'created,id'
     entries = [json.loads(r[0]) for r in con.execute('SELECT data FROM entries WHERE ' + conditions +
-               ' ORDER BY created,id LIMIT ? OFFSET ?', (*values, args.limit, args.offset))] if level == 'index' else None
+               ' ORDER BY '+order+' LIMIT ? OFFSET ?', (*values, args.limit, args.offset))] if level == 'index' else None
+    if entries is not None and getattr(args,'chat',False): entries.reverse()
     execution = status.pop('local_execution')
     projects = status.pop('local_projects',[])
     result = {'target': 'thread', 'thread': card}
@@ -426,6 +538,8 @@ def target_page(con, args, value, level):
 def read_page(wb, args):
     if not 1 <= args.limit <= 100 or args.offset < 0:
         raise Error('INPUT_INVALID', 'Use a limit from 1 to 100 and a nonnegative offset.')
+    product=prepared_read(wb,args)
+    if product is not None:return product
     root = cache_root(wb)
     token = stamp(wb)
     recovered = False
@@ -439,12 +553,40 @@ def read_page(wb, args):
         path = root / 'index.sqlite3'; path.rename(root / ('index-damaged-' + str(time.time_ns()) + '.sqlite3'))
         ready = False; recovered = True
     update = None
-    if not ready or args.refresh:
+    fast_product = ((getattr(args,'ready',False) and not args.id and not args.continue_id and not args.user and
+                     args.level=='brief' and not args.query and not args.all and args.limit==20 and args.offset==0) or
+                    (getattr(args,'chat',False) and args.contact))
+    keep_prepared=False
+    if not ready and fast_product and os.environ.get('COSMESH_PAGE_BACKGROUND')!='0' and not args.refresh and not getattr(args,'require_fresh',False):
+        with database(root) as con:
+            identity=meta(con,'identity',{})
+            keep_prepared=bool(meta(con,'tokens')) and identity.get('actor')==wb.client.get('actor',identity.get('local'))
+    if (not ready and not keep_prepared) or args.refresh:
         update = refresh(wb, root)
     with database(root) as con:
         con.execute('BEGIN')
         source_token = meta(con, 'tokens')[args.scope]
         identity = meta(con, 'identity'); users = meta(con, 'users', [])
+        if getattr(args,'chat',False) and args.contact:
+            from .contact_chat import read
+            sync = meta(con,'sync')
+            args._thread_sync_state = {k:sync[k] for k in ('state','identity_verified','last_sync')}
+            result=read(con,args,identity,users,{'generated_at':meta(con,'generated_at'),
+                        'source_token':source_token,
+                        'local_sources_current':source_token==token[args.scope],
+                        'remote_checked_at':(sync.get('last_sync') or {}).get('at')})
+            if keep_prepared:result['freshness']={**result['freshness'],'local_sources_current':False,'updating':True}
+            return result,None
+        if (getattr(args,'ready',False) and not args.id and not args.continue_id and not args.user and
+                args.level=='brief' and not args.query and not args.all and args.limit==20 and args.offset==0):
+            saved=con.execute('SELECT body FROM pages WHERE key=?',(args.scope+'/user-'+identity['actor']+'/ready',)).fetchone()
+            if saved:
+                sync=meta(con,'sync');args._thread_sync_state={k:sync[k] for k in ('state','identity_verified','last_sync')}
+                value=json.loads(saved[0]);value['cache_hit']=bool(ready and not args.refresh)
+                if keep_prepared:
+                    value['cache_hit']=True;value['freshness'].update(local_sources_current=False,updating=True)
+                    value['document']+='\n〔有更新正在准备，当前为上次成品〕\n'
+                return value,None
         requested = args.user
         person = identity['actor']
         local_alias = args.scope != 'mesh' and requested == identity['local']
@@ -457,8 +599,18 @@ def read_page(wb, args):
             raise Error('PRIVATE_REFERENCE', 'Other users have Mesh-only status pages; use --scope mesh.')
         selected_user = (identity['local'], identity['actor']) if mine else person
         page_user = next((u['name'] for u in users if u['account'] == person and u['name']), person)
+        request = None
+        target = args.id
+        if getattr(args, 'check', False) or getattr(args,'chat',False):
+            row = con.execute('SELECT thread,kind,data FROM entries WHERE id=?', (args.id,)).fetchone()
+            if row:
+                if row['kind'] != 'request':
+                    raise Error('INPUT_INVALID', 'Use a Thread or request ID for a quick status check.')
+                request = json.loads(row['data'])
+                target = row['thread']
+            if getattr(args,'chat',False): args.chat_request = request['id'] if request else None
         if args.id:
-            result, body, key = target_page(con, args, args.id, args.level)
+            result, body, key = target_page(con, args, target, args.level)
         else:
             rows = select_rows(con, args.scope, selected_user, args.all, args.query, args.limit, args.offset)
             # Count uses the same predicates without loading the source workspace.
@@ -511,7 +663,17 @@ def read_page(wb, args):
         if args.scope != 'mesh': result['cache']['directory'] = str(root)
         else: result['cache'].pop('update', None)
         args._thread_sync_state = sync
-        if is_ready:
+        if getattr(args,'chat',False):
+            from .thread_chat import receipt
+            status = json.loads(con.execute('SELECT status FROM threads WHERE id=?',(result['thread']['id'],)).fetchone()[0])
+            requests = ([{'id':request['id'],'to':request['to'],**request['request_status']}] if request else status['requests'][-5:])
+            result = receipt(result['thread'],result['entries'],result['total'],args.offset,identity,
+                             {k: result['cache'][k] for k in ('generated_at','local_sources_current','remote_checked_at')},requests,status['materials'])
+        elif getattr(args, 'check', False):
+            from .thread_checks import ready_check
+            result = ready_check(result['thread'], result['status'], request, args.limit,
+                                 {k: result['cache'][k] for k in ('generated_at','local_sources_current','remote_checked_at')})
+        elif is_ready:
             from .status_receipts import ready_receipt
             focus = result.get('continuation', result if 'status' in result else None)
             preview = None
@@ -527,8 +689,7 @@ def read_page(wb, args):
 def schedule(wb):
     """Best effort after successful mutations; never change the write receipt."""
     try:
-        root = cache_root(wb, create=False)
-        if not (root / 'index.sqlite3').is_file(): return
+        root = cache_root(wb)
         atomic(root / 'queued.json', encoded({'at': now()}))
         if os.environ.get('COSMESH_PAGE_BACKGROUND') == '0': return
         with (root / 'worker.lock').open('a+') as lock:
@@ -555,7 +716,7 @@ def worker(path):
             str(Path(__file__).resolve().parent.parent), str(wb.base.root))
         deadline = time.monotonic() + 45
         try:
-            for _ in range(3):
+            while time.monotonic()<deadline:
                 time.sleep(.15)
                 queued = (root / 'queued.json').read_bytes()
                 subprocess.run([sys.executable, '-c', code], stdin=subprocess.DEVNULL,

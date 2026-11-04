@@ -375,8 +375,30 @@ class Hub:
         if isinstance(payload.get('method'),str) and payload['method'].startswith('community_'):
             community=self.community()
             if not community:raise Error('FEATURE_UNAVAILABLE','This Hub has not enabled its knowledge library and user directory.')
-            return community.rpc(payload,user,self)
+            result=community.rpc(payload,user,self)
+            if payload['method'] in {'community_apply','community_name','community_reindex'}:
+                from .hub_pages import schedule
+                schedule(self)
+            return result
         if self.community():self.community().check(user)
+        if payload.get('method')=='thread_chat_ready':
+            from .hub_pages import fetch
+            return fetch(self,payload,user)
+        if payload.get('method')=='thread_read':
+            refs=payload.get('sources');chars=payload.get('chars',8000);offset=payload.get('offset',0)
+            if (set(payload)-{'method','sources','chars','offset'} or not isinstance(refs,list) or not 1<=len(refs)<=5 or
+                    type(chars)is not int or not 1<=chars<=32000//len(refs) or type(offset)is not int or offset<0):
+                raise Error('INPUT_INVALID','Read 1–5 fixed records, at most 32000 total characters, with a nonnegative offset.')
+            from .thread_protocol import reference
+            records=[]
+            for ref in refs:
+                reference(ref)
+                if ref['repo']=='library':raise Error('INPUT_INVALID','Use library text/open for knowledge content.')
+                self.policy(ref['repo'],user);doc=self.resolve_shared_reference(ref)
+                text=doc['body'];end=offset+chars
+                records.append({'source':ref,'author':doc['meta']['author'],'body':text[offset:end],
+                                'truncated':end<len(text),'next_offset':end if end<len(text) else None})
+            return {'records':records}
         if payload in ({'method': 'list_threads'}, {'method': 'ensure_threads'}):
             return self.thread_spaces(payload, user)
         if payload not in ({'method': 'list'}, {'method': 'ensure'}):
@@ -690,4 +712,6 @@ class Hub:
                 try:self.community().reconcile(self)
                 except (Error,sqlite3.Error) as exc:
                     self.audit(name,'archive_pending',error=getattr(exc,'code','CATALOG_UNAVAILABLE'))
+                from .hub_pages import schedule
+                schedule(self)
             return code

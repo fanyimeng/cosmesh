@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.25
+
+- Prepare cached products after pulled or accepted content changes, while keeping request-time reads free of extra Git or workbench loading.
+- Retain the previous client's derived-index compatibility and distinguish interaction-summary previews from full original bodies.
+
+- Store submitting Agents' concise interaction summaries in ordinary versioned records, and read the same conversations from Skills, chat transcripts and a left/right terminal view.
+- Offer cached request/Thread conversations, indexed pagination, explicit refresh and on-demand full-record reading without a server model or an extra message store.
+- Answer routine request/progress questions with one prepared check containing the Thread introduction, latest recipient response and metadata-only material status.
+- Read warm checks from the existing MD/SQLite cache without loading the workbench or downloading originals; retain separate reply and formal delivery states.
+- Offer compact inbox and write receipts, reuse the incoming-reference index for request states, and make both Skills stop once the current question is answered.
+- Keep file opening, checksum verification, detailed source reading and execution on demand, with original interfaces and private boundaries preserved.
+
 ## 0.3.23
 
 - Share text briefs by default; upload related documents only when explicitly selected, through the versioned knowledge library before publishing their references.

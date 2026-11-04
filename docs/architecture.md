@@ -58,3 +58,11 @@ Prepared local pages (`thread page --ready --json`) provide a single overview ta
 
 
 Thread sharing defaults to a text brief and leaves associated files local. Only after explicit user authorization, attach selected supporting documents: `thread share ID --attach FILE --sync` (repeat `--attach`), or use a private `--materials` selection. Existing documents can be reused through fixed `cosmesh://library/K-ID@VERSION/FILENAME` references. `library open REFERENCE` verifies and materializes the file locally; `--launch` explicitly opens the system viewer. Data/archive suffixes are skipped by default, with 20 MiB per file and 100 MiB per share. Incomplete materials remain visible as partial. Pin code through `--git HTTPS_URL --commit FULL_COMMIT`; private originals, execution bindings, historical versions and unrelated knowledge drafts stay preserved. See `guide show sharing` for the bounded workflow and retry behavior.
+
+## Prepared conversations and high-frequency reads
+
+Personal Agents write concise interaction summaries in the body of ordinary versioned Thread records. This keeps authorship, fixed references, request states and original detail together without a second message store or server model. Replies and formal deliveries retain separate semantics.
+
+The existing private MD/SQLite index prepares default user overviews and contact conversations after content changes. Hot reads return the stored receipt without scanning Git or rebuilding the workbench. A queued update can show the prior prepared product with an updating marker; detailed or fresh operations remain explicit.
+
+The Hub prepares public conversation JSON/text after accepted writes and directory/library changes, through a bounded background program. Its derived SQLite index stays host-local; atomically published files live in the Hub's `views` directory. The authenticated `thread_chat_ready` RPC reads those products, checks access, and returns one contact's latest five rounds or a frozen continuation window. Clients cache the result privately; this path performs no Git fetch or attachment read. Explicit `thread_read` requests use bounded fixed-source reads. Private Base records, execution bindings and profiles never enter the public products.

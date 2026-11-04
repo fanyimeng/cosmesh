@@ -159,9 +159,10 @@ def ready_receipt(result, document, preview=None, timezone='UTC'):
     if preview:
         ready['record_preview'] = {'total': preview['total'], 'shown': len(preview['records']),
             'scope':'work_record_bodies_excluding_naming_and_referenced_documents',
-            'body_complete': preview['total'] == len(preview['records']) and all(not r['excerpt']['truncated'] for r in preview['records']),
+            'body_complete': preview['total'] == len(preview['records']) and all(not r['excerpt']['truncated'] and r['excerpt'].get('basis')!='interaction_summary' for r in preview['records']),
             'records': [{'source': add(r['source'], r['author']), 'kind': r['kind'],
                          'author': r.get('author_name', r['author']), 'text': r['excerpt']['text'],
+                         'basis': r['excerpt'].get('basis','record_body'),
                          'truncated': r['excerpt']['truncated'],
                          'superseded_by': [add(ref) for ref in r['superseded_by']]} for r in preview['records']]}
         ready['read_hint'] += ' record_preview 是本次判断用的有界原文；body_complete 只表示目标记录正文已覆盖，不表示引用资料全文已读。不重复读取已覆盖正文或转贴这份预览。'

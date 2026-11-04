@@ -279,6 +279,9 @@ class Workbench:
             meta = {'schema_version': 2, 'kind': 'entry', 'id': new_id('entry'), 'author': author,
                     'created_at': now(), 'title': body.strip().splitlines()[0][:100] if body.strip() else record_type,
                     'thread': payload['thread'], 'type': record_type}
+            from .thread_chat import summary
+            brief = summary(body)
+            if brief['origin'] == 'author': meta['title'] = brief['text'].splitlines()[0][:100]
             if getattr(self,'generation',None):meta['generation']=self.generation
             if parent['repo']!='local':
                 from .knowledge import Knowledge
@@ -459,6 +462,11 @@ class Workbench:
 
     @networked
     def synchronize(self, publish=True,knowledge_keys=None,publish_repos=None):
+        def prepared_sources():
+            knowledge=self.base.path('.cosmesh/knowledge/snapshot.json')
+            return (dict(getattr(self,'_revisions',{})),{repo:store.client().get('remote_revision') for repo,store in self.stores.items()},
+                    (knowledge.stat().st_mtime_ns,knowledge.stat().st_size) if knowledge.is_file() else None)
+        previous_sources=prepared_sources()
         results, errors = [], []
         versions = {}
         if self.client.get('connection'):
@@ -533,12 +541,15 @@ class Workbench:
             except Error as exc:errors.append({'repo':'library','error':exc.as_dict()})
         self.client['last_sync']={'at':now(),'complete':not errors,'publish':publish,'errors':errors}
         self.save_client()
+        if prepared_sources()!=previous_sources:
+            from .status_pages import schedule
+            schedule(self)
         return {'synchronized': publish and not errors, 'refreshed': not errors, 'results': results, 'errors': errors}
 
     def request_state(self, item):
         request_id = item['doc']['meta']['id']
-        actions = [x for x in self.catalog.values() if x['doc']['meta'].get('request', {}).get('id') == request_id
-                   and x['doc']['meta'].get('type') in CONTROL]
+        actions = [x for x, relation, _ in self._incoming.get((item['repo'], request_id), [])
+                   if relation == 'request' and x['doc']['meta'].get('type') in CONTROL]
         # Causal order within each actor stream, rather than timestamp order.
         terminals = {}
         for x in actions:

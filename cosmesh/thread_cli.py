@@ -42,10 +42,24 @@ def add_commands(commands, command, body):
     presentation.add_argument('--markdown', action='store_true')
     presentation.add_argument('--ready', action='store_true', help='Prepared document and a minimal fixed-source index')
     p.add_argument('--continue', dest='continue_id', help='Include the selected status page with a user overview')
+    p = command(group, 'check', 'thread.check'); p.add_argument('id')
+    p.add_argument('--scope', choices=('all', 'base', 'mesh'), default='all')
+    p.add_argument('--limit', type=int, default=5)
+    p = command(group, 'chat', 'thread.chat'); p.add_argument('id',nargs='?')
+    p.add_argument('--with',dest='contact');p.add_argument('--rounds',type=int,default=5)
+    p.add_argument('--before');p.add_argument('--date');p.add_argument('--include-progress',action='store_true')
+    p.add_argument('--scope', choices=('all','base','mesh'), default='all')
+    p.add_argument('--limit',type=int,default=30);p.add_argument('--offset',type=int,default=0)
+    view = p.add_mutually_exclusive_group()
+    view.add_argument('--tui',action='store_true');view.add_argument('--plain',action='store_true')
+    p = command(group,'read','thread.read');p.add_argument('id');p.add_argument('--repo',required=True)
+    p.add_argument('--offset',type=int,default=0);p.add_argument('--chars',type=int,default=8000)
     p = command(group, 'inbox', 'thread.inbox'); p.add_argument('--sent', action='store_true'); p.add_argument('--all', action='store_true')
+    p.add_argument('--ready', action='store_true'); p.add_argument('--limit', type=int, default=10)
     for verb in ('show', 'context', 'continue', 'coordinate', 'backlinks'):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id')
     p = command(group, 'create', 'thread.create'); p.add_argument('--title', required=True); body(p)
+    p.add_argument('--ready', action='store_true')
     p.add_argument('--generation-file')
     p.add_argument('--english');p.add_argument('--chinese');p.add_argument('--intro')
     p = command(group,'name','thread.name');p.add_argument('id')
@@ -60,6 +74,7 @@ def add_commands(commands, command, body):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id', **({'nargs':'?'} if verb == 'request' else {}))
         if verb != 'bind':
             p.add_argument('--sync', action='store_true')
+            p.add_argument('--ready', action='store_true')
         if verb in ('note', 'result', 'summary', 'request', 'reply', 'assign', 'decline', 'deliver', 'adopt', 'cancel', 'correct', 'link', 'edit'):
             body(p)
         if verb == 'request':
@@ -67,7 +82,11 @@ def add_commands(commands, command, body):
             p.add_argument('--maintenance', action='store_true', help='Use the Hub maintenance Thread')
         if verb in ('note', 'result', 'summary', 'request'):
             p.add_argument('--ref', action='append', default=[], help='Cite ID or pinned ID@VERSION; repeat for multiple sources')
-        if verb in ('note','result','summary','edit'):p.add_argument('--generation-file')
+        if verb in ('note','result','summary','edit','request','reply','assign','decline','deliver','adopt','cancel','correct','state','archive','restore'):
+            p.add_argument('--generation-file')
+        if verb in ('note','result','summary','request','reply','assign','decline','deliver','adopt','cancel','correct','state','archive','restore'):
+            brief = p.add_mutually_exclusive_group()
+            brief.add_argument('--interaction-summary');brief.add_argument('--interaction-summary-file')
         if verb == 'assign':
             p.add_argument('--work', action='append', required=True)
         if verb == 'deliver':
@@ -105,7 +124,7 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Offline Thread operations cannot contact the Hub.')
     if dry and (publish or fresh or verb in {'discover', 'sync'}):
         raise Error('INPUT_INVALID', 'Dry-run previews local changes and cannot synchronize.')
-    if fresh and verb not in {'list', 'overview', 'page', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status', 'maintenance'}:
+    if fresh and verb not in {'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'status', 'maintenance'}:
         raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
     if verb == 'overview' and ((args.scope == 'mesh' and args.host_file) or (args.scope == 'base' and fresh)):
         raise Error('INPUT_INVALID', 'Mesh overview excludes host metadata; Base overview stays local without --require-fresh.')
@@ -113,6 +132,13 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Use --compact and a private scope for combined continuation.')
     if verb == 'request' and bool(args.id) == args.maintenance:
         raise Error('INPUT_INVALID', 'Choose a Thread ID or --maintenance.')
+    if verb == 'chat':
+        if bool(args.id)==bool(args.contact):raise Error('INPUT_INVALID','Choose a Thread/request ID or --with REAL_NAME.')
+        if args.contact:
+            if args.scope=='base':raise Error('INPUT_INVALID','Contact conversations use shared Mesh records.')
+            args.scope='mesh'
+        elif args.before or args.date or args.include_progress:
+            raise Error('INPUT_INVALID','Date, cursor and shared-progress filters apply to --with conversations.')
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
     if prefix and (root == Path(prefix).resolve() or Path(prefix).resolve() in root.parents):
         raise Error('PATH_INVALID', 'Keep the workbench outside the application installation.')
@@ -121,17 +147,55 @@ def execute(args):
     if verb == 'discover' and not root.exists():
         initialize(root, system_user()['user'])
     wb = Workbench(root)
-    if verb == 'page':
+    if verb=='read':
+        if dry:raise Error('INPUT_INVALID','Source reads do not use --dry-run.')
+        from .thread_protocol import reference
+        identifier,separator,version=args.id.partition('@')
+        if not separator:raise Error('INPUT_INVALID','Use the fixed ID@VERSION from a conversation source index.')
+        ref={'repo':args.repo,'id':identifier,'version':version};reference(ref)
+        if not 1<=args.chars<=32000 or args.offset<0:raise Error('INPUT_INVALID','Use 1–32000 characters and a nonnegative offset.')
+        args._thread_sync_state={'state':'local_only','identity_verified':False}
+        if args.repo!='local' and not offline and wb.client.get('connection'):
+            from .spaces import rpc
+            result=rpc(wb.client['connection'],{'method':'thread_read','sources':[ref],'chars':args.chars,'offset':args.offset})
+            if result.get('actor')!=wb.client.get('actor'):raise Error('AUTH_DENIED','Source read identity differs.')
+            args._thread_sync_state={'state':'synced','identity_verified':True}
+            return result['records'][0],None
+        with wb.base.locked():
+            wb.load();doc=wb.resolve(ref);end=args.offset+args.chars
+            return {'source':ref,'author':doc['meta']['author'],'body':doc['body'][args.offset:end],
+                    'truncated':end<len(doc['body']),'next_offset':end if end<len(doc['body']) else None},None
+    if verb == 'check':
+        args.level = 'status'; args.user = args.query = args.continue_id = None
+        args.all = True; args.offset = 0
+        args.refresh = args.markdown = args.ready = False
+        args.check = True
+    if verb == 'chat':
+        args.level = 'index'; args.user = args.query = args.continue_id = None
+        args.all = True; args.refresh = args.markdown = args.ready = False
+        args.chat = True
+    if verb in {'page','check','chat'}:
         args._thread_sync_state = {'state': 'local_only', 'identity_verified': False}
         if dry or (args.scope == 'base' and fresh) or (args.id and args.continue_id):
             raise Error('INPUT_INVALID', 'Status pages are local derived reads; omit --dry-run and keep Base offline.')
+        if verb=='chat' and args.contact:
+            from .remote_pages import contact
+            prepared,preparing=contact(wb,args)
+            if prepared is not None:
+                if prepared.get('transport')=='prepared_hub_document':
+                    args._thread_sync_state={'state':'cached' if prepared['freshness'].get('updating') else 'synced','identity_verified':True}
+                return prepared,None
+            if preparing:
+                fresh=False;args.require_fresh=False;args._hub_page_preparing=True
         if fresh:
             with wb.base.locked():
                 wb.load()
                 if wb.synchronize(publish=False)['errors']:
                     raise Error('FRESHNESS_UNAVAILABLE', 'Some shared sources could not be refreshed; cached sources are retained.')
         from .status_pages import read_page
-        return read_page(wb, args)
+        result,revision=read_page(wb,args)
+        if getattr(args,'_hub_page_preparing',False):result['freshness'].update(updating=True,server_current=False)
+        return result,revision
     with wb.base.locked():
         wb.load()
         def finish(result, reload=False):
@@ -147,9 +211,15 @@ def execute(args):
                     {key: space[key] for key in ('repo', 'local_revision', 'remote_revision', 'last_sync_at',
                                                 'state', 'identity_verified', 'unpushed_count') if key in space}
                     for space in status['spaces'] if space['repo'] in repos]
-            if not dry and verb not in {'status','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'}:
+            if verb == 'inbox' and args.ready:
+                args._thread_sync_state = {key: args._thread_sync_state[key] for key in ('state','identity_verified','last_sync')}
+            if not dry and not publish and verb not in {'status','sync','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'}:
                 from .status_pages import schedule
                 schedule(wb)
+            if getattr(args,'ready',False) and verb not in {'overview','inbox'}:
+                from .thread_checks import ready_write
+                result = ready_write(result,verb)
+                args._thread_sync_state = {key: args._thread_sync_state[key] for key in ('state','identity_verified','last_sync')}
             return result, wb.base.head
         if getattr(args,'generation_file',None):
             import json
@@ -167,6 +237,11 @@ def execute(args):
                 raise Error('FRESHNESS_UNAVAILABLE', 'Some shared sources could not be refreshed; cached content is retained.')
         key = getattr(args, 'idempotency_key', None)
         body = read_input(args.file, MAX_DOCUMENT) if hasattr(args, 'file') else getattr(args, 'body', '')
+        brief = getattr(args,'interaction_summary',None)
+        if getattr(args,'interaction_summary_file',None): brief = read_input(args.interaction_summary_file,16000)
+        if brief is not None:
+            from .thread_chat import with_summary
+            body = with_summary(body,brief)
         if verb == 'status':
             result = wb.status()
         elif verb == 'maintenance':
@@ -199,6 +274,8 @@ def execute(args):
                 result.append(shown)
             result.sort(key=lambda x:(x['created_at'], x['id']), reverse=True)
         elif verb == 'inbox':
+            if not 1 <= args.limit <= 100:
+                raise Error('INPUT_INVALID', 'Use a limit from 1 to 100.')
             result = []
             for item in wb.catalog.values():
                 meta = item['doc']['meta']
@@ -208,6 +285,11 @@ def execute(args):
                         parent = wb.find(meta['thread'], 'thread')
                         result.append({'request': wb.present(item), 'thread_lifecycle': wb.present(parent)['lifecycle'], **state})
             result.sort(key=lambda x:x['request']['created_at'], reverse=True)
+            if args.ready:
+                from .thread_checks import ready_inbox, recipient_responses
+                for row in result[:args.limit]:
+                    row['response_count'] = len(recipient_responses(wb,wb.find(row['request']['id'])))
+                result = ready_inbox(result,args.limit)
         elif verb == 'show':
             item = wb.find(args.id)
             result = wb.present(item) if item['doc']['meta']['kind'] == 'entry' else wb.context(item['doc']['meta']['id'])

@@ -1,5 +1,13 @@
 # 组件与文件职责
 
+## 交互摘要、对话与快速成品
+
+thread_materials.py 管理明确选定的共享资料、后缀／大小预检与先入库后引用；material_links.py 解析固定文件引用、校验原件及按需启动查看器。默认分享只发正式文本，原文件保持。
+
+thread_chat.py 保存、读取作者的交互摘要，生成左右排版与终端 TUI；contact_chat.py 从现有共享记录派生按人的五轮对话和固定历史窗口，合并补充并保留每条来源。thread_checks.py 提供紧凑状态、资料登记与写入回执，不下载原件。
+
+hub_pages.py 在内容更新后由有时限的普通后台程序准备公共对话 JSON/文本，SQLite 仅放机器本地，服务器成品用原子文件提供。thread_chat_ready RPC 只读已准备文件，不读取 Git 历史或附件。remote_pages.py 一次取回并私人缓存成品；普通查看直接读缓存，明确最新才抓取，准备中保留上次成品与标记。
+
 ## 分级状态页
 
 status_receipts.py 生成可直接展示的成品表格/段落和精简来源索引。只处理已缓存的状态，不额外读源文件或调用模型；状态页准备时生成正文，读取 --ready 复用成品，组合视图引用同一目标并仅追加增量说明。
@@ -7,6 +15,8 @@ status_receipts.py 生成可直接展示的成品表格/段落和精简来源索
 status_pages.py 在当前机器私人缓存中维护 Markdown 成品与 SQLite 派生索引。thread_cli.py 提供 page 的 Thread/用户三层读取及 summary 源记录入口，成功写入后触发短后台准备。cli.py 为知识目录更新触发相同机制，保持共享失败回执不附私人诊断。读取命中不加载全工作台，失效按现有固定来源重建受影响页面；无新模型、网络轮询或源格式。
 
 ## Thread 总览
+
+preferences.py 保存两份 CLI 共用的私人快速模式偏好；agent_projects.py 管理与 Agent 原生项目／工作区的私人独立关联；thread_names.py 用普通版本化记录保存中英文短名、简介与历史别名，显示时区分命名和语义归纳。
 
 thread_overview.py 从现有 Thread、进展记录和私人绑定生成只读总览。可选的个人 Agent 宿主元数据只在本次调用中核验会话与实际项目归属，目录检查按主机/路径去重；不联网、不写绑定或源历史。thread_cli.py 路由 overview，cli.py 为 --scope mesh 去除私人同步定位信息。两份 Skill 负责按宿主能力取元数据、解释证据并简短展示。
 

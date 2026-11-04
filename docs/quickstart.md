@@ -115,3 +115,16 @@ Prepared local pages (`thread page --ready --json`) provide a single overview ta
 
 
 Thread sharing defaults to a text brief and leaves associated files local. Only after explicit user authorization, attach selected supporting documents: `thread share ID --attach FILE --sync` (repeat `--attach`), or use a private `--materials` selection. Existing documents can be reused through fixed `cosmesh://library/K-ID@VERSION/FILENAME` references. `library open REFERENCE` verifies and materializes the file locally; `--launch` explicitly opens the system viewer. Data/archive suffixes are skipped by default, with 20 MiB per file and 100 MiB per share. Incomplete materials remain visible as partial. Pin code through `--git HTTPS_URL --commit FULL_COMMIT`; private originals, execution bindings, historical versions and unrelated knowledge drafts stay preserved. See `guide show sharing` for the bounded workflow and retry behavior.
+
+## Fast interaction summaries
+
+Start with prepared products; expand only when needed:
+
+```sh
+cosbase thread page --ready --json
+cosmesh thread chat --with REAL_NAME --json
+cosmesh thread chat --with REAL_NAME --require-fresh --json
+cosmesh thread chat --with REAL_NAME --tui
+```
+
+The conversation defaults to five rounds, with the other participant on the left and you on the right. Follow `next_cursor` using `--before` to read earlier rounds without repeating the current page. Submitting personal Agents write concise interaction summaries using `--interaction-summary`; summaries remain in the original versioned records. Prepared documents update after content changes. A latest-contact read uses one prepared-document RPC, while ordinary reads use the private local cache. Original content and attachments are read on request. See `cosmesh guide show chat`.
