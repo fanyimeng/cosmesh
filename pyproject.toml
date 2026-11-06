@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cosmesh"
-version = "0.3.27"
+version = "0.3.28"
 description = "Local-first documents, actions and records for people and their agents"
 requires-python = ">=3.9"
 dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<51", "pypdf==6.21.4"]

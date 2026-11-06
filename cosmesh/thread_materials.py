@@ -7,14 +7,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from .errors import Error
-from .knowledge_protocol import EXTENSIONS,MAX_FILE,MAX_TOTAL
+from .knowledge_protocol import MAX_FILE,MAX_TOTAL,attachment_reason,attachment_suffix_reason
 from .material_links import filename,html_ready,link,parse,relative_links
 from .store import atomic
 from .thread_protocol import new_id
 from .threads import now
 
-SKIP_SUFFIXES=('.fits','.fit','.fts','.fits.gz','.h5','.hdf5','.hdf','.npy','.npz','.ms','.zarr','.parquet','.nc',
-               '.zip','.tar','.tar.gz','.tgz','.7z','.gz','.bz2','.xz')
 PRIVATE_PATH=re.compile(r'(?<![\w:/])(?:/(?:Users|home|private|tmp|srv|mnt|Volumes|data\d+)(?:/[^\s`<>\[\]()，。；；]+)+|[A-Za-z]:\\[^\s`<>\[\]()]+)')
 FILE_TOKEN=re.compile(r'(?<![\w:/])(?:[\w.\-]+/)*[\w.\-]+\.(?:md|txt|pdf|docx?|pptx?|html?|json|csv|tsv|png|jpe?g|svg|bib|py|fits(?:\.gz)?|h5|hdf5|npy|npz|zip|tar\.gz)\b',re.I)
 
@@ -69,18 +67,26 @@ def preflight(files):
         key=(str(path),name)
         if key in seen:continue
         seen.add(key);reason=None;size=None
-        if any(path.name.casefold().endswith(s) for s in SKIP_SUFFIXES):reason='data_or_archive_suffix'
-        elif path.suffix.casefold() not in EXTENSIONS:reason='unsupported_document_type'
-        elif path.is_symlink():reason='symbolic_link'
-        elif not path.is_file():reason='file_unavailable'
-        else:
-            size=path.stat().st_size
-            if size>MAX_FILE:reason='file_exceeds_20_MiB'
-            elif total+size>MAX_TOTAL:reason='share_exceeds_100_MiB'
-            elif len(accepted)>=32:reason='more_than_32_files'
-            elif name in {x['name'] for x in accepted}:raise Error('INPUT_INVALID','Choose distinct public filenames for selected documents.')
-            elif path.suffix.lower() in {'.html','.htm','.svg'} and not html_ready(path.read_bytes()):reason='html_needs_self_contained_resources'
-        if reason:skipped.append({'name':name,'reason':reason,'bytes':size,'required':required});continue
+        reason=attachment_suffix_reason(path.name) or attachment_suffix_reason(name)
+        if not reason:
+            if path.is_symlink():reason='symbolic_link'
+            elif not path.is_file():reason='file_unavailable'
+            else:
+                size=path.stat().st_size
+                if size>MAX_FILE:reason='file_exceeds_20_MiB'
+                elif total+size>MAX_TOTAL:reason='share_exceeds_100_MiB'
+                elif len(accepted)>=32:reason='more_than_32_files'
+                elif name in {x['name'] for x in accepted}:raise Error('INPUT_INVALID','Choose distinct public filenames for selected documents.')
+                else:
+                    raw=path.read_bytes()
+                    reason=attachment_reason(path.name,raw) or attachment_reason(name,raw)
+                    if not reason and {path.suffix.lower(),Path(name).suffix.lower()} & {'.html','.htm','.svg'} and not html_ready(raw):
+                        reason='html_needs_self_contained_resources'
+        if reason:
+            skipped.append({'name':name,'reason':reason,'bytes':size,'required':required,
+                            'suffix':path.suffix.lower(),
+                            'hint':'允许 UTF-8 文本（含源码和无后缀文件）、PDF、Office 和图片；跳过数据、压缩包、二进制程序及超限文件。'})
+            continue
         accepted.append({'path':str(path),'input':f['path'],'name':name,'bytes':size,'required':required});total+=size
     return accepted,skipped,total
 

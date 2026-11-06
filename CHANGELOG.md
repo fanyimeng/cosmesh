@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.28
+
+- Accept UTF-8 text and source attachments by content, including LaTeX, scripts, configuration files and extensionless text.
+- Apply the same checks during attachment selection, library import and Hub acceptance, with explicit skip reasons for data, archives, binary programs and invalid text.
+- Extract source text for search and preserve fixed-reference opening, existing document formats and attachment size limits.
+
 ## 0.3.27
 
 - Capture Agent-authored project increments in ordinary Thread records, deduplicate exact repeats, retain private checkpoints and publish only the selected shared update.

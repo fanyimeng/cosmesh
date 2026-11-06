@@ -183,7 +183,7 @@ class Community:
             return result
 
     def _resource_action(self,db,user,operation,v,hub):
-        from .knowledge_protocol import validate,EXTENSIONS
+        from .knowledge_protocol import validate,attachment_reason,MAX_FILE
         from .thread_protocol import reference
         allowed={'id','expect','title','body','kind','status','files','bibliography','refs','generation','maintainer'}
         if set(v)-allowed:raise Error('INPUT_INVALID','Unknown knowledge fields.')
@@ -206,7 +206,9 @@ class Community:
             for f in files:
                 path=self.blob(f['sha256'])
                 if not path.is_file() or path.stat().st_size!=f['size']:raise Error('SOURCE_PENDING','Upload all file content before publishing metadata.')
-                if Path(f['name']).suffix.lower() not in EXTENSIONS:raise Error('INPUT_INVALID','The knowledge library accepts documents and simple figures.')
+                if path.stat().st_size>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose a document up to 20 MiB.')
+                reason=attachment_reason(f['name'],path.read_bytes())
+                if reason:raise Error('INPUT_INVALID',f'Attachment {f["name"]} rejected: {reason}. Accepts UTF-8 text/source, PDF, Office and figures.')
                 if f['text_sha256'] and not self.blob(f['text_sha256']).is_file():raise Error('SOURCE_PENDING','Extracted text is missing.')
             refs=v.get('refs',old['meta']['refs'] if old else [])
             for ref in refs:

@@ -14,7 +14,7 @@ from xml.etree import ElementTree
 from html.parser import HTMLParser
 
 from .errors import Error
-from .knowledge_protocol import CHUNK,MAX_FILE,EXTENSIONS,knowledge_id
+from .knowledge_protocol import CHUNK,MAX_FILE,BINARY_DOCUMENTS,attachment_reason,knowledge_id
 from .store import atomic,safe_path
 from .community import packed,digest,normalized
 from .connections import networked
@@ -202,8 +202,11 @@ class Knowledge:
         for name in paths:
             path=Path(name).expanduser()
             if not path.is_file() or path.stat().st_size>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose an existing document up to 20 MiB.')
-            if path.suffix.lower() not in EXTENSIONS:raise Error('INPUT_INVALID','Knowledge accepts text, office documents, PDF and simple figures.')
-            raw=path.read_bytes();sha=self.cache_blob(raw)
+            raw=path.read_bytes()
+            if len(raw)>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose a document up to 20 MiB.')
+            reason=attachment_reason(path.name,raw)
+            if reason:raise Error('INPUT_INVALID',f'Attachment {path.name} (suffix {path.suffix or "[none]"}) rejected: {reason}. Accepts UTF-8 text/source, PDF, Office and figures.')
+            sha=self.cache_blob(raw)
             previous=known.get((sha,path.suffix.lower()))
             if previous:
                 files.append({**previous,'name':path.name});continue
@@ -316,6 +319,7 @@ def extract(path):
             text='\n'.join('[page '+str(i)+']\n'+(page.extract_text() or '') for i,page in enumerate(reader.pages,1))
             if not any(page.extract_text() for page in reader.pages):status='needs_ocr'
         tool='pypdf/'+pypdf.__version__
+    elif suffix not in BINARY_DOCUMENTS:text=path.read_text(encoding='utf-8')
     else:status='not_extracted';tool='original_only'
     return {'status':status,'text':text,'tool':tool}
 

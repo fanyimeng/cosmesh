@@ -24,7 +24,11 @@ cosmesh thread share THREAD_ID --attach /work/project/report.pdf --dry-run --jso
 
 ## 限制与预检
 
-单文件20 MiB，整次新原件合计100 MiB，最多32个入库文件；只处理显式选择，不递归扫描目录。默认跳过 FITS/FITS.GZ、HDF5、NPY/NPZ、MS/Zarr数据目录及ZIP/TAR/GZ等数据或压缩文件。允许 MD/TXT、PDF、Office、HTML、图像、BibTeX和有界JSON/CSV/TSV文本。
+单文件20 MiB，整次新原件合计100 MiB，最多32个入库文件；只处理显式选择，不递归扫描目录。默认跳过 FITS/FITS.GZ、HDF5、NPY/NPZ、MS/Zarr数据目录及ZIP/TAR/GZ等数据或压缩文件。PDF、Office和图像沿用现有支持。
+
+UTF-8 文本按内容接收，支持 `.tex .py .md .bib .csv .tsv .json .yaml .yml .sh .c .h .cpp .html .css .js .toml .ini .rst .txt .log`，也支持其他后缀及无后缀文本。文本中的 NUL、二进制控制字符、非 UTF-8 内容以及二进制程序被拒。源码按资料存储，脚本的可执行权限不影响文本接收；打开缓存文件时使用私人普通文件权限。HTML/SVG 继续核对资源自包含条件。
+
+跳过项返回 `name`、`reason`、`suffix` 和允许类型提示。数据/压缩后缀为 `data_or_archive_suffix`，程序后缀或内容为 `executable_suffix` / `executable_content`，无效文字为 `not_utf8_text` / `binary_content`；大小限制沿用原原因。必要文件被跳过时资料状态为 partial。
 
 大小／后缀首先看名称与文件大小；数据文件不读取内容。HTML/SVG 静态检查资源依赖，优先提交自包含版本或PDF，不执行脚本或自动下载资源。Markdown 相对引用的报告／图片也应选入同一资料；打开时按原相对路径准备缓存副本。缺失依赖明确标记。
 

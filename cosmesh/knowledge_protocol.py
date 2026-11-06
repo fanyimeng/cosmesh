@@ -7,7 +7,45 @@ DIGEST = re.compile(r'^[0-9a-f]{64}$')
 MAX_FILE = 20 * 1024 * 1024
 MAX_TOTAL = 100 * 1024 * 1024
 CHUNK = 256 * 1024
-EXTENSIONS = {'.md', '.txt', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.html', '.htm', '.png', '.jpg', '.jpeg', '.svg', '.bib', '.json', '.csv', '.tsv'}
+BINARY_DOCUMENTS = {'.pdf', '.doc', '.docx', '.ppt', '.pptx', '.png', '.jpg', '.jpeg'}
+TEXT_EXTENSIONS = {'.md', '.txt', '.tex', '.bib', '.json', '.csv', '.tsv', '.yaml', '.yml',
+                   '.py', '.sh', '.c', '.h', '.cpp', '.html', '.htm', '.svg', '.css', '.js',
+                   '.toml', '.ini', '.rst', '.log'}
+EXTENSIONS = BINARY_DOCUMENTS | TEXT_EXTENSIONS
+SKIP_SUFFIXES = ('.fits', '.fit', '.fts', '.fits.gz', '.h5', '.hdf5', '.hdf', '.npy', '.npz',
+                 '.ms', '.zarr', '.parquet', '.nc', '.zip', '.tar', '.tar.gz', '.tgz', '.7z',
+                 '.gz', '.bz2', '.xz', '.rar', '.zst')
+EXECUTABLE_SUFFIXES = ('.exe', '.dll', '.so', '.dylib', '.o', '.a', '.wasm', '.class', '.pyc')
+
+
+def attachment_suffix_reason(name):
+    name = name.casefold()
+    if name.endswith(SKIP_SUFFIXES):
+        return 'data_or_archive_suffix'
+    if name.endswith(EXECUTABLE_SUFFIXES):
+        return 'executable_suffix'
+    return None
+
+
+def attachment_reason(name, raw):
+    """Apply the same attachment policy to selected files and uploaded blobs."""
+    from pathlib import Path
+    reason = attachment_suffix_reason(name)
+    if reason:
+        return reason
+    if raw.startswith((b'\x7fELF', b'MZ', b'\xfe\xed\xfa\xce', b'\xce\xfa\xed\xfe',
+                       b'\xfe\xed\xfa\xcf', b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe',
+                       b'\xbe\xba\xfe\xca', b'\x00asm')):
+        return 'executable_content'
+    if Path(name).suffix.lower() in BINARY_DOCUMENTS:
+        return None
+    try:
+        text = raw.decode('utf-8')
+    except UnicodeDecodeError:
+        return 'not_utf8_text'
+    if re.search(r'[\x00-\x08\x0b\x0e-\x1f\x7f]', text):
+        return 'binary_content'
+    return None
 
 
 def knowledge_id(value):

@@ -23,7 +23,7 @@ class MaterialPreflightTests(unittest.TestCase):
             root=Path(name);files=[]
             for i in range(6):
                 p=root/(str(i)+'.txt')
-                with p.open('wb') as h:h.truncate(MAX_FILE)
+                p.write_bytes(b'a'*MAX_FILE)
                 files.append({'path':str(p)})
             big=root/'too-big.pdf'
             with big.open('wb') as h:h.truncate(MAX_FILE+1)
@@ -44,6 +44,55 @@ class MaterialPreflightTests(unittest.TestCase):
 
 
 class SharedMaterialTests(ThreadFixture):
+    def test_utf8_sources_attach_extract_and_open_with_fixed_references(self):
+        tid=self.shared('alice','源码交付','合成测试资料')
+        contents={'table.tex':'\\begin{tabular}{c} 合成表格 \\end{tabular}',
+                  'analysis.py':'print("synthetic")\n', 'result.csv':'name,value\na,1\n',
+                  'settings.custom':'参数 = 合成\n', 'README':'没有后缀的说明\n',
+                  'run.sh':'#!/bin/sh\necho synthetic\n'}
+        args=[]
+        for name,body in contents.items():
+            path=self.root/name;path.write_text(body,encoding='utf-8')
+            if name=='run.sh':path.chmod(0o700)
+            args.extend(['--attach',str(path)])
+        for name in ('data.zip','cube.fits','program.exe','binary.py','invalid.custom'):
+            path=self.root/name
+            path.write_bytes(b'\xff' if name=='invalid.custom' else b'abc\x00def' if name=='binary.py' else b'synthetic')
+            args.extend(['--attach',str(path)])
+        materials=self.cli('alice','thread','share',tid,*args,'--sync')['result']['materials']
+        self.assertEqual(materials['state'],'partial')
+        self.assertEqual({f['name'] for f in materials['files']},set(contents))
+        reasons={f['name']:f['reason'] for f in materials['skipped']}
+        self.assertEqual(reasons,{'data.zip':'data_or_archive_suffix','cube.fits':'data_or_archive_suffix',
+                                 'program.exe':'executable_suffix','binary.py':'binary_content','invalid.custom':'not_utf8_text'})
+        self.update('bob')
+        with patch.dict(os.environ,COSMESH_OPEN_CACHE=str(self.root/'opened')):
+            for f in materials['files']:
+                opened=self.cli('bob','library','open',f['reference'])
+                self.assertTrue(opened['verified'])
+                self.assertEqual(Path(opened['path']).read_text(),contents[f['name']])
+                self.assertEqual(Path(opened['path']).stat().st_mode & 0o111,0)
+        ref,_=parse(materials['files'][0]['reference'])
+        with self.use('bob') as w:
+            parts=Knowledge(w).text(ref['id'])['parts']
+            self.assertEqual({p['file']:p['text'] for p in parts},contents)
+
+    def test_library_and_hub_apply_content_rules(self):
+        source=self.root/'source.tex';source.write_text('合成 LaTeX',encoding='utf-8')
+        added=self.cli('alice','library','add','--title','Source','--file',str(source),'--sync')
+        self.assertTrue(added['publication']['synchronized'])
+        binary=self.root/'binary.txt';binary.write_bytes(b'\x7fELF\x00')
+        with self.use('alice') as w:
+            kb=Knowledge(w)
+            with self.assertRaises(Error):kb.import_files([str(binary)])
+            files=kb.import_files([str(source)])
+            files[0]['name']='program.exe'
+            from uuid import uuid4
+            value={'id':'K-'+str(uuid4()),'title':'Rejected','files':files}
+            with self.assertRaises(Error) as caught:
+                self.hub.community().apply('alice','resource_add',value,'reject-executable',self.hub)
+            self.assertIn('executable_suffix',str(caught.exception))
+
     def setUp(self):
         super().setUp();self.hub.initialize_community(self.root/'knowledge-library')
         for user,name in {'alice':'张三','bob':'李四','carol':'王五'}.items():

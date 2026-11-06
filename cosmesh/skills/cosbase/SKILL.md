@@ -59,7 +59,7 @@ Base 私人；Mesh 使用 --scope mesh，只展示共享内容。他人页用 th
 
 ## 可选关联资料
 
-默认只共享 Thread 文本简报／正式文本，不主动读取、选择或上传关联文件，不固定追问。用户明确允许后选最小必要资料，thread share ID --attach FILE（可重复）或 --materials PRIVATE_JSON --sync；--resource 可复用已有固定文件。单文件20 MiB、整次100 MiB，数据与压缩包默认跳过，skipped/partial 如实说明。代码用 --git HTTPS_URL --commit FULL_SHA [--code-path RELATIVE_PATH]。已有共享资料与私人原件保留；不扫描／打包整个目录。按需 guide show sharing。
+默认只共享 Thread 文本简报／正式文本，不主动读取、选择或上传关联文件，不固定追问。用户明确允许后选最小必要资料，thread share ID --attach FILE（可重复）或 --materials PRIVATE_JSON --sync；--resource 可复用已有固定文件。单文件20 MiB、整次100 MiB，数据与压缩包默认跳过，skipped/partial 如实说明。明确选择的 UTF-8 文本与源码（如 .tex/.py/.sh、配置和无后缀文字）可直接作为附件；二进制程序和无效文本会说明跳过原因。代码用 --git HTTPS_URL --commit FULL_SHA [--code-path RELATIVE_PATH]。已有共享资料与私人原件保留；不扫描／打包整个目录。按需 guide show sharing。
 
 固定引用 cosmesh://library/K-ID@VERSION/FILENAME 用 library open 取得经摘要校验的本机 path；--launch 明确启动查看器。共享继续引用固定 URI，不使用作者本机路径。只问资料状态时不下载原件。长期文献／文字资料用 library add，明确入组内库才 --sync。
 
