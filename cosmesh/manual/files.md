@@ -2,6 +2,8 @@
 
 ## 项目更新与消息
 
+thread_sending.py 检查公开范围，生成草稿／待发送／已发送回执，只提交选定消息和明确引用的待提交来源；公开分支仅复制指定文本，来源关系留私人。
+
 thread_updates.py 提交Agent撰写的项目增量、精确去重、私人检查点与限定同步，阻止捎带其他草稿。thread_mail.py 从已接受的请求／回应／更正关系准备私人收发件箱索引，提供固定窗口、按用户的查看状态与一次RPC快读；普通项目进展不自动通知。消息原文仍在普通Thread记录，查看状态不进入共享Git历史。
 
 ## 交互摘要、对话与快速成品
@@ -20,9 +22,9 @@ status_pages.py 在当前机器私人缓存中维护 Markdown 成品与 SQLite �
 
 ## Thread 总览
 
-preferences.py 保存两份 CLI 共用的私人快速模式偏好；agent_projects.py 管理与 Agent 原生项目／工作区的私人独立关联；thread_names.py 用普通版本化记录保存中英文短名、简介与历史别名，显示时区分命名和语义归纳。
+preferences.py 保存CosMesh 与旧兼容 CLI 共用的私人快速模式偏好；agent_projects.py 管理与 Agent 原生项目／工作区的私人独立关联；thread_names.py 用普通版本化记录保存中英文短名、简介与历史别名，显示时区分命名和语义归纳。
 
-thread_overview.py 从现有 Thread、进展记录和私人绑定生成只读总览。可选的个人 Agent 宿主元数据只在本次调用中核验会话与实际项目归属，目录检查按主机/路径去重；不联网、不写绑定或源历史。thread_cli.py 路由 overview，cli.py 为 --scope mesh 去除私人同步定位信息。两份 Skill 负责按宿主能力取元数据、解释证据并简短展示。
+thread_overview.py 从现有 Thread、进展记录和私人绑定生成只读总览。可选的个人 Agent 宿主元数据只在本次调用中核验会话与实际项目归属，目录检查按主机/路径去重；不联网、不写绑定或源历史。thread_cli.py 路由 overview，cli.py 为 --scope public 去除私人同步定位信息。统一 Skill 负责按宿主能力取元数据、解释证据并简短展示。
 
 ## 新用户安装与资料登记
 
@@ -46,7 +48,7 @@ schema 1 旧文档、schema 2 Thread、schema 3 知识资料分别验证；libra
 
 cosmesh/__init__.py 保存客户端版本；__main__.py 支持 python -m cosmesh。pyproject.toml 声明 Python 基线、依赖、cosmesh/cosbase 入口和包资源。
 
-cosmesh/cli.py 的 parser 构造命令和参数，execute 路由业务、Profile、说明与反馈，capabilities 返回真实能力，main 输出稳定 JSON、错误码与来源状态；base_main 绑定 CosBase 规则。传输和 hook 分支输出各自协议流。
+cosmesh/cli.py 的 parser 构造命令和参数，execute 路由业务、Profile、说明与反馈，capabilities 返回真实能力，main 输出稳定 JSON、错误码与来源状态；base_main 保留旧个人文档入口和默认位置。传输和 hook 分支输出各自协议流。
 
 ## protocol.py 文档格式
 
@@ -56,7 +58,7 @@ StrictLoader 安全解析 YAML，拒绝对象构造、别名、重复键与深�
 
 initialize 建源配置。Service.run 在固定 Git 快照中完成读取、幂等检查、版本前提、变更和提交。fresh/create 建文档，mutate 分派修改与生命周期，reduce 从 Update 控制链重建任务，check_graph 核验引用和规则，read 生成列表、正文、context、Inbox、Agenda、历史与验证结果。
 
-CosBase 的转换、归档、回收、恢复与结束规则和 CosMesh 的邀请、状态、日期、责任规则在此分别处理。未来独立 reducer/views 模块尚未拆出。
+旧个人文档的转换、归档、回收、恢复与结束规则和旧协作文档的邀请、状态、日期、责任规则在此分别处理。未来独立 reducer/views 模块尚未拆出。
 
 ## store.py 版本与事务
 
@@ -96,9 +98,9 @@ FeedbackService 复用 Service 的事务、幂等、引用与格式，给作者�
 
 ## skills.py、Skill 文件与 errors.py
 
-skills.py 分发标准 Skill，检查宿主路径、托管摘要与冲突，保持既有 Agent 配置。skills/cosbase/SKILL.md 和 skills/cosmesh/SKILL.md 包含业务、资料问答、系统说明及反馈的薄使用指引。它们共用接口，不保存权限或凭证。errors.py 的 Error 提供稳定 code/message/hint。
+skills.py 分发标准 Skill，检查宿主路径、托管摘要与冲突，保持既有 Agent 配置。skills/cosmesh/SKILL.md 包含业务、资料问答、系统说明及反馈的薄使用指引。它使用统一接口，不保存权限或凭证。errors.py 的 Error 提供稳定 code/message/hint。
 
-remote_skills.py 从同一份 Skill 正文生成 SSH 执行入口与成对安装脚本。resources/remote-run.sh 传送引用后的参数、stdin 与退出码，提供按需检查/更新；remote-install.sh 通过已有 SSH 设置服务器 CLI 并取得导出；remote-payload.sh 核验托管摘要、保留自定义内容并切换两份 Skill。tools/remote_bootstrap.py 只用服务器标准库，校验稳定发布目录，调用现有固定包安装器。tests/test_remote_skills.py 覆盖无本地运行时、参数边界、输入流、失败、冲突、回退和更新。
+remote_skills.py 从同一份 Skill 正文生成 SSH 执行入口与成对安装脚本。resources/remote-run.sh 传送引用后的参数、stdin 与退出码，提供按需检查/更新；remote-install.sh 通过已有 SSH 设置服务器 CLI 并取得导出；remote-payload.sh 核验托管摘要、保留自定义内容并切换统一 Skill。tools/remote_bootstrap.py 只用服务器标准库，校验稳定发布目录，调用现有固定包安装器。tests/test_remote_skills.py 覆盖无本地运行时、参数边界、输入流、失败、冲突、回退和更新。
 
 ## 开发工具、示例与测试
 
@@ -122,7 +124,7 @@ spaces.py 管理本人自动空间、公开空间发现及只拉取缓存，复�
 
 ## Thread 内核与个人 Agent 协调
 
-thread_lifecycle.py 按本机目录和会话定位既有工作，实现同库分裂与归并、Base 回收站、Mesh 撤回及保留来源的续接入口。结构操作保持作者与原 ID，归并和来源通过固定引用追溯；跨空间综合沿普通结果引用处理。
+thread_lifecycle.py 按本机目录和会话定位既有工作，实现同库分裂与归并、私人 Thread 回收站、公开 Thread 撤回及保留来源的续接入口。结构操作保持作者与原 ID，归并和来源通过固定引用追溯；跨空间综合沿普通结果引用处理。
 
 legacy_search.py 只读加载旧版 Base/Mesh 的固定 Git 快照，复用模型、版本和关系索引，提供覆盖清单、有界原文、历史来源及旧 Mesh 远端版本核验；原件、身份和隐私范围保留。
 
@@ -130,6 +132,6 @@ search.py 提供个人 Agent 批量展开问法所用的统一候选检索和固
 
 thread_protocol.py 负责 schema 2 的 Thread/entry 字段、固定版本引用、不可变记录、请求动作与工作状态的因果链，以及共享业务校验。Hub 与客户端复用这套规则，保留实际作者。
 
-threads.py 的 Workbench 组织私人 Base、专用 Mesh 缓存、明确分享、请求关联、来源先于交付的同步、本地 Session/目录映射和引用上下文。thread_cli.py 给两份 CLI 注册同一 thread 命令，旧 schema 1 的 Service 路径保留。
+threads.py 的 Workbench 组织私人 Thread、专用 Mesh 缓存、明确分享、请求关联、来源先于交付的同步、本地 Session/目录映射和引用上下文。thread_cli.py 给CosMesh 与旧兼容 CLI 注册同一 thread 命令，旧 schema 1 的 Service 路径保留。
 
 threads.py 的 coordination 只读导出请求、分配工作、来源和更正，供当前个人 Agent 汇总；note/result 的 --ref 保存固定版本依据。协调结果仍是普通工作记录。

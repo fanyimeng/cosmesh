@@ -64,6 +64,7 @@ def inspect(agent, names, dest=None):
 
 
 def install(agent, names, dest=None, dry_run=False):
+    names = ["cosmesh"] if names else []
     prefix = os.environ.get("COSMESH_INSTALL_PREFIX")
     if prefix:
         command = [sys.executable, str(Path(prefix) / "manager.py"), "skills", "--prefix", prefix,

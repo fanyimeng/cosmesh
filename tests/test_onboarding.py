@@ -29,7 +29,7 @@ class OnboardingTests(unittest.TestCase):
     def test_prompts_for_three_agents_and_two_modes_use_real_installers(self):
         for agent in ('codex', 'opencode', 'dsh'):
             server = installation_prompt('server', agent, source='/srv/team/agent', service='/srv/team/public.json')
-            self.assertIn('--only both', server['prompt'])
+            self.assertIn('--only cosmesh', server['prompt'])
             self.assertIn('/srv/team/agent/install.sh', server['prompt'])
             self.assertIn('--service /srv/team/public.json', server['prompt'])
             self.assertIn('YOUR_SSH_ALIAS', server['prompt'])

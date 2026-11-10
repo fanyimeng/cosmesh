@@ -98,13 +98,13 @@ def main():
         for helper in ('prepare_thread_preview.py',):
             shutil.copy2(ROOT/'tools'/helper, agent/helper)
         shutil.copy2(ROOT/'cosmesh/resources/remote-install.sh',agent/'install.sh')
-        instructions = '''# CosMesh / CosBase 用户发布包 %s
+        instructions = '''# CosMesh 用户发布包 %s
 
 适用环境：%s / %s / Python %d.%d，另需 Git。依赖 wheels 随包提供，安装不联网。
 
 先解压发布包，在本目录打开终端。首次安装（可先加 --dry-run 预览）：
 
-    python3 install.py install --skills both
+    python3 install.py install --skills cosmesh
 
 默认安装到 ~/.local/opt/cosmesh，选装 Skill 位于 ~/.agents/skills。
 可用 --prefix 和 --skills-dir 指定独立测试目录，--skills none 跳过 Skill。
@@ -112,7 +112,7 @@ def main():
 查看安装：
 
     ~/.local/opt/cosmesh/bin/cosmesh self status
-    ~/.local/opt/cosmesh/bin/cosbase --version
+    ~/.local/opt/cosmesh/bin/cosmesh --version
 
 首次建立工作台（0.2 的 Thread 模型）：
 
@@ -125,13 +125,13 @@ def main():
 
     python3 install.py upgrade
 
-也可以用已安装命令：cosmesh self upgrade --release /新版发布包目录
+0.3 升级至 0.4 请使用新包安装器；同代版本也可用 cosmesh self upgrade --release /新版发布包目录
 版本切换：cosmesh self rollback（回到上一个已安装版本）
 卸载程序：cosmesh self uninstall（保留数据及自定义 Skill）
 
-只有安装器管理且未被修改的 Skill 会随版本更新。升级失败保留当前版本。
+0.4 将托管 cosbase Skill 完整备份后停用；自定义内容备份位置见回执。cosmesh 自定义修改仍报告冲突。升级失败恢复当前入口。
 发布校验：shasum -a 256 -c SHA256SUMS。校验值用于检查文件完整性；发布来源由下载渠道确定。
-业务能力以包内 RELEASE_NOTES 和 cosmesh capabilities 为准。远端同步需管理员配置受限 SSH Hub、公钥身份与仓库权限。
+业务能力以包内 RELEASE_NOTES 和 cosmesh capabilities 为准。远端同步使用维护者配置的 Hub 与本人已有服务器身份。
 ''' % (version,sys.platform,platform.machine(),*sys.version_info[:2])
         (payload/'README.md').write_text(instructions,encoding='utf-8')
         changelog=(ROOT/'CHANGELOG.md').read_text(encoding='utf-8')

@@ -8,9 +8,9 @@
 
 ## 从一个或多个会话初始化
 
-对个人 Agent 说“用 CosBase 初始化这些工作，先给我 Thread 划分”。Agent 根据当前可见内容、用户指定的可读材料和已有工作，按可独立推进的事项拟定一个或多个 Thread。先讨论标题、范围、当前进展和复用关系，用户确认后才用已有 create/note/result/bind 建立或补充。工作台缺失时也在确认后建立。
+对个人 Agent 说“用 CosMesh 初始化这些工作，先给我 Thread 划分”。Agent 根据当前可见内容、用户指定的可读材料和已有工作，按可独立推进的事项拟定一个或多个 Thread。先讨论标题、范围、当前进展和复用关系，用户确认后才用已有 create/note/result/bind 建立或补充。工作台缺失时也在确认后建立。
 
-同一件事跨会话优先复用，一次会话涉及数件事可对应数条 Thread；初始化会再次检查已有工作。背景、结果、下一步和未决问题留在私人 Base，实际目录/主机/Agent/Session 是私人定位。Session ID 缺失时如实省略；其他会话材料只读取用户指定且有权访问的范围。已共享工作的私人补充另存 Base 并保留来源引用。部分成功保留 ID 和稳定幂等键，重试从回执继续。
+同一件事跨会话优先复用，一次会话涉及数件事可对应数条 Thread；初始化会再次检查已有工作。背景、结果、下一步和未决问题留在私人 Thread，实际目录/主机/Agent/Session 是私人定位。Session ID 缺失时如实省略；其他会话材料只读取用户指定且有权访问的范围。已公开工作的私人补充另存私人 Thread 并保留来源引用。部分成功保留 ID 和稳定幂等键，重试从回执继续。
 
 例如：会话 A 同时讨论分析与会议，会话 B 补充分析。可以讨论后建立“分析”“会议”两条 Thread，A 关联两条，B 关联“分析”；已有“分析”时优先补充原 Thread。分享始终是后续的明确操作。
 
@@ -20,7 +20,7 @@
 
 split A --title TEXT --file FILE [--ref ID@VERSION] 在同一范围新建分支，保留原工作和固定来源；来源只存一份，去向从回链查看。merge B --into A 保留本人同库原件并标记 merged，continue B 跟随 A；其他作者或空间只引用并保留原状态。共同变更在一次 Git 提交，重试用原幂等键。
 
-delete ID 按实际目标范围处理：Base 为 trash，Mesh 为 withdrawn。原记录、旧 ID、引用和私人会话绑定保留；list 默认只展示 active，--lifecycle 或 --all 可查历史。restore 从回收/撤回/归并恢复先前收纳状态，普通归档恢复 active，工作结果保持。归并和撤回停止普通新增工作，已存在请求的回应仍依原权限记录在原 Thread。公开内容撤回不收回他人已缓存的历史。
+delete ID 按实际目标范围处理：私人为 trash，公开为 withdrawn。原记录、旧 ID、引用和私人会话绑定保留；list 默认只展示 active，--lifecycle 或 --all 可查历史。restore 从回收/撤回/归并恢复先前收纳状态，普通归档恢复 active，工作结果保持。归并和撤回停止普通新增工作，已存在请求的回应仍依原权限记录在原 Thread。公开内容撤回不收回他人已缓存的历史。
 
 同库归并用来源到后续工作的单向引用及回链表示，避免制造私人来源互相依赖。以后分享沿来源顺序明确执行；部分来源尚私人时保持 PRIVATE_REFERENCE，操作不自动公开关联工作。
 
@@ -42,9 +42,9 @@ thread edit ID --expect VERSION 修改本人的标题和概况。thread state ID
 
 组合格式为 thread.overview.continue.v1，continuation 保留原 continue 的工作、全部记录、引用、更正、请求、回链、归并去向和私人绑定；其 source 字段也使用同一 source_index。所选工作在总览中的 purpose.from、进展的 text_from 是回执内 JSON Pointer，指向 continuation 中已提供的原文。完整正文仅一份，作者、固定版本和接受状态保持；来源的同步状态复用共同 sync.spaces，不再重复返回顶层 sources。原始 continue/context 接口不变，缺失来源和后续变化仍需按需核验。
 
-组合读取包含私人执行定位，只允许 --compact 及 all/base 本人视图，--scope mesh 在加载前明确拒绝。单独共享总览继续用 overview --scope mesh --compact。旧的已知目标单独续接、普通总览、详细接口保持原有行为；用户尚未选定目标时也保持先总览、后按选择读取。
+组合读取包含私人执行定位，只允许 --compact 及 all/base 本人视图，--scope public 在加载前明确拒绝。单独共享总览继续用 overview --scope public --compact。旧的已知目标单独续接、普通总览、详细接口保持原有行为；用户尚未选定目标时也保持先总览、后按选择读取。
 
-0.3.18 起，两份 Skill 默认用 `thread overview --mine --compact --json` 一次本地快览。紧凑视图每条提供目的短句、一条近期非空原文摘录、状态、一个私人接续入口与绑定数量；不探测绑定目录，也不查询宿主。Agent 先显示所需字段，缺项标为仅登记／缺失，概括结论或下一步时再按需读原文和更正。原有默认详细 JSON 与 --details 保持，--compact 和 --details 互斥。
+0.3.18 起，统一 Skill 默认用 `thread overview --mine --compact --json` 一次本地快览。紧凑视图每条提供目的短句、一条近期非空原文摘录、状态、一个私人接续入口与绑定数量；不探测绑定目录，也不查询宿主。Agent 先显示所需字段，缺项标为仅登记／缺失，概括结论或下一步时再按需读原文和更正。原有默认详细 JSON 与 --details 保持，--compact 和 --details 互斥。
 
 紧凑回执 format=thread.overview.compact.v1，行及记录的 source 是顶层 source_index 的整数下标；固定 repo/id/version 只存一次，作者与 accepted 分别保留。顶层统一解释证据状态，避免逐行重复来源和通用说明。execution 的 agent/host、session、project、directory 及 binding_count 保留私人定位；缺绑定时 status=missing。显式 --host-file 可提供已核验元数据，host_observation 给出来源/时间；project.verified_absence=true 表示宿主已核验该会话未归属项目，目录始终只登记。scope mesh 同样排除全部私人执行定位。
 
@@ -54,7 +54,7 @@ thread edit ID --expect VERSION 修改本人的标题和概况。thread state ID
 
 `thread overview --mine --json` 离线读取自己的工作与私人定位，按最近记录排序，默认最多 20 条，total/truncated 提示是否还有更多。`--limit 1..100`、`--query`、`--all` 和 `--lifecycle` 沿用列表筛选。`thread overview ID --details --json` 展开最多 100 个绑定并标明截断；同一 Thread 可关联多个会话，同一会话可关联多个 Thread。旧 list 契约保持。
 
-`--scope base` 仅私人工作；`--scope mesh` 仅共享正文与进展，整个回执均不含私人执行定位、绑定数量或工作台路径，也不接受 --host-file。默认 scope all 是本人的私人总览，可包含本人对共享工作的私人绑定，不能直接复制进共享结果。普通读取不联网；--require-fresh 只显式拉取共享内容，Base 总览保持离线。
+`--scope private` 仅私人工作；`--scope public` 仅共享正文与进展，整个回执均不含私人执行定位、绑定数量或工作台路径，也不接受 --host-file。默认 scope all 是本人的私人总览，可包含本人对共享工作的私人绑定，不能直接复制进共享结果。普通读取不联网；--require-fresh 只显式拉取共享内容，私人总览保持离线。
 
 证据状态：verified（已核验）附来源和时间，宿主会话以列出时刻为准，尚未执行恢复；registered（仅登记）来自既有记录/绑定；missing（缺失）说明原因。宿主元数据由当前个人 Agent 报告，不代替 Hub 身份校验。宿主未提供、列表未覆盖或失联时保留仅登记，不推断会话已删除。归档会话标明需在宿主恢复。详细视图可检查本机目录存在性，紧凑视图只登记；远端目录不自动 SSH。绑定目录表示工作关联，数据/产物用途未登记时留空。
 
@@ -86,7 +86,7 @@ thread sync 拉取并推送；thread sync --pull 与读取的 --require-fresh �
 
 thread request THREAD_ID --to USER --file FILE 先向人提出需求。thread inbox 查询本人收到的请求，--sent 查询自己发出的，--all 包含已结束请求。
 
-接收人选择自己的工作，明确 share 后，用 thread assign REQUEST_ID --work WORK1 --work WORK2 回应承接。结果用 thread result WORK_ID --file FILE 生成记录，取得 RECORD_ID，再用 thread deliver REQUEST_ID --result RECORD1 --result RECORD2 交付引用；--partial 表示部分交付。需要同步时加 --sync，程序先确认来源再发布交付回复。
+接收人选择自己的工作，明确 share 后，用 thread assign REQUEST_ID --work WORK1 --work WORK2 回应承接。结果用 thread result WORK_ID --file FILE 生成记录，取得 RECORD_ID，再用 thread deliver REQUEST_ID --result RECORD1 --result RECORD2 交付引用；--partial 表示部分交付。发送默认尝试提交，程序先确认来源再发布交付回复。
 
 thread reply/decline REQUEST_ID 回应或拒绝。请求人用 thread adopt/cancel REQUEST_ID 采用或取消。结果正文保留在来源工作串，TA 内的回应引用它；context 内直接提供可用来源与更正信息。
 
@@ -124,7 +124,7 @@ backlinks 接受 Thread 或具体记录 ID。Thread 查询包含指向工作本�
 
 Thread context 和 coordinate 自动附上 backlinks，协调包的 related_work 也包含各分配工作的回链。记录级 context 只展开该记录、所属工作概况和直接依据；citations 附来源的更正，backlinks 中的 supersedes 提示该记录本身已被更正。个人 Agent 再按需读取相关记录，检查需求、版本和适用条件。回应请求时可直接交付已有 result/correction 的引用，保留原作者；新增分析用自己的 result --ref 保存依据。
 
-回链按当前可读的缓存重建，不写源文件、不复制结果、不触发模型或自动采用。重复的相同引用只显示一次；不同版本各自保留。共享查询排除私人 Base 回链和执行映射。coverage 和 sources 表示实际查询范围及截至版本，accepted=false 的记录尚未确认发布；--require-fresh 只拉取，--offline 使用已有缓存。回链列表不自动递归展开，避免循环和无关材料膨胀。
+回链按当前可读的缓存重建，不写源文件、不复制结果、不触发模型或自动采用。重复的相同引用只显示一次；不同版本各自保留。共享查询排除私人 Thread 回链和执行映射。coverage 和 sources 表示实际查询范围及截至版本，accepted=false 的记录尚未确认发布；--require-fresh 只拉取，--offline 使用已有缓存。回链列表不自动递归展开，避免循环和无关材料膨胀。
 
 ## 稳定回执与边界
 
@@ -140,11 +140,11 @@ Thread context 和 coordinate 自动附上 backlinks，协调包的 related_work
 默认主关联为 Agent 项目／工作区，Session 是辅助定位。Codex 原生项目、DSH/OpenCode 原生项目或类似工作区都可用；宿主无原生项目时明确登记目录工作区，缺失值保持缺失。旧 Session 登记原位保留，不自动转成原生项目绑定。
 
 ```sh
-cosbase thread locate --agent codex --project-id ACTUAL_ID --host ACTUAL_HOST
-cosbase thread bind-project THREAD_ID --agent codex --project-name NAME --project-id ACTUAL_ID --host ACTUAL_HOST
-cosbase thread bind-project THREAD_ID --agent dsh --project-name NAME --kind directory --workdir /work/example
-cosbase thread create --title LONG_TITLE --english TEXT --chinese TEXT --intro TEXT --file GOAL_MD
-cosbase thread name THREAD_ID --english TEXT --chinese TEXT --intro TEXT --alias TEXT
+cosmesh thread locate --agent codex --project-id ACTUAL_ID --host ACTUAL_HOST
+cosmesh thread bind-project THREAD_ID --agent codex --project-name NAME --project-id ACTUAL_ID --host ACTUAL_HOST
+cosmesh thread bind-project THREAD_ID --agent dsh --project-name NAME --kind directory --workdir /work/example
+cosmesh thread create --title LONG_TITLE --english TEXT --chinese TEXT --intro TEXT --file GOAL_MD
+cosmesh thread name THREAD_ID --english TEXT --chinese TEXT --intro TEXT --alias TEXT
 ```
 
 bind-project 可 --host-file 使用上述项目快照，只需 projects，无需 sessions；实际本机 hostId=local 按已知映射使用本机 hostname。已登记和宿主核验登记分别呈现，核验含来源和时间，供按需复核。--remove 只撤销私人关联，历史保留；工作源 Git 与共享正文不写项目名称、ID、路径。locate 优先返回项目匹配，也可 --workdir/--session-id 查旧登记。明确“接入本项目”授权直接创建／复用私人 Thread，关键歧义才澄清。
@@ -153,7 +153,7 @@ bind-project 可 --host-file 使用上述项目快照，只需 projects，无需
 
 ## 快速模式
 
-默认开启，个人 Agent 尽量少读、少转述、少做额外操作，直接复用成品与成功回执。client mode normal 关闭，client mode fast 开启，client mode 查看；--no-fast/--fast 只覆盖当前调用。两份 CLI 共用私人偏好，不改 Profile、模型或宿主配置；升级保留已保存偏好。每份 JSON 回执 fast_mode 表示本次偏好，无需另查一次。明确详细要求与必要核验仍优先遵循。
+默认开启，个人 Agent 尽量少读、少转述、少做额外操作，直接复用成品与成功回执。client mode normal 关闭，client mode fast 开启，client mode 查看；--no-fast/--fast 只覆盖当前调用。CosMesh 与旧兼容 CLI 共用私人偏好，不改 Profile、模型或宿主配置；升级保留已保存偏好。每份 JSON 回执 fast_mode 表示本次偏好，无需另查一次。明确详细要求与必要核验仍优先遵循。
 
 
 ## 共享配套资料

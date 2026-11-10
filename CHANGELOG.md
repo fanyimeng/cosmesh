@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0
+
+Released 2026-11-10.
+
+- Automatically show the important-update guide after installation or an upgrade, including through legacy client receipts.
+
+- One CosMesh Skill for private and public Threads; retained legacy CLI/data compatibility.
+- Prominent not-sent warning for private work; record-specific outbound acceptance, scoped publication and retry.
+- Optional selected-text public branches with private provenance, shown only on request.
+- Transactional retirement/backups of the managed CosBase Skill and rollback restoration.
+- Independent complete entry titles; concise checks with optional background/details.
+
 ## 0.3.28
 
 - Accept UTF-8 text and source attachments by content, including LaTeX, scripts, configuration files and extensionless text.

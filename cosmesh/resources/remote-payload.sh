@@ -55,7 +55,7 @@ for cosmesh_name in cosmesh cosbase; do
         for cosmesh_file in SKILL.md scripts/run.sh connection version; do
             [ -f "$cosmesh_current/$cosmesh_file" ] && [ ! -L "$cosmesh_current/$cosmesh_file" ] || fail 'Modified Skill resources; preserve the current Skill.'
             cosmesh_hash=$(awk -v file="$cosmesh_file" '$2 == file {print $1}' "$cosmesh_current/SHA256SUMS")
-            [ "$(checksum "$cosmesh_current/$cosmesh_file")" = "$cosmesh_hash" ] || fail 'User-modified Skill preserved; review before updating.'
+            [ "$cosmesh_name" = cosbase ] || [ "$(checksum "$cosmesh_current/$cosmesh_file")" = "$cosmesh_hash" ] || fail 'User-modified Skill preserved; review before updating.'
         done
         # Extra files and symlinked directories are user material too.
         [ "$(find "$cosmesh_current" -mindepth 1 | wc -l | tr -d ' ')" = 6 ] || fail 'Extra Skill material preserved; review before updating.'
@@ -64,9 +64,17 @@ for cosmesh_name in cosmesh cosbase; do
     mkdir -p "$cosmesh_stage/new-$cosmesh_name/scripts"
 done
 
+# A retired SSH Skill is archived outside the Agent Skill search root.
+if [ -d "$cosmesh_root/cosbase" ]; then
+    mkdir -p "$cosmesh_root/../cosmesh-skill-backups"
+    cosmesh_backup=$(mktemp -d "$cosmesh_root/../cosmesh-skill-backups/retired.XXXXXX")
+    cp -R "$cosmesh_root/cosbase" "$cosmesh_backup/cosbase"
+    echo "Retired Skill backup: $cosmesh_backup/cosbase"
+fi
+
 # GENERATED_FILES
 
-for cosmesh_name in cosmesh cosbase; do
+for cosmesh_name in cosmesh; do
     cosmesh_new="$cosmesh_stage/new-$cosmesh_name"
     for cosmesh_file in SKILL.md scripts/run.sh connection version; do
         chmod 600 "$cosmesh_new/$cosmesh_file"
@@ -77,7 +85,7 @@ done
 for cosmesh_name in cosmesh cosbase; do
     cosmesh_moved="$cosmesh_name $cosmesh_moved"
     if [ -d "$cosmesh_root/$cosmesh_name" ]; then mv "$cosmesh_root/$cosmesh_name" "$cosmesh_stage/old-$cosmesh_name"; fi
-    mv "$cosmesh_stage/new-$cosmesh_name" "$cosmesh_root/$cosmesh_name"
+    if [ "$cosmesh_name" = cosmesh ]; then mv "$cosmesh_stage/new-$cosmesh_name" "$cosmesh_root/$cosmesh_name"; fi
 done
 cosmesh_committed=yes
-echo 'Installed: cosmesh and cosbase (SSH mode).'
+echo 'Installed: cosmesh (SSH mode). Start a new Agent session.'

@@ -20,7 +20,7 @@ def export(host, bootstrap='/srv/cosmesh/agent/bootstrap.py'):
     if any(c in prefix + bootstrap for c in '\r\n\x00') or not Path(bootstrap).is_absolute():
         raise Error('INPUT_INVALID', 'Use absolute, single-line server paths.')
     generated = []
-    for name in ('cosmesh', 'cosbase'):
+    for name in ('cosmesh',):
         entry = f'''
 
 ## 执行入口：已有 SSH（本 Skill 的当前配置）
@@ -36,11 +36,11 @@ sh ~/.agents/skills/{name}/scripts/run.sh guide search '用法' --json
 
 本地正文文件用 `--file -` 配合输入重定向，例如更新简介时 `sh 本Skill/scripts/run.sh profile set --expect VERSION --file - --json < 本地简介文件`。--root 和其他业务路径属于服务器；本地文件不直接充当服务器路径。Session 继续描述实际工作发生的 Agent、host、workdir。
 
-用户询问更新时运行 `sh 本Skill/scripts/run.sh --check-updates`；明确要求更新时运行 `sh 本Skill/scripts/run.sh --update`，先准备服务器 CLI，再更新未修改的两份本地 Skill。更新失败分别报告服务器和本地结果，不从网络失败推断写入没有发生，业务重试沿用幂等键。没有后台检查或自动更新。
+用户询问更新时运行 `sh 本Skill/scripts/run.sh --check-updates`；明确要求更新时运行 `sh 本Skill/scripts/run.sh --update`，先准备服务器 CLI，再更新未修改的统一本地 Skill。更新失败分别报告服务器和本地结果，不从网络失败推断写入没有发生，业务重试沿用幂等键。没有后台检查或自动更新。
 
 需要口令的操作使用用户终端中的 `sh 本Skill/scripts/run.sh --tty profile encrypt --field contact --expect VERSION` 等；口令由远端终端隐藏输入。自动化仅在有临时内存管道时使用 --key-fd 0；同时发送新联系方式和口令时请用户在终端操作，避免把口令写入脚本、文件、参数值或聊天。服务端 reveal 的明文进入本地 Agent 上下文后按私人资料处理。
 
-个人 Base、Profile、反馈队列与业务副本均位于服务器账号 home；需要已有 SSH 连接。已有本地资料保持原位，迁移由用户明确选择。doctor 检查服务器环境时不将其结果当作本地 Agent 的 Skill 发现验证；新会话的发现、自然语言触发和真实调用分别验收。
+私人 Thread、Profile、反馈队列与业务副本均位于服务器账号 home；需要已有 SSH 连接。已有本地资料保持原位，迁移由用户明确选择。doctor 检查服务器环境时不将其结果当作本地 Agent 的 Skill 发现验证；新会话的发现、自然语言触发和真实调用分别验收。
 '''
         files = {
             'SKILL.md': (source(name) / 'SKILL.md').read_text() + entry,

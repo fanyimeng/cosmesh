@@ -22,7 +22,7 @@ def request_status(wb, item, names):
     from .thread_chat import summary
     ordered = recipient_responses(wb, item)
     state = wb.request_state(item)
-    return {'state': state['state'], 'confirmed': state['confirmed'], 'response_count': len(ordered),
+    return {'requester':item['doc']['meta']['author'], 'requester_name':names.get(item['doc']['meta']['author'],item['doc']['meta']['author']), 'state': state['state'], 'confirmed': state['confirmed'], 'response_count': len(ordered),
             'responses': [{'source': wb.ref(x), 'author': x['doc']['meta']['author'],
                            'author_name': names.get(x['doc']['meta']['author'], x['doc']['meta']['author']),
                            'kind': x['doc']['meta']['type'], 'accepted': wb.accepted(x) if x['repo'] != 'local' else False,
@@ -69,7 +69,7 @@ def material_status(wb, item, records):
             'read_hint': '仅核对固定版本的资料登记；未下载原件、校验字节或检查显示效果。资料属于整个工作，不表示某条请求已完成。'}
 
 
-def ready_check(card, status, request, limit, freshness):
+def ready_check(card, status, request, limit, freshness, details=False):
     from .status_receipts import overview_text, short_title, state
     sources = []; positions = {}
     def add(ref):
@@ -116,12 +116,34 @@ def ready_check(card, status, request, limit, freshness):
         lines += ['资料索引说明〔原文〕：', materials['declaration']['text'] + ('〔截断〕' if materials['declaration']['truncated'] else '')]
     total = 1 if request else status['request_count']
     if total > len(requests): lines += ['〔请求未全部展示，可按需展开〕']
-    return {'format': 'thread.check.ready.v1', 'document': '\n'.join(lines) + '\n',
+    if not details:
+        lines = ['# ' + short_title(card)]
+        if not selected:
+            lines += ['当前：' + state(card)]
+            if card['progress']: lines += [card['progress'][0]['excerpt']['text']]
+        for r in selected:
+            label = states[r['state']]
+            if r['state'] in {'pending','accepted','partial'}:
+                label += ' · ' + r.get('to_name',r['to'])
+            elif r['state'] == 'delivered':
+                label += ' · 待' + r.get('requester_name','请求方') + '确认采用'
+            label += ' · 已有回应' if r['response_count'] else ' · 尚无回应'
+            lines += ['',label]
+            if r['responses']:
+                latest=r['responses'][0]
+                text=latest['text']
+                if text not in lines:
+                    lines += [latest['author_name'] + '：' + text + ('〔截断，按需展开〕' if latest['truncated'] else '') + ('〔原文摘录〕' if latest['origin']=='legacy_excerpt' else '')]
+                if latest['superseded_by']:lines += ['〔此回应有更正，按需展开〕']
+                if not latest['accepted']:lines += ['〔回应尚未确认发布〕']
+        if materials['file_count']:lines += ['', '资料：' + str(materials['file_count']) + ' 份固定引用（登记信息）']
+        if total > len(requests):lines += ['〔更多请求按需展开〕']
+    return {'format': 'thread.check.ready.v1', 'overall':intro, 'details':details, 'document': '\n'.join(lines) + '\n',
             'thread': thread_source, 'overall_source': add(card['overall']['source']),
             'private': not card['shared'], 'focus': add(request['source']) if request else thread_source,
             'source_index': sources, 'requests': requests, 'request_count': total,
             'truncated': total > len(requests), 'materials': materials, 'freshness': freshness,
-            'read_hint': '根据整体介绍、回应摘录和登记状态，用两三句话直接概括。当前材料足够就结束；用户进一步要求内容、打开或核验时再定点读取。待处理与已有回应可同时成立，不改写正式交付状态。'}
+            'read_hint': '默认直接呈现当前状态与待处理人，最新回应只出现一次；overall供询问工作背景时使用，--details展开完整说明。普通回应不等于正式交付。'}
 
 
 def ready_inbox(rows, limit):

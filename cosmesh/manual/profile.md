@@ -2,7 +2,7 @@
 
 ## 两个模块共用的私人档案
 
-CosBase / CosMesh 读取同一执行环境的 ~/.config/cosmesh/profile.md。遵循 XDG_CONFIG_HOME，COSMESH_PROFILE_DIR 可指定隔离目录。字段包括 display_name、organization、contact、language、timezone、about、preferences，均可留空。about 是 Markdown 正文，其他字段为 YAML。
+CosMesh 读取同一执行环境的 ~/.config/cosmesh/profile.md。遵循 XDG_CONFIG_HOME，COSMESH_PROFILE_DIR 可指定隔离目录。字段包括 display_name、organization、contact、language、timezone、about、preferences，均可留空。about 是 Markdown 正文，其他字段为 YAML。
 
 Profile 不要求先创建业务空间；--root 不切换资料。执行系统账号由内核和系统账号库取得，显示名、机构与偏好不会改变身份或授权。Mac 与服务器当前各自保存，同一账号共享 home 的两个节点共用文件，跨设备 Profile 同步仍待实现。
 
@@ -25,10 +25,10 @@ profile export --field FIELD 可多次选择字段，生成本地选择结果，
 0.1.6 起，联系方式可选加密，默认保持现有存储方式。show 返回 encrypted_fields；普通 show/export 只给出存储中的密文，其他字段继续可读。启用只作用于 contact，不改变身份、空间和同步规则。命令由 cosmesh/cosbase 任一入口调用。
 
 ```sh
-cosbase profile show --json
-cosbase profile encrypt --field contact --expect VERSION --json
+cosmesh profile show --json
+cosmesh profile encrypt --field contact --expect VERSION --json
 cosmesh profile reveal --field contact --json
-cosbase profile decrypt --field contact --expect VERSION --json
+cosmesh profile decrypt --field contact --expect VERSION --json
 ```
 
 encrypt 加密保存已有联系方式；reveal 只临时返回 contact 明文，不修改档案，回执 persisted=false、published=false；decrypt 明确解除加密并保存明文。写入前使用最新 version；--dry-run 可预览 encrypt/decrypt。错误口令、密文损坏、版本冲突和写入失败保留当前档案。

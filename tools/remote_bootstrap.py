@@ -90,6 +90,7 @@ def main(argv=None):
         current = installed(prefix)
         number = lambda s: tuple(map(int, s.split('.')))
         action = 'unchanged'
+        notice = None
         if args.action == 'ensure' and (current is None or number(current) < number(available)):
             action = 'install' if current is None else 'upgrade'
             command = [sys.executable, str(selected / 'install.py'), action, '--prefix', str(prefix), '--json']
@@ -103,11 +104,13 @@ def main(argv=None):
             if result.returncode or not reply.get('ok'):
                 raise Failure('Server installation was preserved: ' + (reply.get('error') or {}).get('message', 'installer failed'))
             current = installed(prefix)
+            notice = reply['data'].get('update_notice')
         data = {'action': action, 'installed_version': current, 'available_version': available,
                 'local_skill_version': args.local_skill_version,
                 'server_update_available': current is None or number(current) < number(available),
                 'skill_update_available': args.local_skill_version is not None and args.local_skill_version != current,
                 'prefix': str(prefix), 'data_unchanged': True, 'automatic_updates': False}
+        if notice: data['update_notice'] = notice
         print(json.dumps({'ok': True, 'data': data, 'error': None}, ensure_ascii=False))
         return 0
     except (Failure, OSError, ValueError, KeyError) as exc:

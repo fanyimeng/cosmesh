@@ -103,7 +103,7 @@ def main():
             shutil.move(str(skills / name), backup / name)
             migrated.append(name)
         action = 'upgrade' if (prefix / 'state.json').is_file() else 'install'
-        result = manager.apply_release(prefix, bundle, action, ['cosmesh', 'cosbase'], skills)
+        result = manager.apply_release(prefix, bundle, action, ['cosmesh'], skills)
     except Exception:
         for name in migrated:
             if not (skills / name).exists():shutil.move(str(backup / name), skills / name)
@@ -119,6 +119,8 @@ def main():
     except ValueError:
         mesh = {'ok': False, 'error': {'code': 'DISCOVERY_PENDING', 'message': check.stderr[-1000:]}}
     saved = json.loads((prefix / 'client.json').read_text())
+    if result.get('update_notice'):
+        mesh['update_notice'] = result['update_notice']  # 0.3 clients return this existing field after upgrading.
     saved['mesh_setup'] = mesh
     manager.atomic(prefix / 'client.json', manager.json_bytes(saved))
     print(json.dumps({'ok': True, 'data': result, 'execution': 'local', 'mesh': mesh,

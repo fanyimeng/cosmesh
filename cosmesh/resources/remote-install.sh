@@ -38,4 +38,4 @@ cosmesh_entry="$cosmesh_entry skills export --ssh $(quote "$cosmesh_host") --boo
 ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ClearAllForwardings=yes -o ConnectTimeout=8 "$cosmesh_host" "$cosmesh_entry" > "$cosmesh_temp/skills.sh" || fail 'Skill export failed; local Skills were preserved.'
 [ "$(head -n 1 "$cosmesh_temp/skills.sh")" = '#!/bin/sh' ] || fail 'Invalid export response; local Skills were preserved.'
 COSMESH_SKILLS_DIR="$cosmesh_destination" sh "$cosmesh_temp/skills.sh" || fail 'Skill update incomplete. The server may already be updated; existing local material was preserved.'
-echo 'Ready: two SSH Skills installed. Open a new Agent session to verify discovery.'
+echo 'Ready: CosMesh SSH Skill installed. Open a new Agent session to verify discovery.'

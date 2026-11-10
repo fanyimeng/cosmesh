@@ -24,7 +24,7 @@ class LocalFirstTests(unittest.TestCase):
             self.assertEqual(store.git('status', '--porcelain'), '')
 
     def test_update_check_is_explicit_and_read_only(self):
-        with patch.object(client, 'config', return_value=(Path('/unused'), {})), patch.object(client, 'fetch', return_value=json.dumps({'version': '0.4.0'}).encode()) as fetch:
+        with patch.object(client, 'config', return_value=(Path('/unused'), {})), patch.object(client, 'fetch', return_value=json.dumps({'version': '9.0.0'}).encode()) as fetch:
             result = client.check()
             self.assertTrue(result['update_available'])
             self.assertFalse(result['automatic_updates'])

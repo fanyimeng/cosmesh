@@ -23,7 +23,7 @@ class DshTests(unittest.TestCase):
             with patch.dict(os.environ,env),redirect_stdout(io.StringIO()) as output:
                 code=main(['skills','install','--agent','dsh','--only','both','--dest',str(target),'--json'])
             value=json.loads(output.getvalue());self.assertEqual(code,0,value)
-            for name in ('cosbase','cosmesh'):
+            for name in ('cosmesh',):
                 self.assertTrue((target/name/'SKILL.md').is_file())
             with patch.dict(os.environ,env),redirect_stdout(io.StringIO()) as output:
                 code=main(['doctor','--agent','dsh','--dest',str(target),'--root',str(root/'base'),'--json'])
@@ -31,8 +31,8 @@ class DshTests(unittest.TestCase):
             self.assertIn('dsh',value['data']['capabilities']['agent_targets'])
             self.assertEqual(value['data']['agent']['agent_binary'],str(executable))
             self.assertTrue(all(s['status']=='installed_identical' for s in value['data']['agent']['skills']))
-            custom=target/'cosbase/SKILL.md';custom.write_text('User customization')
-            with patch.dict(os.environ,env),self.assertRaises(Error):install('dsh',['cosbase','cosmesh'],target)
+            custom=target/'cosmesh/SKILL.md';custom.write_text('User customization')
+            with patch.dict(os.environ,env),self.assertRaises(Error):install('dsh',['cosmesh'],target)
             self.assertEqual(custom.read_text(),'User customization')
 
     def test_installer_and_client_offer_the_same_agent_choices(self):

@@ -264,11 +264,15 @@ class Workbench:
         return self._commit(self.base, 'create', payload, build, key, dry_run)
 
     def append(self, value, body='', record_type='note', refs=None, request=None, work=None,
-               recipient=None, supersedes=None, complete=True, state=None, key=None, dry_run=False, agent=None,lifecycle=None):
+               recipient=None, supersedes=None, complete=True, state=None, key=None, dry_run=False, agent=None,lifecycle=None,title=None):
         parent = self.find(value, 'thread')
         payload = {'thread': parent['doc']['meta']['id'], 'body': body, 'type': record_type,
                    'refs': refs or [], 'request': request, 'work': work or [], 'to': recipient,
                    'supersedes': supersedes, 'complete': complete, 'state': state, 'agent': agent,'lifecycle':lifecycle}
+        if title is not None:
+            if not isinstance(title,str) or not title.strip() or len(title)>200 or '\n' in title:
+                raise Error('INPUT_INVALID', 'Provide a complete one-line title (at most 200 characters); rewrite rather than truncate.')
+            payload['title']=title.strip()
         if lifecycle is None:payload.pop('lifecycle')
         author = self.config['user'] if parent['repo'] == 'local' else self.user
         def build():
@@ -277,11 +281,13 @@ class Workbench:
             if placement in {'trash', 'withdrawn', 'merged'} and not (responding or (record_type == 'lifecycle' and lifecycle in {'active', 'archived'})):
                 raise Error('STATE_CONFLICT', 'Restore the removed or merged Thread before appending records.')
             meta = {'schema_version': 2, 'kind': 'entry', 'id': new_id('entry'), 'author': author,
-                    'created_at': now(), 'title': body.strip().splitlines()[0][:100] if body.strip() else record_type,
+                    'created_at': now(), 'title': record_type,
                     'thread': payload['thread'], 'type': record_type}
             from .thread_chat import summary
             brief = summary(body)
-            if brief['origin'] == 'author': meta['title'] = brief['text'].splitlines()[0][:100]
+            fallback = {'request':'请求','reply':'回应','delivery':'交付','correction':'更正','note':'记录','result':'成果','summary':'概括'}.get(record_type,record_type)
+            first = brief['text'].splitlines()[0] if brief['text'] else ''
+            meta['title'] = payload.get('title') or (first if brief['origin'] != 'author' and len(first)<=100 else fallback)
             if getattr(self,'generation',None):meta['generation']=self.generation
             if parent['repo']!='local':
                 from .knowledge import Knowledge
@@ -583,7 +589,7 @@ class Workbench:
         if author:extra.update(author_name=author['name'],person_id=author['id'])
         recipient=next((x for x in users if x['account']==item['doc']['meta'].get('to')),None)
         if recipient:extra['to_name']=recipient['name']
-        return {**extra, **public(item['doc']), 'source': self.ref(item), 'shared': item['repo'] != 'local',
+        return {**extra, **public(item['doc']), 'source': self.ref(item), 'shared': item['repo'] != 'local', 'visibility':'private' if item['repo'] == 'local' else 'public',
                 'accepted': self.accepted(item) if item['repo'] != 'local' else False}
 
     def incoming_links(self, targets, include_private=False, version=None):

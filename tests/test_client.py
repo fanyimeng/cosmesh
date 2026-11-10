@@ -328,7 +328,7 @@ class CLITests(LocalCase):
         with patch.dict(os.environ, {"COSMESH_INSTALL_PREFIX": self.tmp.name}):
             self.assertEqual(self.cli("doc", "list", "--json", expected=2)["error"]["code"], "PATH_INVALID")
 
-    def test_both_agent_skill_installs_preserve_existing_files(self):
+    def test_unified_agent_skill_installs_preserve_existing_files(self):
         for agent in ("codex", "opencode", "dsh"):
             target = Path(self.tmp.name) / agent
             preview = install(agent, ["cosbase", "cosmesh"], target, dry_run=True)
@@ -337,7 +337,7 @@ class CLITests(LocalCase):
             install(agent, ["cosbase", "cosmesh"], target)
             repeated = install(agent, ["cosbase", "cosmesh"], target)
             self.assertTrue(all(x["status"] == "installed_identical" for x in repeated["skills"]))
-            existing = target / "cosbase/SKILL.md"
+            existing = target / "cosmesh/SKILL.md"
             existing.write_text("用户自己的版本")
             self.assertCode("OVERWRITE_REFUSED", lambda: install(agent, ["cosbase", "cosmesh"], target))
             self.assertEqual(existing.read_text(), "用户自己的版本")

@@ -42,7 +42,9 @@ class QuickCheckTests(ThreadFixture):
     def test_request_reply_materials_intro_and_warm_read_without_extra_work(self):
         self.respond()
         first = self.call('alice','check',self.qid)['data']
-        self.assertIn('研究分子云的形成机制',first['document'])
+        self.assertIn('研究分子云的形成机制',first['overall'])
+        self.assertNotIn('研究分子云的形成机制',first['document'])
+        self.assertIn('研究分子云的形成机制',self.call('alice','check',self.qid,'--details')['data']['document'])
         self.assertIn('代码仓库和 commit 尚待补充',first['document'])
         self.assertEqual(first['requests'][0]['state'],'pending')
         self.assertEqual(first['requests'][0]['response_count'],1)

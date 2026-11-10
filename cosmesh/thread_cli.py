@@ -23,10 +23,11 @@ def add_commands(commands, command, body):
     p.add_argument('--host-file');p.add_argument('--remove',action='store_true')
     p = command(group, 'list', 'thread.list'); p.add_argument('--query'); p.add_argument('--mine', action='store_true');p.add_argument('--all',action='store_true')
     p.add_argument('--lifecycle', choices=('active', 'archived', 'trash', 'withdrawn', 'merged', 'all'))
+    p.add_argument('--scope', choices=('all','private','public','base','mesh'), default='all')
     p = command(group, 'overview', 'thread.overview'); p.add_argument('id', nargs='?')
     p.add_argument('--mine', action='store_true'); p.add_argument('--query'); p.add_argument('--all', action='store_true')
     p.add_argument('--lifecycle', choices=('active', 'archived', 'trash', 'withdrawn', 'merged', 'all'))
-    p.add_argument('--scope', choices=('all', 'base', 'mesh'), default='all')
+    p.add_argument('--scope', choices=('all', 'private', 'public', 'base', 'mesh'), default='all')
     view = p.add_mutually_exclusive_group()
     view.add_argument('--details', action='store_true'); view.add_argument('--compact', action='store_true')
     p.add_argument('--limit', type=int, default=20)
@@ -34,7 +35,7 @@ def add_commands(commands, command, body):
     p.add_argument('--continue', dest='continue_id', help='Read a selected Thread together with the compact private overview')
     p = command(group, 'page', 'thread.page'); p.add_argument('id', nargs='?')
     p.add_argument('--level', choices=('brief', 'status', 'index'), default='brief')
-    p.add_argument('--scope', choices=('all', 'base', 'mesh'), default='all')
+    p.add_argument('--scope', choices=('all', 'private', 'public', 'base', 'mesh'), default='all')
     p.add_argument('--user'); p.add_argument('--query'); p.add_argument('--all', action='store_true')
     p.add_argument('--limit', type=int, default=20); p.add_argument('--offset', type=int, default=0)
     p.add_argument('--refresh', action='store_true')
@@ -42,13 +43,13 @@ def add_commands(commands, command, body):
     presentation.add_argument('--markdown', action='store_true')
     presentation.add_argument('--ready', action='store_true', help='Prepared document and a minimal fixed-source index')
     p.add_argument('--continue', dest='continue_id', help='Include the selected status page with a user overview')
-    p = command(group, 'check', 'thread.check'); p.add_argument('id')
-    p.add_argument('--scope', choices=('all', 'base', 'mesh'), default='all')
+    p = command(group, 'check', 'thread.check'); p.add_argument('id'); p.add_argument('--details',action='store_true')
+    p.add_argument('--scope', choices=('all', 'private', 'public', 'base', 'mesh'), default='all')
     p.add_argument('--limit', type=int, default=5)
     p = command(group, 'chat', 'thread.chat'); p.add_argument('id',nargs='?')
     p.add_argument('--with',dest='contact');p.add_argument('--rounds',type=int,default=5)
     p.add_argument('--before');p.add_argument('--date');p.add_argument('--include-progress',action='store_true')
-    p.add_argument('--scope', choices=('all','base','mesh'), default='all')
+    p.add_argument('--scope', choices=('all','private','public','base','mesh'), default='all')
     p.add_argument('--limit',type=int,default=30);p.add_argument('--offset',type=int,default=0)
     view = p.add_mutually_exclusive_group()
     view.add_argument('--tui',action='store_true');view.add_argument('--plain',action='store_true')
@@ -81,6 +82,8 @@ def add_commands(commands, command, body):
     p = command(group,'name','thread.name');p.add_argument('id')
     p.add_argument('--english');p.add_argument('--chinese');p.add_argument('--intro')
     p.add_argument('--alias',action='append',default=[]);p.add_argument('--expect');p.add_argument('--sync',action='store_true')
+    p = command(group, 'public-branch', 'thread.public-branch'); p.add_argument('id'); p.add_argument('--title', required=True); body(p)
+    p.add_argument('--sync', action='store_true'); p.add_argument('--ready', action='store_true')
     p = command(group, 'split', 'thread.split'); p.add_argument('id'); p.add_argument('--title', required=True); body(p)
     p.add_argument('--ref', action='append', default=[]);p.add_argument('--sync', action='store_true')
     p = command(group, 'merge', 'thread.merge'); p.add_argument('sources', nargs='+');p.add_argument('--into',required=True)
@@ -93,6 +96,10 @@ def add_commands(commands, command, body):
             p.add_argument('--ready', action='store_true')
         if verb in ('note', 'result', 'summary', 'request', 'reply', 'assign', 'decline', 'deliver', 'adopt', 'cancel', 'correct', 'link', 'edit'):
             body(p)
+        if verb in {'note','result','summary','request','reply','assign','decline','deliver','adopt','cancel','correct'}:
+            p.add_argument('--title', help='Complete short title, independent of the interaction summary')
+        if verb in {'request','reply','assign','decline','deliver','adopt','cancel','correct'}:
+            p.add_argument('--local-only', action='store_true', help='Save a draft; do not send')
         if verb == 'request':
             p.add_argument('--to', help='Recipient account, stable ID or real name; defaults to the Thread creator')
             p.add_argument('--maintenance', action='store_true', help='Use the Hub maintenance Thread')
@@ -134,6 +141,9 @@ def execute(args):
     root = workspace_root(getattr(args, 'root', None))
     dry, offline = getattr(args, 'dry_run', False), getattr(args, 'offline', False)
     fresh, publish = getattr(args, 'require_fresh', False), getattr(args, 'sync', False)
+    from .thread_sending import ACTIONS
+    if verb in ACTIONS and args.local_only and publish:
+        raise Error('INPUT_INVALID', 'Choose --local-only or --sync.')
     if getattr(args, 'revision', None) or getattr(args, 'expect_revision', None):
         raise Error('INPUT_INVALID', 'Thread contexts carry separate source versions; use pinned references or edit --expect.')
     if offline and (fresh or publish or verb in {'discover', 'sync'}):
@@ -143,7 +153,7 @@ def execute(args):
     if fresh and verb not in {'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'outbox', 'mail', 'status', 'maintenance'}:
         raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
     if verb == 'overview' and ((args.scope == 'mesh' and args.host_file) or (args.scope == 'base' and fresh)):
-        raise Error('INPUT_INVALID', 'Mesh overview excludes host metadata; Base overview stays local without --require-fresh.')
+        raise Error('INPUT_INVALID', 'Public overview excludes host metadata; private overview stays local without --require-fresh.')
     if verb == 'overview' and args.continue_id and (not args.compact or args.scope == 'mesh'):
         raise Error('INPUT_INVALID', 'Use --compact and a private scope for combined continuation.')
     if verb == 'request' and bool(args.id) == args.maintenance:
@@ -201,7 +211,7 @@ def execute(args):
     if verb in {'page','check','chat'}:
         args._thread_sync_state = {'state': 'local_only', 'identity_verified': False}
         if dry or (args.scope == 'base' and fresh) or (args.id and args.continue_id):
-            raise Error('INPUT_INVALID', 'Status pages are local derived reads; omit --dry-run and keep Base offline.')
+            raise Error('INPUT_INVALID', 'Status pages are local derived reads; omit --dry-run and keep private scope offline.')
         if verb=='chat' and args.contact:
             from .remote_pages import contact
             prepared,preparing=contact(wb,args)
@@ -240,7 +250,7 @@ def execute(args):
             if not dry and not publish and verb not in {'status','sync','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'}:
                 from .status_pages import schedule
                 schedule(wb)
-            if getattr(args,'ready',False) and verb not in {'overview','inbox','update'}:
+            if getattr(args,'ready',False) and verb not in {'overview','inbox','update'} and result.get('format') != 'thread.send.v1':
                 from .thread_checks import ready_write
                 result = ready_write(result,verb)
                 args._thread_sync_state = {key: args._thread_sync_state[key] for key in ('state','identity_verified','last_sync')}
@@ -266,6 +276,12 @@ def execute(args):
         if brief is not None:
             from .thread_chat import with_summary
             body = with_summary(body,brief)
+        if verb in ACTIONS:
+            from .thread_sending import prepare
+            key = prepare(wb,args,body,key)
+        if verb == 'public-branch':
+            from .thread_sending import branch
+            return finish(branch(wb,args,body,key,dry))
         if verb == 'update':
             from .thread_updates import update as project_update
             return finish(project_update(wb,args,body,key,dry))
@@ -295,6 +311,7 @@ def execute(args):
                     continue
                 if args.query and args.query.casefold() not in (doc['meta']['title'] + '\n' + doc['body']+'\n'+'\n'.join(wb._thread_names[doc['meta']['id']]['aliases'])).casefold():
                     continue
+                if (args.scope == 'base' and item['repo'] != 'local') or (args.scope == 'mesh' and item['repo'] == 'local'): continue
                 shown=wb.present(item)
                 placement = args.lifecycle or ('all' if args.all else 'active')
                 if placement != 'all' and shown['lifecycle'] != placement:continue
@@ -359,7 +376,7 @@ def execute(args):
             result=merge(wb,args.sources,args.into,body,key,dry)
         elif verb in {'note', 'result', 'summary', 'request', 'link', 'state'}:
             target = args.id
-            options = {'record_type': verb, 'key': key, 'dry_run': dry}
+            options = {'record_type': verb, 'key': key, 'dry_run': dry, 'title':getattr(args,'title',None)}
             if verb in ('note', 'result', 'summary', 'request'): options['refs'] = [wb.citation(x) for x in args.ref]
             if verb == 'request':
                 if args.maintenance:
@@ -377,17 +394,20 @@ def execute(args):
             result = wb.append(target, body, **options)
         elif verb == 'correct':
             old = wb.find(args.id, 'entry')
-            result = wb.append(old['doc']['meta']['thread'], body, 'correction', supersedes=wb.ref(old), key=key, dry_run=dry)
+            result = wb.append(old['doc']['meta']['thread'], body, 'correction', supersedes=wb.ref(old), key=key, dry_run=dry, title=args.title)
         else:
             request = wb.find(args.id, 'entry')
             if request['doc']['meta'].get('type') != 'request':
                 raise Error('INPUT_INVALID', 'This command takes a request record ID.')
-            options = {'request': wb.ref(request), 'key': key, 'dry_run': dry}
+            options = {'request': wb.ref(request), 'key': key, 'dry_run': dry, 'title':args.title}
             record_type = {'deliver':'delivery'}.get(verb, verb)
             if verb == 'assign': options['work'] = [wb.ref(wb.find(x, 'thread')) for x in args.work]
             if verb in {'deliver', 'adopt'}: options['refs'] = [wb.ref(wb.find(x, 'entry')) for x in args.result]
             if verb == 'deliver': options['complete'] = not args.partial
             result = wb.append(request['doc']['meta']['thread'], body, record_type, **options)
+        if verb in ACTIONS:
+            from .thread_sending import receipt
+            return finish(receipt(wb,args,result,dry))
         if publish:
             wb.load()
             result = {'result': result, 'publication': wb.synchronize()}

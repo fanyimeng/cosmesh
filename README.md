@@ -6,8 +6,8 @@
 
 CosMesh gives people and their AI agents a durable workspace beyond a single chat. A **Thread** keeps a piece of work together: context, notes, requests, decisions, and results.
 
-- **CosBase** — private personal work, available offline.
-- **CosMesh** — shared work, readable by authenticated users on the same Hub.
+- **Private Threads** — personal work, available offline.
+- **Public Threads** — collaborative work, readable by authenticated users on the same Hub.
 - **Knowledge library** — versioned documents with citations and backlinks to the work that used them.
 
 Your own agent provides the conversation. CosMesh provides Markdown records, Git history, deterministic commands, and explicit synchronization.
@@ -23,7 +23,11 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release **0.3.26**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release: **0.4.0**. Requires Python 3.9+ and Git; targets macOS and Linux.
+
+Download a ready-made [release package](https://github.com/fanyimeng/cosmesh/releases/tag/v0.4.0) for Apple Silicon / Python 3.9 or Linux x86-64 / Python 3.12. Extract it and run `python3 install.py install --skills cosmesh` with the matching Python. Existing Hub-channel users can ask their agent to “update CosMesh”; see [installation and upgrades](docs/quickstart.md#independent-user-packages--独立用户安装包).
+
+For a source checkout:
 
 ```sh
 git clone https://github.com/fanyimeng/cosmesh.git
@@ -33,31 +37,31 @@ python3 -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -e .
 
-cosbase thread init --json
-cosbase thread create --title "My first Thread" --body "Goal, context, and next step." --json
-cosbase thread overview --mine --compact --json
+cosmesh thread init --json
+cosmesh thread create --title "My first Thread" --body "Goal, context, and next step." --json
+cosmesh thread overview --mine --compact --json
 ```
 
-Base works immediately without a Hub. For collaboration, connect using your existing SSH alias:
+Private Threads work immediately without a Hub. For collaboration, connect using your existing SSH alias:
 
 ```sh
 cosmesh thread discover --ssh your-hub --json
 ```
 
-A compatible Hub must already be configured. Writes stay local until you explicitly use `--sync` or `thread sync`. Sharing publishes the selected Thread to the Hub's authenticated users.
+A compatible Hub must already be configured. Private work stays local. Outbound requests and replies attempt delivery automatically; a private Thread produces a prominent **NOT SENT** warning and guidance to publish it first. Publication requires your approval and makes the formal text readable to authenticated Hub users. Attachments remain opt-in.
 
 ## Use with your agent
 
-Install the two standard Skills for Codex or OpenCode:
+Install the single CosMesh Skill for Codex or OpenCode:
 
 ```sh
-cosmesh skills install --agent codex --only both --json
+cosmesh skills install --agent codex --only cosmesh --json
 # For OpenCode, use --agent opencode; for DeepSeek Harness, use --agent dsh.
 ```
 
-Then ask: “Use CosBase to organize this work. Check existing Threads first and suggest what to continue or create.”
+Then ask: “Use CosMesh to organize this work. Check existing Threads first and suggest what to continue or create.”
 
-For an independent user installation or upgrade, use a verified release package from your Hub maintainer; see the [quick start](docs/quickstart.md). This repository provides the CLI, standard Skills, build tools, and an optional in-memory TUI demo. Native Windows, private cross-device sync, and background notifications are future work.
+For an independent user installation or upgrade, use a release package from GitHub or your Hub maintainer; see the [quick start](docs/quickstart.md). This repository provides the CLI, one standard Skill, build tools, and an optional in-memory TUI demo. Native Windows, private cross-device sync, and background notifications are future work.
 
 ## Development
 

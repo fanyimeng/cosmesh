@@ -3,7 +3,7 @@
 ```mermaid
 flowchart LR
     User[User / 用户] --> Agent[Personal AI agent]
-    Agent --> Skill[CosBase + CosMesh Skills]
+    Agent --> Skill[CosMesh Skill]
     Skill --> CLI[CLI / JSON]
     CLI --> Base[Private local work]
     CLI --> Cache[Shared working cache]
@@ -15,7 +15,7 @@ flowchart LR
 
 Thread 是一件工作的持续记录，跨会话接续。概况与追加记录保存事实和来源，状态、列表与回链由源文档重建；本机执行定位保持私人。
 
-**CosBase and CosMesh share storage primitives and CLI contracts.** Base is private and offline-capable. Mesh is readable by authenticated users on one Hub, with authorship and request permissions checked on writes. Sharing and synchronization are explicit.
+**CosMesh has private and public Threads in one workspace.** Private work stays local and works offline. Public work is readable by authenticated users on one Hub. Authorship and request permissions govern writes. Publication needs consent; outbound actions report acceptance of their specific record.
 
 两套系统共用文档、版本、存储和查询能力，隐私范围由工作所在位置决定。共享读取、业务动作权限和原作者归属分别表达。
 
@@ -65,10 +65,10 @@ Personal Agents write concise interaction summaries in the body of ordinary vers
 
 The existing private MD/SQLite index prepares default user overviews and contact conversations after content changes. Hot reads return the stored receipt without scanning Git or rebuilding the workbench. A queued update can show the prior prepared product with an updating marker; detailed or fresh operations remain explicit.
 
-The Hub prepares public conversation JSON/text after accepted writes and directory/library changes, through a bounded background program. Its derived SQLite index stays host-local; atomically published files live in the Hub's `views` directory. The authenticated `thread_chat_ready` RPC reads those products, checks access, and returns one contact's latest five rounds or a frozen continuation window. Clients cache the result privately; this path performs no Git fetch or attachment read. Explicit `thread_read` requests use bounded fixed-source reads. Private Base records, execution bindings and profiles never enter the public products.
+The Hub prepares public conversation JSON/text after accepted writes and directory/library changes, through a bounded background program. Its derived SQLite index stays host-local; atomically published files live in the Hub's `views` directory. The authenticated `thread_chat_ready` RPC reads those products, checks access, and returns one contact's latest five rounds or a frozen continuation window. Clients cache the result privately; this path performs no Git fetch or attachment read. Explicit `thread_read` requests use bounded fixed-source reads. Private Thread records, execution bindings and profiles never enter the public products.
 
 ## Project capture and interaction mail
 
-An explicit “CosBase update” asks the working Agent to capture the current project's increment in an existing Thread. The client deduplicates exact inputs, retains private continuation checkpoints, and limits automatic Mesh publication to that update. Ordinary progress does not notify other users or upload files.
+An explicit “update this project” (including the legacy “CosBase update”) asks the working Agent to capture the current project's increment in an existing Thread. The client deduplicates exact inputs, retains private continuation checkpoints, and limits automatic Mesh publication to that update. Ordinary progress does not notify other users or upload files.
 
 Accepted request/reply/control/correction records produce a private, rebuildable delivery index. Inbox/outbox reads use prepared summaries and fixed original references; explicit seen state is private Hub metadata and remains independent of task state. Legacy request-inbox JSON remains available.

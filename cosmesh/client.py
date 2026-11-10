@@ -32,9 +32,9 @@ def fetch(cfg, file):
     try:
         r = subprocess.run(command, capture_output=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
-        raise Error('SYNC_NETWORK', 'Update server unavailable. Local Base and Mesh remain usable.') from None
+        raise Error('SYNC_NETWORK', 'Update server unavailable. Private work and cached public Threads remain usable.') from None
     if r.returncode:
-        raise Error('SYNC_NETWORK', 'Update server unavailable. Local Base and Mesh remain usable.')
+        raise Error('SYNC_NETWORK', 'Update server unavailable. Private work and cached public Threads remain usable.')
     return r.stdout
 
 
@@ -60,4 +60,5 @@ def update():
     state = json.loads((prefix / 'state.json').read_text())
     saved = json.loads((prefix / 'client.json').read_text())
     return {'updated': True, 'version': state['current'], 'execution': 'local', 'data_unchanged': True,
-            'mesh': saved.get('mesh_setup')}
+            'mesh': saved.get('mesh_setup'), 'update_notice':(saved.get('mesh_setup') or {}).get('update_notice'), 'retired_skills':state.get('retired_skills',{}),
+            'session_hint':'请新开 Agent 会话加载统一 CosMesh Skill。'}

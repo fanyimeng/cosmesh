@@ -206,18 +206,23 @@ def recover(prefix):
     pending.unlink()
 
 
+def skill_names(version):
+    return ('cosmesh',) if tuple(map(int, version.split('.'))) >= (0, 4, 0) else NAMES
+
+
 def switch_files(prefix, changes, state):
     # state.json is written last: this is the activation point.
     targets = {str(path): (content, mode) for path, content, mode in changes}
     targets[str(prefix / "state.json")] = (json_bytes(state), 0o600)
     before = {path: read_bytes(path) for path in targets}
     journal = {"before": {p: base64.b64encode(b).decode() if b is not None else None for p, b in before.items()},
-               "after": {p: base64.b64encode(value[0]).decode() for p, value in targets.items()},
+               "after": {p: base64.b64encode(value[0]).decode() if value[0] is not None else None for p, value in targets.items()},
                "modes": {p: (Path(p).stat().st_mode & 0o777) if Path(p).exists() else value[1] for p, value in targets.items()}}
     atomic(prefix / "pending.json", json_bytes(journal))
     try:
         for path, (content, mode) in targets.items():
-            atomic(Path(path), content, mode)
+            if content is None: Path(path).unlink(missing_ok=True)
+            else: atomic(Path(path), content, mode)
         (prefix / "pending.json").unlink()
     except BaseException:
         recover(prefix)
@@ -277,7 +282,7 @@ def prepare(prefix, release, meta):
     home.mkdir(parents=True)
     atomic(home / "release.json", json_bytes(meta))
     with zipfile.ZipFile(release / meta["wheel"]) as wheel:
-        for name in NAMES:
+        for name in skill_names(version):
             atomic(home / "skills" / name / "SKILL.md", wheel.read("cosmesh/skills/" + name + "/SKILL.md"))
     runtime = home / "runtime"
     checked([base_interpreter(), "-m", "venv", runtime])
@@ -301,6 +306,51 @@ def wrappers(prefix, interpreter, manager):
     return changes
 
 
+def unified_plan(prefix, state, version, names, skills_dir):
+    if len(skill_names(version)) != 1:
+        preflight_skills(state, names, skills_dir)
+        return names, skills_dir
+    existing = state.get('skills', {}) if state else {}
+    if names is None:
+        names = ['cosmesh'] if existing else []
+    else:
+        names = ['cosmesh'] if names else []
+    if 'cosmesh' in existing:
+        # Preserve a managed custom location even when an old bootstrap passes a default directory.
+        skills_dir = Path(existing['cosmesh']['path']).parent.parent
+    elif 'cosbase' in existing:
+        skills_dir = Path(existing['cosbase']['path']).parent.parent
+    mesh_state = dict(state or {}, skills={k:v for k,v in existing.items() if k != 'cosbase'})
+    preflight_skills(mesh_state, names, skills_dir)
+    if 'cosbase' in existing:
+        folder = canonical(Path(existing['cosbase']['path']).parent)
+        for file in folder.rglob('*'):
+            if file.is_symlink():
+                raise Failure('SKILL_CONFLICT', '保留旧 Skill 中的符号链接，请检查：' + str(file))
+    return names, skills_dir
+
+
+def retire_base(prefix, state, next_state):
+    """All backup writes and removal participate in the activation journal."""
+    old = (state or {}).get('skills', {}).get('cosbase')
+    if not old: return []
+    changes = []; files = {}; records = dict(state['skills'])
+    backup = prefix / 'skill-backups' / (state['current'] + '-' + digest(json_bytes(records))[:12])
+    for name, record in records.items():
+        folder = canonical(Path(record['path']).parent)
+        for file in sorted(folder.rglob('*')):
+            if not file.is_file(): continue
+            content = read_bytes(file); saved = backup / name / file.relative_to(folder)
+            changes.append((saved, content, file.stat().st_mode & 0o777))
+            files[str(file)] = {'backup':str(saved), 'sha256':digest(content), 'mode':file.stat().st_mode & 0o777}
+            if name == 'cosbase': changes.append((file, None, 0o600))
+    next_state.setdefault('skill_snapshots', {})[state['current']] = {'records':records,'files':files}
+    next_state['skills'].pop('cosbase', None)
+    next_state['retired_skills'] = {'cosbase': {'backup':str(backup/'cosbase'),
+        'customized': read_bytes(old['path']) is not None and digest(read_bytes(old['path'])) != old['sha256']}}
+    return changes
+
+
 def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry_run=False, verbose=False):
     release, meta = bundle(release_path)
     state = load_state(prefix) if prefix.exists() else None
@@ -319,7 +369,8 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
     plan = {"action": action, "from": state["current"] if state else None, "to": meta["version"],
             "prefix": str(prefix), "release": str(release), "data_unchanged": True, "dry_run": dry_run,
             "skills": names if names is not None else list(state.get("skills", {})) if state else []}
-    preflight_skills(state, names, skills_dir)
+    names, skills_dir = unified_plan(prefix, state, meta["version"], names, skills_dir)
+    plan["skills"] = names if names is not None else list((state or {}).get("skills", {}))
     if dry_run:
         return plan
     if verbose:
@@ -331,15 +382,29 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
         prepare(prefix, release, meta)
         if verbose:
             print("运行环境检查通过。正在切换程序和选装 Skill…", file=sys.stderr)
-        changes, skill_records = skill_changes(prefix, state, meta["version"], names, skills_dir)
+        mesh_state = dict(state or {}, skills={k:v for k,v in (state or {}).get("skills", {}).items() if k in skill_names(meta["version"])})
+        changes, skill_records = skill_changes(prefix, mesh_state, meta["version"], names, skills_dir)
         next_state = json.loads(json.dumps(state)) if state else {"format": 1, "versions": {}, "skills": {}}
         if not state or state["current"] != meta["version"]:
             next_state["previous"] = state["current"] if state else None
         next_state.update(current=meta["version"], skills=skill_records)
+        if len(skill_names(meta["version"])) == 1:
+            changes = retire_base(prefix, state, next_state) + changes
         next_state["versions"][meta["version"]] = {"manifest_sha256": meta["manifest_sha256"], "schema_write": meta["schema_write"]}
         interpreter = base_interpreter()
         switch_files(prefix, wrappers(prefix, interpreter, (release / "install.py").read_bytes()) + changes, next_state)
-    plan["commands"] = {name: str(prefix / "bin" / name) for name in NAMES}
+    plan["commands"] = {name: str(prefix / "bin" / name) for name in skill_names(meta["version"])}
+    plan["retired_skills"] = next_state.get("retired_skills", {})
+    old_skill = Path(skills_dir or Path.home()/'.agents/skills') / 'cosbase' / 'SKILL.md'
+    if old_skill.exists() and 'cosbase' not in (state or {}).get('skills', {}):
+        plan['preserved_unmanaged_skills'] = [str(old_skill)]
+    plan["session_hint"] = "请新开 Agent 会话加载统一 CosMesh Skill；原数据保留。"
+    if meta['version'] == '0.4.0' and plan['from'] != plan['to'] and meta.get('wheel'):
+        with zipfile.ZipFile(release / meta['wheel']) as wheel:
+            notice = wheel.read('cosmesh/manual/upgrade.md').decode('utf-8')
+        plan['update_notice'] = {'version':meta['version'], 'document':notice,
+            'read_hint':'升级已完成。请向用户完整展示此更新说明，保留醒目标题和符号；强调 CosBase 已取消、数据保留，以及新开 Agent 会话。',
+            'reopen':'cosmesh guide show upgrade --json'}
     return plan
 
 
@@ -357,7 +422,22 @@ def rollback(prefix, version=None, dry_run=False):
         if current.get('thread_lifecycle_version', 1) > target.get('thread_lifecycle_version', 1):
             raise Failure('MIGRATION_REQUIRED', '旧程序不支持新的 Thread 生命周期记录；先保全数据并核验兼容恢复方案。')
         preflight_skills(state)
-        changes, records = skill_changes(prefix, state, version)
+        snapshot = state.get('skill_snapshots', {}).get(version)
+        if snapshot:
+            changes = []; records = snapshot['records']
+            for path, item in snapshot['files'].items():
+                content = read_bytes(item['backup'])
+                if content is None or digest(content) != item['sha256']:
+                    raise Failure('CHECKSUM_MISMATCH', '旧 Skill 备份不完整：' + item['backup'])
+                current = read_bytes(path)
+                managed = any(r['path'] == path for r in state['skills'].values())
+                if current is not None and not managed and current != content:
+                    raise Failure('SKILL_CONFLICT', '保留回退期间新增的 Skill 内容：' + path)
+                changes.append((Path(path),content,item['mode']))
+            for name, record in state['skills'].items():
+                if name not in records: changes.append((Path(record['path']),None,0o600))
+        else:
+            changes, records = skill_changes(prefix, state, version)
         result = {"action": "rollback", "from": state["current"], "to": version, "data_unchanged": True, "dry_run": dry_run}
         if not dry_run:
             state.update(current=version, previous=state["current"], skills=records)
@@ -368,7 +448,7 @@ def rollback(prefix, version=None, dry_run=False):
 def manage_skills(prefix, names, skills_dir=None, dry_run=False):
     with locked(prefix):
         state = load_state(prefix, required=True)
-        preflight_skills(state, names, skills_dir)
+        names, skills_dir = unified_plan(prefix,state,state["current"],names,skills_dir)
         changes, records = skill_changes(prefix, state, state["current"], names, skills_dir)
         if not dry_run:
             state["skills"] = records
@@ -461,15 +541,16 @@ def emit(data, error, machine):
         print("操作未完成 [%s]：%s" % (error.code, error.message), file=sys.stderr)
     elif data.get("action") in ("install", "upgrade", "rollback"):
         verb = {"install": "安装", "upgrade": "升级", "rollback": "回滚"}[data["action"]]
-        print(("预览：" if data.get("dry_run") else "已完成：") + verb + " CosMesh / CosBase " + data["to"])
+        print(("预览：" if data.get("dry_run") else "已完成：") + verb + " CosMesh " + data["to"])
         if data.get("from"):
             print("版本变化：%s → %s" % (data["from"], data["to"]))
         if data.get("commands"):
             print("程序入口：" + data["commands"]["cosmesh"])
             print("查看安装：" + data["commands"]["cosmesh"] + " self status")
         print("用户文档独立保留。")
+        if data.get("update_notice"): print("\n" + data["update_notice"]["document"])
     elif data.get("mode") == "managed_release":
-        print("CosMesh / CosBase " + data["version"] + " · 用户发布版")
+        print("CosMesh " + data["version"] + " · 用户发布版")
         print("安装目录：" + data["prefix"])
         print("可用版本：" + ", ".join(data["installed_versions"]))
         print("上一版本：" + str(data.get("previous") or "无"))

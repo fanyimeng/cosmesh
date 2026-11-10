@@ -110,3 +110,59 @@ class ReleaseTests(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+
+
+class UnifiedSkillTests(unittest.TestCase):
+    setUp = ReleaseTests.setUp
+    def setup_upgrade(self, names=('cosbase','cosmesh'), custom=False):
+        old='0.3.28'; new='0.4.0'
+        state={'format':1,'current':old,'versions':{old:{'schema_write':[1,2,3],'manifest_sha256':'old'}},'skills':{}}
+        for name in names:
+            path=self.root/'skills'/name/'SKILL.md'
+            release.atomic(path,('old '+name).encode())
+            state['skills'][name]={'path':str(path),'sha256':release.digest(path.read_bytes()),'version':old}
+            release.atomic(self.prefix/'versions'/old/'skills'/name/'SKILL.md',path.read_bytes())
+        if custom and 'cosbase' in names:
+            release.atomic(self.root/'skills/cosbase/SKILL.md',b'custom instructions')
+            release.atomic(self.root/'skills/cosbase/notes.md',b'custom resource')
+        release.atomic(self.prefix/'owner.json',release.json_bytes(release.MARKER))
+        release.atomic(self.prefix/'state.json',release.json_bytes(state))
+        release.atomic(self.root/'install.py',Path(release.__file__).read_bytes())
+        release.atomic(self.prefix/'versions'/new/'skills/cosmesh/SKILL.md',b'unified skill')
+        for version in (old,new):
+            release.atomic(self.prefix/'versions'/version/'release.json',release.json_bytes({'thread_lifecycle_version':2}))
+        meta={'version':new,'schema_write':[1,2,3],'manifest_sha256':'new'}
+        return state,meta
+
+    def test_upgrade_retires_only_base_and_rollback_restores_custom_resources(self):
+        for names in (('cosbase',),('cosbase','cosmesh'),('cosmesh',)):
+            with self.subTest(names=names):
+                # Use an independent install for each case.
+                self.prefix=self.root/('-'.join(names));self.prefix.mkdir()
+                state,meta=self.setup_upgrade(names,custom=True)
+                sentinel=self.root/'data/private.md';release.atomic(sentinel,b'private data')
+                with patch.object(release,'bundle',return_value=(self.root,meta)),patch.object(release,'prepare'),patch.object(release,'base_interpreter',return_value=Path('/usr/bin/python3')):
+                    plan=release.apply_release(self.prefix,self.root,'upgrade')
+                current=release.load_state(self.prefix)
+                self.assertEqual(set(current['skills']),{'cosmesh'})
+                self.assertFalse((self.root/'skills/cosbase/SKILL.md').exists())
+                self.assertEqual(sentinel.read_bytes(),b'private data')
+                release.rollback(self.prefix)
+                self.assertEqual(set(release.load_state(self.prefix)['skills']),set(names))
+                if 'cosbase' in names:
+                    self.assertEqual((self.root/'skills/cosbase/SKILL.md').read_bytes(),b'custom instructions')
+                    self.assertEqual((self.root/'skills/cosbase/notes.md').read_bytes(),b'custom resource')
+                import shutil
+                shutil.rmtree(self.root/'skills')
+
+    def test_retirement_transaction_interruption_restores_deleted_files(self):
+        state,meta=self.setup_upgrade(custom=True)
+        original=release.atomic
+        def fail(path,data,mode=0o600):
+            if Path(path)==self.prefix/'state.json' and b'0.4.0' in data:raise OSError('injected')
+            original(path,data,mode)
+        with patch.object(release,'bundle',return_value=(self.root,meta)),patch.object(release,'prepare'),patch.object(release,'base_interpreter',return_value=Path('/usr/bin/python3')),patch.object(release,'atomic',side_effect=fail):
+            with self.assertRaises(OSError):release.apply_release(self.prefix,self.root,'upgrade')
+        self.assertEqual(release.load_state(self.prefix),state)
+        self.assertEqual((self.root/'skills/cosbase/SKILL.md').read_bytes(),b'custom instructions')
+        self.assertEqual((self.root/'skills/cosbase/notes.md').read_bytes(),b'custom resource')

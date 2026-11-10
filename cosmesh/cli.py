@@ -63,7 +63,7 @@ def parser(product):
     speed = common.add_mutually_exclusive_group()
     speed.add_argument('--fast', dest='fast_override', action='store_true', default=argparse.SUPPRESS)
     speed.add_argument('--no-fast', dest='fast_override', action='store_false', default=argparse.SUPPRESS)
-    root = Parser(prog=product, description="CosMesh / CosBase document client and controlled SSH Hub", parents=[common])
+    root = Parser(prog=product, description="CosMesh private and public Threads", parents=[common])
     version_label = __version__ + (" (development)" if installation()["mode"] == "development" else "")
     root.add_argument("--version", action="version", version=version_label)
     commands = root.add_subparsers(dest="command", required=True)
@@ -341,7 +341,7 @@ def capabilities(product):
                          "private_session_bindings": True, "maintenance_requests": True,
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,
-                         "personal_lifecycle": product == "cosbase", "local_control_updates": product == "cosmesh",
+                         "personal_lifecycle": True, "local_control_updates": True, "unified_cosmesh": True, "explicit_send_receipts": True,
                          "authenticated_identity": True, "remote_sync": True, "mcp": False,
                          "hub_key_mapping": True,
                          "system_identity": True, "local_gateway": True,
@@ -570,12 +570,18 @@ def execute(args, product):
         from .access import system_user
         return {'system': system_user(), 'document_user': Store(root).client().get('user')}, None
     if action == "skills.install":
-        names = ["cosmesh", "cosbase"] if args.only == "both" else [args.only]
+        names = ["cosmesh"]
         return install(args.agent, names, args.dest, getattr(args, "dry_run", False)), None
     installed_prefix = os.environ.get("COSMESH_INSTALL_PREFIX")
     if installed_prefix and root.expanduser().resolve().is_relative_to(Path(installed_prefix).resolve()):
         raise Error("PATH_INVALID", "Document stores must be outside the installed application directory.",
                     "Use the default data directory or a separate --root so upgrades and uninstall preserve documents.")
+    store = Store(root)
+    # Existing schema-1 personal stores keep their original behavior under the unified CLI.
+    config_file = store.path('.cosmesh/config.json')
+    if config_file.is_file():
+        legacy = json.loads(config_file.read_text())
+        if legacy.get('schema_version') == 1 and legacy.get('product') == 'cosbase': product = 'cosbase'
     if action == "doctor":
         result = {"capabilities": capabilities(product), "python": sys.version.split()[0],
                   "python_executable": sys.executable, "client_entry": str(Path(sys.argv[0]).absolute()),
@@ -585,9 +591,8 @@ def execute(args, product):
             result["validation"], revision = Service(Store(root), product).run("validate")
             result["store"] = "local_unverified"
         if args.agent:
-            result["agent"] = inspect(args.agent, [product], args.dest)
+            result["agent"] = inspect(args.agent, ["cosmesh"], args.dest)
         return result, revision
-    store = Store(root)
     if getattr(args, "offline", False) and (action in {"sync", "repo.connect", "repo.clone"} or getattr(args, "require_fresh", False)):
         raise Error("INPUT_INVALID", "Offline mode cannot contact the Hub or require a fresh remote.")
     if getattr(args, "dry_run", False) and action in {"sync", "repo.connect", "repo.clone"}:
@@ -640,6 +645,7 @@ def main(argv=None, product="cosmesh"):
     revision, data, error = None, None, None
     try:
         args = parser(product).parse_args(argv)
+        if hasattr(args, 'scope'): args.scope = {'private':'base','public':'mesh'}.get(args.scope,args.scope)
         if args.action == 'skills.export':
             if machine or getattr(args, 'dry_run', False):
                 raise Error('INPUT_INVALID', 'Skill export emits an installer script; omit --json and --dry-run.')
@@ -746,7 +752,7 @@ def main(argv=None, product="cosmesh"):
             pass
     client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.'))
     if 'args' in locals() and (args.action in {'thread.check','thread.chat'} or (args.action=='thread.read' and args.repo!='local') or
-                              (args.action in {'thread.overview', 'thread.page'} and args.scope == 'mesh')):
+                              (args.action in {'thread.overview', 'thread.page', 'thread.list'} and args.scope == 'mesh')):
         # The shared envelope must not reveal private workbench roots, counts or bindings, including on errors.
         sync_state = {"state": sync_state.get('state', 'local_only'),
                       "identity_verified": sync_state.get('identity_verified', False)}
@@ -826,6 +832,12 @@ def main(argv=None, product="cosmesh"):
             from .thread_chat import document
             print(document(data),end='')
         return 0
+    if not machine and error and error['code'] == 'PRIVATE_THREAD_NOT_SENT':
+        print(error['message'] + '\n' + error['hint']); return 2
+    if not machine and isinstance(data,dict) and data.get('format') == 'thread.send.v1':
+        print(data['document'],end='')
+        if data['publication'].get('error'): print(data['publication']['error']['message'])
+        return 0 if data['sent'] or data['delivery_state'] in {'draft','published'} else 2
     print(json.dumps(result, ensure_ascii=False, indent=None if machine else 2))
     if error:
         if error["code"] in {"STATE_CONFLICT", "IDEMPOTENCY_CONFLICT", "STORE_BUSY", "STORE_DIRTY", 'PROFILE_BUSY', 'FEEDBACK_BUSY'}:

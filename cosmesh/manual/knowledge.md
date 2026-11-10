@@ -4,7 +4,7 @@
 
 0.3.6 的本地读取按 Git 完整版本批量取对象，Thread 操作和状态回执复用同一工作台。当前命令内可复用未变化模型，版本变化时重新校验；每次加载继续检查路径。接受状态匹配已核验来源，旧版本引用仍沿历史查找。此缓存随命令退出释放，无新后台进程或持久索引文件。
 
-知识库是独立的组内共享空间。文献和资料使用 K- ID，可包含 Markdown、TXT、PDF、DOC/DOCX、PPT/PPTX、HTML、BibTeX、JSON/CSV/TSV 和简单图像。大型科研数据继续留在分析环境。每项资料可以有多个文件和多个固定版本，Thread 与 Base 引用同一个资料 ID 和版本。
+知识库是独立的组内共享空间。文献和资料使用 K- ID，可包含 Markdown、TXT、PDF、DOC/DOCX、PPT/PPTX、HTML、BibTeX、JSON/CSV/TSV 和简单图像。大型科研数据继续留在分析环境。每项资料可以有多个文件和多个固定版本，私人和公开 Thread 引用同一个资料 ID 和版本。
 
 服务器由维护者 hub community-init --hub-root HUB --library-root LIBRARY 明确建立专用目录。catalog.sqlite3 保存用户、不可变资料版本、活动、来源和派生索引；blobs/ 保存按 SHA-256 定位的原文件和提取文字。目录 700、文件 600，客户端通过已核验的 Hub 身份访问。共享用户默认可读；正式写入前填写本人真实姓名。
 
@@ -40,7 +40,7 @@ backlinks 从现有引用重建，列出直接引用这份资料的共享工作�
 
 个人 Agent 沿 record.id 用 thread context 读取结果、依据和更正，根据当前需求、版本和适用条件判断复用。再用 thread backlinks RECORD_ID 可发现引用该结果的综合成果。只读查询不会自动采用，归档工作的原始记录仍可被发现。
 
-coverage=cached_mesh 和 sources 表明实际查询范围及截至版本；accepted=false 的引用者尚未确认发布。默认查询排除私人 Base、Session 和目录绑定。--require-fresh 只拉取，不发布工作草稿或资料 outbox；--offline 完全使用已有缓存。反向关系按需展开，无模型、后台扫描或新数据格式。
+coverage=cached_mesh 和 sources 表明实际查询范围及截至版本；accepted=false 的引用者尚未确认发布。默认查询排除私人 Thread、Session 和目录绑定。--require-fresh 只拉取，不发布工作草稿或资料 outbox；--offline 完全使用已有缓存。反向关系按需展开，无模型、后台扫描或新数据格式。
 
 ## 修订、维护人与候选内容
 
@@ -56,7 +56,7 @@ library revise ID --expect CONTENT_VERSION --file PATH --sync 创建新版本；
 
 归档沿用原 Thread 身份映射，多次快照使用同一个知识资料 ID 的不同版本。后续更正或再次结束生成新版本，旧档案保留。工作结果与收纳状态分开：thread state --to active|done|cancelled 管工作结果，thread archive/restore 管收纳。旧 state archived 仍可读。重新开展时设置 state active，并按需要 restore；旧档案通过当前 Thread 状态显示已经重开。
 
-thread list 默认隐藏已归档工作，--all 包含历史工作。私人 Base 工作仅在本机保留 Git 历史，不自动进入公共知识库。共享 Thread 的权威源继续留在 Hub，知识库快照独立可读；本次不改写 Git 历史以回收空间。
+thread list 默认隐藏已归档工作，--all 包含历史工作。私人 Thread 工作仅在本机保留 Git 历史，不自动进入公共知识库。共享 Thread 的权威源继续留在 Hub，知识库快照独立可读；本次不改写 Git 历史以回收空间。
 
 成功接收共享写入后触发归档；断点由下次目录拉取对账补齐，无需公共 Mesh Agent 或大模型。library status 显示 archive_errors，源记录保留，可在恢复条件后重新拉取重建。快照以单仓库接受版本为准，跨工作引用固定到明确版本。
 

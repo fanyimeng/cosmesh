@@ -2,7 +2,7 @@
 
 ## 默认的本地优先接入
 
-用户电脑的 Agent 读取两份标准 Skill，通过本机 CLI 操作本地 Base、Mesh Git 工作副本、Profile 和反馈队列。Base 不依赖 Hub，Mesh 已缓存内容离线可读写，变更保留为本地提交；显式 sync 时才通过已有 SSH 登录服务器并由 Hub 核验身份、权限与候选历史。
+用户电脑的 Agent 读取一份标准 Skill，通过本机 CLI 操作私人 Thread、公开 Thread 的 Git 工作副本、Profile 和反馈队列。私人 Thread 不依赖 Hub，公开 Thread 的缓存离线可读写，变更保留为本地提交；对外发送或显式 sync 时通过已有 SSH 登录服务器并由 Hub 核验身份、权限与候选历史。
 
 通用安装包包含同一应用 wheel、独立安装器和固定依赖摘要锁。local-install.sh 自动选择本机 Python，缺少时在专用目录准备运行时。local_bootstrap.py 取得匹配平台的固定依赖后复用现有版本化安装器。client.py 仅在显式 client check/update 时访问稳定渠道，日常操作不检查网络或更新。
 
@@ -34,7 +34,7 @@ cli.py 解析命令与稳定信封。service.py 管理业务规则、状态重�
 
 ## 仓库授权、业务责任与反馈范围
 
-Base 私有，CosMesh 仓库及历史对全部已核验用户公开读取。原 writer 与已声明的项目协作者可按业务规则写入，Lead/Member、作者和任务接受仍由 hook 核验。私人 CosBase 仓库只有单一所有者。显示名与偏好不改变身份。
+私人工作留在本地，公开仓库及历史对全部已核验用户公开读取。原 writer 与已声明的项目协作者可按业务规则写入，Lead/Member、作者和任务接受仍由 hook 核验。旧版个人文档库保留单一所有者规则。显示名与偏好不改变身份。
 
 系统维护使用已登记的普通共享 Thread；意见、回应、分配、交付与采用均复用 Thread 请求和记录。Hub 配置只保存入口的 repo/ID，不复制正文；作者与请求角色由同一套校验约束。旧 system_feedback 仓库策略仅兼容原历史与队列。
 

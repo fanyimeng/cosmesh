@@ -36,7 +36,7 @@ class RemoteSkillsTests(unittest.TestCase):
                        'sys.exit(subprocess.run(["sh","-c",command]).returncode)\n')
         ssh.chmod(0o700)
         (self.prefix / 'bin').mkdir(parents=True)
-        for name in ('cosmesh', 'cosbase'):
+        for name in ('cosmesh',):
             file = self.prefix / 'bin' / name
             code = 'from cosmesh.cli import main; raise SystemExit(main(product=%r))' % name
             file.write_text('#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' -c ' + shlex.quote(code) + ' "$@"\n')
@@ -57,41 +57,41 @@ class RemoteSkillsTests(unittest.TestCase):
         self.assertEqual(result.returncode == 0, success, result.stderr)
         return result
 
-    def test_only_two_skills_and_no_local_runtime_are_needed(self):
+    def test_only_one_skill_and_no_local_runtime_are_needed(self):
         self.install()
-        self.assertEqual(sorted(p.name for p in self.skills.iterdir()), ['cosbase', 'cosmesh'])
+        self.assertEqual(sorted(p.name for p in self.skills.iterdir()), ['cosmesh'])
         self.assertFalse((self.root / 'local-runtime').exists())
-        for name in ('cosmesh', 'cosbase'):
+        for name in ('cosmesh',):
             result = json.loads(self.run_skill(name, 'capabilities', '--json').stdout)
             self.assertTrue(result['data']['features']['ssh_only_skills'])
             self.assertEqual(result['data']['product'], name)
         self.install()
-        self.assertEqual((self.skills / 'cosbase/SKILL.md').stat().st_mode & 0o777, 0o600)
+        self.assertEqual((self.skills / 'cosmesh/SKILL.md').stat().st_mode & 0o777, 0o600)
 
     def test_quoting_unicode_trailing_newlines_and_stdin_reach_server(self):
         self.install()
-        app = self.prefix / 'bin/cosbase'
+        app = self.prefix / 'bin/cosmesh'
         app.write_text('#!' + sys.executable + '\nimport sys,json\nprint(json.dumps({"args":sys.argv[1:],"stdin":sys.stdin.read()}))\n')
         sentinel = self.root / 'must-not-exist'
         arguments = ["单引号 ' 双引号 \"", '$(touch ' + str(sentinel) + ')', '; touch ' + str(sentinel), '末尾\n\n', '--file', '-']
-        result = json.loads(self.run_skill('cosbase', *arguments, body='正文\n第二行\n').stdout)
+        result = json.loads(self.run_skill('cosmesh', *arguments, body='正文\n第二行\n').stdout)
         self.assertEqual(result['args'], arguments)
         self.assertEqual(result['stdin'], '正文\n第二行\n')
         self.assertFalse(sentinel.exists())
 
     def test_remote_personal_flow_and_streamed_profile_and_feedback(self):
         self.install()
-        self.run_skill('cosbase', 'init', '--json')
-        created = json.loads(self.run_skill('cosbase', 'task', 'create', '--title', '远程事项', '--file', '-',
+        self.run_skill('cosmesh', 'thread', 'init', '--json')
+        created = json.loads(self.run_skill('cosmesh', 'thread', 'create', '--title', '远程事项', '--file', '-',
                                            '--idempotency-key', 'one-remote-action', '--json', body='正文\n').stdout)
-        doc = created['data']['result']
+        doc = created['data']
         self.assertEqual(doc['body'], '正文\n')
-        repeated = json.loads(self.run_skill('cosbase', 'task', 'create', '--title', '远程事项', '--file', '-',
+        repeated = json.loads(self.run_skill('cosmesh', 'thread', 'create', '--title', '远程事项', '--file', '-',
                                             '--idempotency-key', 'one-remote-action', '--json', body='正文\n').stdout)
-        self.assertEqual(repeated['data']['result']['id'], doc['id'])
+        self.assertEqual(repeated['data']['id'], doc['id'])
         profile = json.loads(self.run_skill('cosmesh', 'profile', 'set', '--expect', 'missing', '--file', '-', '--json', body='简介\n').stdout)
         self.assertEqual(profile['data']['fields']['about'], '简介\n')
-        feedback = json.loads(self.run_skill('cosbase', 'feedback', 'add', '--file', '-', '--idempotency-key', 'remote-feedback',
+        feedback = json.loads(self.run_skill('cosmesh', 'feedback', 'add', '--file', '-', '--idempotency-key', 'remote-feedback',
                                             '--json', body='系统使用问题\n').stdout)
         self.assertTrue(feedback['data']['saved_locally'])
         bad = self.run_skill('cosmesh', 'feedback', 'add', '--file', '-', '--json', body='x' * 65537, success=False)
@@ -100,11 +100,10 @@ class RemoteSkillsTests(unittest.TestCase):
     def test_modified_extra_and_native_material_are_preserved(self):
         self.install()
         first = (self.skills / 'cosmesh/SKILL.md').read_bytes()
-        target = self.skills / 'cosbase/SKILL.md'
+        target = self.skills / 'cosmesh/SKILL.md'
         target.write_text('用户自定义 Skill')
         self.install(success=False)
         self.assertEqual(target.read_text(), '用户自定义 Skill')
-        self.assertEqual((self.skills / 'cosmesh/SKILL.md').read_bytes(), first)
         other = self.root / 'native'
         (other / 'cosmesh').mkdir(parents=True)
         (other / 'cosmesh/SKILL.md').write_text('native managed Skill')
@@ -112,11 +111,11 @@ class RemoteSkillsTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((other / 'cosbase').exists())
 
-    def test_failed_second_activation_rolls_back_the_pair(self):
+    def test_failed_activation_rolls_back(self):
         self.install()
-        before = {name: (self.skills / name / 'connection').read_bytes() for name in ('cosmesh', 'cosbase')}
+        before = {name: (self.skills / name / 'connection').read_bytes() for name in ('cosmesh',)}
         move = self.bin / 'mv'
-        move.write_text('#!/bin/sh\ncase "$1" in */new-cosbase) exit 1;; esac\nexec /bin/mv "$@"\n')
+        move.write_text('#!/bin/sh\ncase "$1" in */new-cosmesh) exit 1;; esac\nexec /bin/mv "$@"\n')
         move.chmod(0o700)
         self.install(alias='another-existing-server', success=False)
         self.assertEqual(before, {name: (self.skills / name / 'connection').read_bytes() for name in before})
@@ -143,8 +142,8 @@ class RemoteSkillsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         checked = json.loads(self.run_skill('cosmesh', '--check-updates').stdout)
         self.assertTrue(checked['ok'])
-        updated = self.run_skill('cosbase', '--update')
-        self.assertIn('two SSH Skills installed', updated.stdout)
+        updated = self.run_skill('cosmesh', '--update')
+        self.assertIn('CosMesh SSH Skill installed', updated.stdout)
 
 
 class BootstrapTests(unittest.TestCase):
@@ -162,7 +161,7 @@ class BootstrapTests(unittest.TestCase):
         installer = selected / 'install.py'
         installer.write_text('import argparse,json,os\nfrom pathlib import Path\n'
                              'p=argparse.ArgumentParser();p.add_argument("action");p.add_argument("--prefix");p.add_argument("--skills");p.add_argument("--json",action="store_true");a=p.parse_args()\n'
-                             'root=Path(a.prefix);root.mkdir(exist_ok=True);s=root/"state.json";s.write_text(json.dumps({"current":"0.1.7"}));s.chmod(0o600);print(json.dumps({"ok":True}))\n')
+                             'root=Path(a.prefix);root.mkdir(exist_ok=True);s=root/"state.json";s.write_text(json.dumps({"current":"0.1.7"}));s.chmod(0o600);print(json.dumps({"ok":True,"data":{}}))\n')
         (selected / 'release.json').write_text('{}\n')
         installer.chmod(0o644)
         (selected / 'release.json').chmod(0o644)

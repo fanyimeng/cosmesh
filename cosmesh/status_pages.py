@@ -21,7 +21,7 @@ from .store import Store, atomic, safe_path
 from .threads import Workbench, now
 from .thread_protocol import REPO, reference_edges
 
-FORMAT = 10
+FORMAT = 11
 LEVELS = ('brief', 'status', 'index')
 
 
@@ -676,7 +676,7 @@ def read_page(wb, args):
         elif getattr(args, 'check', False):
             from .thread_checks import ready_check
             result = ready_check(result['thread'], result['status'], request, args.limit,
-                                 {k: result['cache'][k] for k in ('generated_at','local_sources_current','remote_checked_at')})
+                                 {k: result['cache'][k] for k in ('generated_at','local_sources_current','remote_checked_at')},getattr(args,'details',False))
         elif is_ready:
             from .status_receipts import ready_receipt
             focus = result.get('continuation', result if 'status' in result else None)

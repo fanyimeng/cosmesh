@@ -55,7 +55,7 @@ def add_commands(commands, command):
         p = command(group, verb, 'search.'+verb)
         if verb=='query':p.add_argument('query')
         else:p.add_argument('id',nargs='+')
-        p.add_argument('--scope', choices=('all','base','mesh'), default='all')
+        p.add_argument('--scope', choices=('all','private','public','base','mesh'), default='all')
         p.add_argument('--legacy-root', action='append', default=[], help='Select old read-only stores instead of automatic legacy discovery.')
         p.add_argument('--no-legacy', action='store_true', help='Only query the Thread workbench and knowledge cache.')
         p.add_argument('--offset', type=int, default=0)
