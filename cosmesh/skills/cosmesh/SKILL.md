@@ -88,6 +88,8 @@ CLI 与旧兼容入口 共用工作台，默认 ~/.local/share/cosmesh/work，--
 
 ## 本机执行入口
 
+服务器上运行的 DSH 等 Agent 使用本人账号的个人客户端，方式与 PC/Mac 相同。软件发布源只负责安装更新，Hub 负责协作，私人工作台负责本人的工作。明确要求接入默认 Hub 时使用 `client hub --service 实际服务发现文件 --json`；新工作台再按需 `thread discover`，已有连接保持。个人业务使用 thread/personal/library；维护 Hub 须有单独授权，不因客户端在服务器上运行就进入 Hub 管理目录。普通业务不重复诊断、安装或配置。
+
 使用安装器追加在本 Skill 末尾的实际 CLI，SSH-only 路径属于服务器。普通业务不先查更新；用户明确更新才 client update，保留资料、自定义 Skill 和其他 Agent 配置。
 
 

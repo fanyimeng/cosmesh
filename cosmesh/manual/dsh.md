@@ -1,5 +1,13 @@
 # DeepSeek Harness
 
+## 服务器上的个人客户端
+
+在服务器上运行的 DSH 使用本人 home 下的 Skill、CLI 和私人工作台，与 PC/Mac 客户端同等。软件发布源负责安装更新；默认 Hub 负责协作与私人中转；个人工作台保存本人的工作。三者可以部署在同一台服务器，配置和职责分别管理。
+
+管理员提供实际服务发现文件后，在本人已安装的 CLI 执行 `client hub --service /actual/path/service.json --json` 保存个人客户端默认 Hub；`client hub --json` 可查看。该命令只保存私人客户端配置，保留发布源、已有工作台连接与 Hub 管理配置，不同步资料。首次工作台接入用 `thread discover`，已有连接的工作台保持原目标；个人共享仍须显式开启。显式 `--ssh`、`--service` 和 `COSMESH_SERVICE` 优先于客户端默认值。
+
+个人 Agent 使用 `thread`、`personal`、`library` 等客户端命令，Hub 管理命令使用独立的 `hub ... --hub-root` 入口。若个人账号同时拥有 Hub 管理目录，同账号进程仍共享操作系统权限；角色分工不构成额外权限隔离。
+
 ## 安装与更新
 
 DSH 与 Codex、OpenCode 共用同一套 CosMesh 程序、工作台与一份标准 Skill。Skill 放在 ~/.agents/skills/cosmesh，DSH 的标准预设会自动发现；项目内同名 Skill 的优先级更高。

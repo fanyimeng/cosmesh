@@ -173,6 +173,8 @@ def parser(product):
     clients = command(commands, 'client').add_subparsers(dest='client_command', required=True)
     command(clients, 'check', 'client.check')
     command(clients, 'update', 'client.update')
+    client_hub = command(clients, 'hub', 'client.hub')
+    client_hub.add_argument('--service', help='Default local Hub discovery for this personal client')
     mode = command(clients, 'mode', 'client.mode')
     mode.add_argument('mode', nargs='?', choices=('fast','normal'))
     invitations = command(commands, 'invite').add_subparsers(dest='invite_command', required=True)
@@ -449,6 +451,8 @@ def execute(args, product):
             from .preferences import mode
             return mode(args.mode, getattr(args, 'dry_run', False)), None
         from . import client
+        if action == 'client.hub':
+            return client.hub(args.service, getattr(args, 'dry_run', False)), None
         if getattr(args, 'dry_run', False) or getattr(args, 'offline', False):
             raise Error('INPUT_INVALID', 'Client check/update explicitly contacts the release server.')
         return (client.check() if action == 'client.check' else client.update()), None

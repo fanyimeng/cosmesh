@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- Add a personal-client default Hub setting, separate from the software update source and Hub administration.
+- Preserve existing workbench destinations and explicit connection overrides; clarify server-hosted DSH as an ordinary personal client.
+
 ## 0.4.2
 
 Released 2026-11-16. Includes the previously unreleased 0.4.1 personal-sharing work.

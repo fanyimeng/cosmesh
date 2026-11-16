@@ -32,13 +32,20 @@ def connection(root, ssh=None, service=None):
         saved = settings()
         remembered = saved.get('discovery') if saved.get('ssh') == ssh else None
         return {'kind': 'ssh-system', 'host': ssh, 'discovery': service or remembered or os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY), 'repo': 'spaces'}
-    if service or Path(os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY)).is_file():
+    if service or os.environ.get('COSMESH_SERVICE') or Path(DEFAULT_DISCOVERY).is_file():
+        # Explicit service/environment always wins; a saved personal default
+        # takes precedence over the generic deployment fallback.
+        if not service and not os.environ.get('COSMESH_SERVICE'):
+            selected = settings().get('default_hub')
+            if selected: return dict(selected)
         return {'kind': 'system', 'discovery': service or os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY), 'repo': 'spaces'}
     if root.joinpath('.cosmesh/config.json').is_file():
         remote = Store(root).client().get('remote')
         if remote and remote.get('kind') in {'system', 'ssh-system'}:
             return dict(remote, repo='spaces')
     saved = settings()
+    if saved.get('default_hub'):
+        return dict(saved['default_hub'])
     if saved.get('ssh'):
         return {'kind': 'ssh-system', 'host': saved['ssh'], 'discovery': saved.get('discovery', DEFAULT_DISCOVERY), 'repo': 'spaces'}
     raise Error('HUB_CONNECTION_REQUIRED', 'Use space discover --ssh with your existing server connection once.')

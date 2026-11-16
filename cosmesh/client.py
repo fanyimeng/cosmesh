@@ -12,6 +12,33 @@ from . import __version__
 from .errors import Error
 
 
+def hub(service=None, dry_run=False):
+    """Per-user default Hub, independent of the software distribution source."""
+    prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
+    if not prefix:
+        raise Error('NOT_INSTALLED', 'Use the installed personal client entry.')
+    prefix = Path(prefix)
+    from .store import safe_path, atomic
+    path = safe_path(prefix / 'client.json')
+    import fcntl
+    with (prefix / '.lock').open('a+') as lock:
+        fcntl.lockf(lock, fcntl.LOCK_EX)
+        saved = json.loads(path.read_text()) if path.is_file() else {}
+        selected = saved.get('default_hub')
+        if service is not None:
+            from .access import discovery
+            target = safe_path(Path(service).expanduser().absolute())
+            discovery(str(target))  # Validate trusted discovery; no connection or Hub mutation.
+            selected = {'kind':'system', 'discovery':str(target), 'repo':'spaces'}
+            if not dry_run:
+                saved['default_hub'] = selected
+                atomic(path, json.dumps(saved, ensure_ascii=False, indent=2)+'\n')
+        return {'role':'personal_client', 'default_hub':selected,
+                'saved':service is not None and not dry_run,
+                'existing_workbench_connections_preserved':True,
+                'software_source_unchanged':True, 'hub_admin_configuration_changed':False}
+
+
 def config():
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
     if not prefix or not (Path(prefix) / 'client.json').is_file():
