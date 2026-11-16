@@ -206,6 +206,18 @@ class Workbench:
                 if content_version(doc) == ref['version']:
                     self._resolved[cache_key] = doc
                     return doc
+        if ref['repo']=='local' and not accepted:
+            # New optional sidecar: fixed sources imported by owner-only personal sync.
+            # This fallback is never consulted for public or accepted-Hub references.
+            from .personal_protocol import read_json
+            sources=read_json(self.base.path('.cosmesh/personal-v1/sources.json'),{})
+            text=sources.get(ref['id']+'@'+ref['version'])
+            if text is not None:
+                doc=decode(text)
+                if doc['meta']['id']!=ref['id'] or content_version(doc)!=ref['version']:
+                    raise Error('CHECKSUM_MISMATCH','Personal fixed source differs from its reference.')
+                self._resolved[cache_key]=doc
+                return doc
         raise Error('SOURCE_PENDING' if accepted else 'REFERENCE_UNAVAILABLE', 'Referenced source version is unavailable.')
 
     def accepted(self, item):
@@ -287,7 +299,7 @@ class Workbench:
             brief = summary(body)
             fallback = {'request':'请求','reply':'回应','delivery':'交付','correction':'更正','note':'记录','result':'成果','summary':'概括'}.get(record_type,record_type)
             first = brief['text'].splitlines()[0] if brief['text'] else ''
-            meta['title'] = payload.get('title') or (first if brief['origin'] != 'author' and len(first)<=100 else fallback)
+            meta['title'] = payload.get('title') or (first if first and brief['origin'] != 'author' and len(first)<=100 else fallback)
             if getattr(self,'generation',None):meta['generation']=self.generation
             if parent['repo']!='local':
                 from .knowledge import Knowledge

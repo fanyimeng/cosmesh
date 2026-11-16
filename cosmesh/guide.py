@@ -7,6 +7,7 @@ from . import __version__
 from .errors import Error
 
 TOPICS = {
+    'personal':'候选：同机个人共享、跨设备私人中转、按需拉取及回退',
     'upgrade':'0.4.0 重要更新：统一 CosMesh、概念与用法',
     'chat':'作者交互摘要、按人跨 Thread 的五轮对话、左右 TUI 与游标展开',
     'sharing':'Thread 配套资料入库、固定打开引用、后缀与大小预检、Git 代码定位',

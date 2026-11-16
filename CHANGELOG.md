@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2
+
+Released 2026-11-16. Includes the previously unreleased 0.4.1 personal-sharing work.
+
+- Preserve the 0.4.1 personal-sharing candidate and add a separate reversible compatibility fix.
+- Empty optional record bodies now receive the existing nonempty fallback title, restoring state/archive/restore commands without changing stored document schemas or explicit titles.
+- Add opt-in synthetic shared-home probes for cross-host locks, concurrent writes, crash recovery, local caches and authoritative relay isolation.
+- Show a prominent personal-sharing guide in the upgrade receipt; sync remains opt-in and public sharing retains its existing authorization rules.
+
+## 0.4.1 (unreleased candidate)
+
+- Opt-in personal workbench replicas with owner-only gateway storage, fixed-source preservation, conflict checks and recoverable local application.
+- Unlimited same-device file references; private streamed file relay with resumable chunks, quotas, content filtering and on-demand verified downloads.
+- Additive private sidecars preserve schema 2 and ordinary 0.4.0 workbench operation. Public attachment rules remain unchanged. No background transfer or production migration.
+
 ## 0.4.0
 
 Released 2026-11-10.

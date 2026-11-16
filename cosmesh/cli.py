@@ -201,7 +201,7 @@ def parser(product):
         p.add_argument('--service', help='Local service discovery; defaults to the shared service')
         p.add_argument('--ssh', help='Use an existing SSH host alias and its normal system login')
     hub = command(commands, "hub").add_subparsers(dest="verb", required=True)
-    for verb in ("init", "repo-create", "grant", "key-add", "key-revoke", "status", "serve", "validate", 'run','community-init','maintenance'):
+    for verb in ("init", "repo-create", "grant", "key-add", "key-revoke", "status", "serve", "validate", 'run','community-init','maintenance','personal-init'):
         p = command(hub, verb, "hub." + verb)
         p.add_argument("--hub-root", required=True)
         if verb=='community-init':p.add_argument('--library-root',required=True)
@@ -246,6 +246,8 @@ def parser(product):
     se.add_argument('--bootstrap', default='/srv/cosmesh/agent/bootstrap.py')
     from .thread_cli import add_commands
     add_commands(commands, command, body)
+    from .personal_cli import add_commands as add_personal_commands
+    add_personal_commands(commands,command)
     from .community_cli import add_commands as add_community_commands
     add_community_commands(commands,command)
     from .search import add_commands as add_search_commands
@@ -322,6 +324,7 @@ def capabilities(product):
             "thread_schema_version": 2, "schema_versions": [1, 2, 3], "knowledge_schema_version":3,"primary_model": "thread",
             "coordination": {"default": "personal_agents", "delegation": "ordinary_request", "requires_server_agent": False},
             "features": {"threads": True, "thread_requests": True, "thread_shared_references": True,
+                         "personal_sharing": True, "personal_relay_protocol": 1, "personal_background_sync": False,
                          "knowledge_library":True,"knowledge_backlinks":True,"thread_archives":True,"real_name_directory":True,"contribution_history":True,
                          "thread_coordination_context": True, "thread_cited_results": True,
                          "thread_record_backlinks": True,
@@ -405,6 +408,17 @@ def read_input(file, limit):
 @networked
 def execute(args, product):
     action = args.action
+    if action.startswith('personal.'):
+        from .personal_cli import execute as execute_personal
+        return execute_personal(args)
+    if action=='hub.personal-init':
+        from .personal_relay import initialize as initialize_personal_relay
+        if getattr(args,'dry_run',False):
+            return {'enabled':False,'dry_run':True},None
+        hub=Hub(args.hub_root)
+        # Hub.settings checks the owner-only Hub directory before enabling a service.
+        hub.settings()
+        return initialize_personal_relay(hub),None
     if action == 'invite.prompt':
         from .onboarding import installation_prompt
         if any(getattr(args, k, None) for k in ('require_fresh', 'revision', 'expect_revision')):
@@ -750,7 +764,7 @@ def main(argv=None, product="cosmesh"):
                 sync_state = workbench.status()
         except (Error, OSError, ValueError):
             pass
-    client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.'))
+    client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.','personal.'))
     if 'args' in locals() and (args.action in {'thread.check','thread.chat'} or (args.action=='thread.read' and args.repo!='local') or
                               (args.action in {'thread.overview', 'thread.page', 'thread.list'} and args.scope == 'mesh')):
         # The shared envelope must not reveal private workbench roots, counts or bindings, including on errors.

@@ -77,6 +77,8 @@ CLI 与旧兼容入口 共用工作台，默认 ~/.local/share/cosmesh/work，--
 
 ## 按需处理的工作
 
+- 个人共享（候选功能）：用户明确开启后，同机 Agent 共用同一工作台，personal asset add 登记原位资源，asset open 返回原件，无文件传输配额。跨设备使用 personal connect / sync / join；首期同步单位为整个私人工作台，先说明当前源记录和绑定范围。personal asset plan 检查文件，push 或 sync --files 按策略上传；远端同步清单后 asset open 按需下载，普通同步不拉取全部原件。--science 仅用于用户指定科研结果；同机不应用传输过滤。公开发布仍沿原 share 规则，私人中转不等于公开。只有服务器接受／本机校验回执才说明对应状态。命令触发，无后台执行；细节与回退见 guide show personal。旧 Hub 缺能力时保留本机资料，不改用公开空间。
+
 - 项目接入：先 thread locate 用实际 Agent 项目／工作区 ID，必要时目录。明确接入授权下唯一合适就复用，缺少则 create 私人 Thread，再 bind-project；关键歧义才问。项目独立于 Session，Codex/DSH/OpenCode 使用实际原生概念，无原生项目时 --kind directory，不造 ID；宿主项目 API 按需核验，不查私人数据库。新结构、分享及向他人请求沿实际授权。命名推荐英文短名、中文短名、一句简介，旧名与稳定 ID 保留；不批量改名。guide show threads。
 - 生命周期：split/merge/delete/restore 按授权执行，保留来源、作者和旧 ID；私人 Thread 删除进回收站，公开 Thread 撤回留历史。其他作者／空间只引用，不改状态；归并后 continue 跟随去向。guide show threads。
 - 模糊查找：search query ORIGINAL --query VARIANT ... --json 一次查工作、记录、知识库与已缓存旧库。当前推理中展开少量问法，先给有界候选；只找入口够用即停，需要内容解释／复用／执行才 search read 固定来源并核验作者、版本、更正与适用条件。只有当前缺口需要时沿相关回链读取，已读来源去重；scope public 排除私人旧库，旧源只读不迁移，缺材料如实说明。guide show search。
@@ -89,4 +91,4 @@ CLI 与旧兼容入口 共用工作台，默认 ~/.local/share/cosmesh/work，--
 使用安装器追加在本 Skill 末尾的实际 CLI，SSH-only 路径属于服务器。普通业务不先查更新；用户明确更新才 client update，保留资料、自定义 Skill 和其他 Agent 配置。
 
 
-升级完成时，完整展示回执 update_notice.document（旧客户端可能位于 mesh.update_notice.document），保留醒目符号，强调 CosBase 已取消、数据保留和新开会话。回执已有正文就直接使用；需要重看用 guide show upgrade，不在普通业务中反复展示。
+升级完成时，完整展示回执 update_notice.document（旧客户端可能位于 mesh.update_notice.document），保留醒目符号，说明本次新增能力、主动开启的共享边界、数据保留和新开会话。回执已有正文就直接使用；需要重看用 guide show upgrade，不在普通业务中反复展示。

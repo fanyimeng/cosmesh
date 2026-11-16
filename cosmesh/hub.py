@@ -372,6 +372,10 @@ class Hub:
 
     def spaces(self, payload, user):
         """One public Mesh space per authenticated server account."""
+        if isinstance(payload.get('method'),str) and payload['method'].startswith('personal_'):
+            if self.community(): self.community().check(user)
+            from .personal_relay import Relay
+            return Relay(self,user).dispatch(payload)
         if isinstance(payload.get('method'),str) and payload['method'].startswith('community_'):
             community=self.community()
             if not community:raise Error('FEATURE_UNAVAILABLE','This Hub has not enabled its knowledge library and user directory.')

@@ -135,3 +135,11 @@ thread_protocol.py 负责 schema 2 的 Thread/entry 字段、固定版本引用�
 threads.py 的 Workbench 组织私人 Thread、专用 Mesh 缓存、明确分享、请求关联、来源先于交付的同步、本地 Session/目录映射和引用上下文。thread_cli.py 给CosMesh 与旧兼容 CLI 注册同一 thread 命令，旧 schema 1 的 Service 路径保留。
 
 threads.py 的 coordination 只读导出请求、分配工作、来源和更正，供当前个人 Agent 汇总；note/result 的 --ref 保存固定版本依据。协调结果仍是普通工作记录。
+
+## 个人共享与私人中转（候选）
+
+personal_cli.py 提供 personal init/connect/sync/join、资源登记、传输预检和按需打开。personal.py 保存独立私人侧车、原位引用、工作台快照、固定历史来源与本机缓存；原 schema 2 和公开操作保持。
+
+personal_protocol.py 定义个人策略、路径／内容过滤、版本化清单与三方合并。personal_relay.py 通过已核验账号隔离对象和清单，执行流式分块、断点恢复、容量与流量配额，使用 Hub 内独立 personal-v1 目录；不加入公开 Git、搜索或知识库。
+
+manual/personal.md 说明候选入口、范围、上限和回退；tests/test_personal_sharing.py 使用独立副本与实际本机网关检查上述能力。
