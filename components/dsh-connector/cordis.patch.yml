@@ -1,0 +1,5 @@
+- insert:
+    - id: cosmesh-dsh-connector
+      name: '@cosmesh/dsh-connector'
+      config:
+        namespace: desktop

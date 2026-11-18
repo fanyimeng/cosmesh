@@ -1,0 +1,12 @@
+{
+  "name": "@cosmesh/dsh-connector",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "description": "Optional CosMesh connector for native DSH projects and guarded acknowledgement-only Sessions.",
+  "engines": { "dsh": "0.2.2-rc.3", "node": ">=22" },
+  "exports": { ".": "./index.js", "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg" },
+  "files": ["index.js", "lib/work-link.js", "lib/cosmesh.js", "lib/dsh.js", "cordis.patch.yml", "locale/en.json", "locale/zh.json", "icon.svg", "README.md"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "scripts": { "test": "node --test test/*.test.mjs" }
+}

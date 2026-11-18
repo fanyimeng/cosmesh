@@ -64,6 +64,10 @@ Then ask: “Use CosMesh to organize this work. Check existing Threads first and
 
 For an independent user installation or upgrade, use a release package from GitHub or your Hub maintainer; see the [quick start](docs/quickstart.md). This repository provides the CLI, one standard Skill, build tools, and an optional in-memory TUI demo. Private cross-device sync, on-demand viewing, person Threads, message search and version-based change lists are available. Native Windows and background notifications remain future work.
 
+## Optional host components
+
+The [DSH Connector](<components/README.md>) is a separately versioned, optional Host bundle for native Project/Session creation and one initialization-only acknowledgement. It is a **independent release**, not part of the 0.4.7 Python release or a published npm package. Installing the CLI or standard Skill does not install or enable it. Install explicitly through DSH's plugin manager after checking compatibility; ordinary CLI/Hub use remains independent of DSH.
+
 ## Development
 
 ```sh

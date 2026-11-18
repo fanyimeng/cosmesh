@@ -1,5 +1,13 @@
 # Changelog
 
+
+## DSH Connector 0.1.1
+
+- Publish the optional DSH connector independently of the CosMesh CLI and Hub.
+- Keep execution paths and host identifiers in private bindings and journals; ordinary Thread receipts contain only a concise result.
+- Release initialization tool guards after a confirmed end, including cancellation and retry races; retain protection while an accepted turn is still running.
+- Preserve existing projects, sessions, operation keys and rollback bundles. Review legacy receipt history before expanding public sharing.
+
 ## 0.4.7
 
 Released 2026-11-18. Includes the previously unreleased 0.4.4–0.4.6 changes.

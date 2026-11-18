@@ -67,6 +67,10 @@ cosmesh skills install --agent codex --only cosmesh --json
 
 GitHub 与服务器渠道提供独立版本化安装包，见[快速上手](docs/quickstart.md)。系统提供 CLI、统一 Skill 与独立的内存 TUI 演示。已支持同一 Thread 跨设备恢复、按人收信、全文检索和版本增量；原生 Windows 与后台通知留后续。
 
+## 可选宿主组件
+
+[DSH Connector](<components/README.md>) 是独立版本的可选 Host 组件，提供原生项目创建／复用、新会话创建、默认初始化确认后等待。当前 **0.1.1 随源码独立发布**，未发布到 npm，也不包含在正式 0.4.7 Python 安装包中。安装 CLI 或标准 Skill 不会自动安装／启用连接器；核验兼容后，明确通过 DSH 插件管理器安装。普通 CLI／Hub 使用不依赖 DSH。
+
 ## 开发
 
 ```sh

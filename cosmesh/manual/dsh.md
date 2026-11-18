@@ -14,6 +14,20 @@ DSH 与 Codex、OpenCode 共用同一套 CosMesh 程序、工作台与一份标�
 
 已安装 CLI 后运行 skills install --agent dsh --only cosmesh --json；doctor --agent dsh --json 检查当前程序和对应 Skill。Mac 桌面版自带的 DSH CLI 即使未加入 PATH，也能被检查识别。程序更新仍使用既有 client update 或服务器安装入口，保留用户修改过的 Skill 和已有资料。
 
+## 可选 DSH Connector（独立组件）
+
+标准 Skill 让 Agent 使用 CosMesh CLI；原生项目／新会话自动创建由独立可选组件 `@cosmesh/dsh-connector` 提供。两者不互相替代。组件目前位于源码项目的 `components/dsh-connector/`，独立版本；源码已独立发布，未发布到 npm 或 CLI 更新渠道，不随 0.4.7 CLI、pip 或 skills install 自动安装。
+
+适配边界为 DSH 0.2.2-rc.3、CosMesh CLI 0.4.7+。组件复用本人已经安装的 CLI；不自带Python环境，业务仍需CLI可用。默认入口为本人home下 `.local/opt/cosmesh/bin/cosmesh`，自定义安装须由插件配置提供绝对cliPath，不通过模型工具参数接受任意命令。
+
+源码用户执行 `python3 tools/build_component.py dsh-connector` 生成固定候选，回执给出 install_directory。用户明确授权后，在 DSH Plugins → Add plugin 选择该目录，或由 DSH Agent 经官方 plugin_manager 安装。不要手工修改profile、聊天数据库或认证信息。插件在Host进程中运行，影响同profile所有会话；管理器application/warnings决定是否需重启，安装完成不等于界面和业务已验收。完整分层、安装、回退说明见源码 components/README.md。
+
+工具 cosmesh_open_work 连接已有私人Thread与明确目录，复用同目录Project，每个operation_key创建一个Session，默认发送一次初始化消息后等待。初始化会调用配置模型，所选私人接续背景进入请求；不是CosMesh公开／文件上传。工具guard禁止该初始化轮执行任何工具。用户另行明确下达实际任务后才工作。initialize:false只创建空白会话，DSH在未选中时隐藏它；沿原key和创建参数改为true可稍后初始化。新key表示另开会话，不能用于绕过失败。
+
+同key重试恢复同一次创建，不是任意旧会话续接。已有Project不会被自动改名，不自动建Thread、同步、远程SSH或开展研究。回执必须区分accepted和completed；超时保留原ID与文本，不能重复发起。运行时guard在崩溃或卸载后不提供持久隔离，初始化中不要升级／卸载插件。
+
+旧本机原型包名为 `@local/cosmesh-dsh-bridge`，与新组件注册同名工具，不能同时启用。迁移前等待初始化结束，保留原目录和journal；通过DSH管理器移除旧包、安装新包，保持原namespace（默认desktop）、主机、workdir、operation_key及创建参数。旧 `.cosmesh-dsh` journal兼容，不删除项目／会话／关联。回退通过管理器移除新包、重装保留的旧包；不删除资料。安装与升级须明确选择新版本目录，保留旧包回退。
+
 ## 完全访问
 
 推荐在用户授权后为 DSH 会话选择 Full access（完全访问），方便在不同项目目录共用个人工作资料。这会放开该会话的本机文件写限制；具体工作继续按用户要求执行，Thread 默认私人，明确分享后公开。
