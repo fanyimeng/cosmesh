@@ -423,6 +423,24 @@ class Workbench:
         from .spaces import connection, rpc
         config = self.client.get('connection') if not (ssh or service) else None
         config = config or connection(self.base.root, ssh, service)
+        # A migrated Hub exposes scoped online views, never legacy whole-repository discovery.
+        try: info = rpc(config, {'method':'thread_access_info'})
+        except Error as exc:
+            if exc.code not in {'INPUT_INVALID','COMMAND_DENIED','FEATURE_UNAVAILABLE'}: raise
+            info = None
+        if info and info.get('unified'):
+            actor = info.get('actor')
+            if info.get('protocol')!='thread.access.v1' or not isinstance(actor,str) or not USER.fullmatch(actor) or info.get('person',{}).get('account')!=actor:
+                raise Error('SYNC_PROTOCOL','Thread discovery did not return a verified account.')
+            if self.client.get('actor') and actor!=self.client['actor']:
+                raise Error('AUTH_DENIED','The configured Hub account changed; use a separate local data directory.')
+            if self.client.get('hub_id') and self.client['hub_id']!=info['hub_id']:
+                raise Error('STATE_CONFLICT','Use a separate local data directory for another Hub.')
+            self.client.setdefault('retired_spaces',{}).update(self.client['spaces'])
+            self.client.update(connection=config,actor=actor,hub_id=info['hub_id'],spaces={},community_enabled=True)
+            self.save_client();self.load()
+            return {'actor':actor,'hub_id':info['hub_id'],'ready':True,'mode':'thread_access',
+                    'spaces':[],'legacy_caches_retained':True,'content_downloaded':False}
         reply = rpc(config, 'ensure_threads')
         actor = reply.get('actor')
         if not isinstance(actor, str) or not USER.fullmatch(actor):

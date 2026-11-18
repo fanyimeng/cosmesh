@@ -129,6 +129,22 @@ class MessageTests(TrackingTests):
         self.assertEqual(self.command('bob','search','银盘结构')['hits'],[])
         with self.assertRaises(Error):self.command('bob','browse',tid,'--changes',first,'--snapshot',second)
 
+    def test_upgrade_discovery_connects_without_copying_threads(self):
+        tid=self.work('Existing local work')
+        wb=self.wbs['alice'];before=wb.base.head
+        wb.load();spaces=dict(wb.client['spaces'])
+        result=self.command('alice','discover')
+        self.assertTrue(result['ready']);self.assertFalse(result['content_downloaded'])
+        wb.load();self.assertEqual(wb.base.head,before);self.assertEqual(wb.client['spaces'],{})
+        self.assertEqual(wb.client['retired_spaces'],spaces)
+        self.assertEqual(wb.find(tid)['doc']['meta']['id'],tid)
+        self.assertTrue(self.command('alice','discover')['ready'])
+        # Fresh clients only register the verified endpoint; no remote Thread is imported.
+        root=self.root/'fresh-client';initialize(root,'new-local-alias');fresh=Workbench(root)
+        fresh.client['connection']=self.connection('alice');fresh.save_client()
+        self.assertTrue(self.command(fresh,'discover')['ready'])
+        fresh.load();self.assertFalse(fresh.catalog)
+
     def test_quota_defaults_and_legacy_message_read_state(self):
         from cosmesh.transfer_policy import PERSONAL,PUBLIC,GB,effective,PREVIOUS,WIDE_046
         self.assertEqual((PERSONAL['auto_file'],PERSONAL['batch_bytes'],PERSONAL['server_bytes']),(5*GB,10*GB,30*GB))
