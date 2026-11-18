@@ -1,0 +1,38 @@
+{
+  "schema": "cosmesh.components.v1",
+  "components": [
+    {
+      "id": "dsh-connector",
+      "title": "CosMesh DSH Connector",
+      "source": "dsh-connector",
+      "kind": "dsh-bundle",
+      "status": "released",
+      "version": "0.1.1",
+      "installation": "dsh-plugin-manager",
+      "requires": {
+        "cosmesh": ">=0.4.7",
+        "dsh": "0.2.2-rc.3"
+      },
+      "default_action": "initialize-and-wait",
+      "scope": "current-host-private-thread",
+      "alias": "dsh",
+      "package": "@cosmesh/dsh-connector",
+      "releases": {
+        "0.1.0": {
+          "archive_sha256": "1244a796012630ccbdfd5ee3332342ea07a2e490901e54d2638c1ca236eb16d1",
+          "requires": {
+            "cosmesh": ">=0.4.7",
+            "dsh": "0.2.2-rc.3"
+          }
+        },
+        "0.1.1": {
+          "archive_sha256": "3a46b1222a33a69906621da3df17d87a321ecff61e64b0015c1cbd62895def81",
+          "requires": {
+            "cosmesh": ">=0.4.7",
+            "dsh": "0.2.2-rc.3"
+          }
+        }
+      }
+    }
+  ]
+}

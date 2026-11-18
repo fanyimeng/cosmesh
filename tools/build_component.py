@@ -23,7 +23,7 @@ def sha(data):
 
 
 def build(component_id, output, root=ROOT):
-    catalog = json.loads((root / 'components/catalog.json').read_text(encoding='utf-8'))
+    catalog = json.loads((root / 'cosmesh/resources/components.json').read_text(encoding='utf-8'))
     matches = [c for c in catalog['components'] if c['id'] == component_id]
     if len(matches) != 1:
         raise ValueError('Unknown or ambiguous component: ' + component_id)
@@ -115,12 +115,12 @@ def build(component_id, output, root=ROOT):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('component', nargs='?', help='ID from components/catalog.json')
+    parser.add_argument('component', nargs='?', help='ID from the packaged component catalog')
     parser.add_argument('--list', action='store_true', help='Read the source component catalog only')
     parser.add_argument('--output', type=Path, default=ROOT / 'dist/components')
     args = parser.parse_args()
     if args.list:
-        print((ROOT / 'components/catalog.json').read_text(encoding='utf-8'))
+        print((ROOT / 'cosmesh/resources/components.json').read_text(encoding='utf-8'))
     elif args.component:
         print(json.dumps(build(args.component, args.output), ensure_ascii=False))
     else:

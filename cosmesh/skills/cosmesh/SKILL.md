@@ -49,6 +49,8 @@ thread search QUERY 搜索当前可见 Thread，--messages 搜索本人收发消
 
 ## 本人账号、宿主与入口
 
+可选宿主组件由 component list/status/install/update/rollback 管理，独立版本、按需安装。先 component status dsh；用户授权安装后，完成初始化并退出目标宿主，再 install/update dsh --host-stopped，已有显式 profile/DSH_HOME 保持。使用现有软件发布源；--artifact/--offline 支持固定包。回执 installed 与运行生效分开，重启后从 DSH 核对。失败保留 pending，用原命令重试或 rollback；不手改 profile，不删除旧包、日志或资料。细节 guide show components。
+
 user me/list/show 读取实名目录；user set-name NAME --expect VERSION 只修改本人真实姓名。Profile 联系方式与偏好保持私人。服务器 DSH 是本人个人客户端；发布源负责软件分发，Hub 负责中转与权限，三者分别配置。client hub --service FILE 设置默认 Hub，已有显式连接保持。
 
 需要在 DSH 自动创建原生项目与新会话时，可选 DSH Connector；先看 guide show dsh，不因普通续接自动安装或改 profile。仅用户明确要求新开会话且宿主提供 cosmesh_open_work 时调用，默认一轮初始化确认后等待，会产生模型请求并将接续背景送入所选模型；不开展实际研究。同操作键恢复原请求，initialize:false仅建空白会话（未选中时可能隐藏）。目录／Session登记不等于宿主已创建或已执行，部分成功按回执报告。组件仍为独立发布组件，CLI/Skill安装不附带启用。

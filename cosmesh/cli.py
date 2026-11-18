@@ -170,6 +170,20 @@ def parser(product):
     doctor.add_argument("--agent", choices=AGENTS)
     doctor.add_argument("--dest")
     command(commands, "capabilities", "capabilities")
+    components = command(commands, 'component').add_subparsers(dest='component_command', required=True)
+    command(components, 'list', 'component.list')
+    for verb in ('status', 'install', 'update', 'rollback'):
+        cp = command(components, verb, 'component.' + verb)
+        cp.add_argument('component', nargs='?', default='dsh', help='Component name or alias; default dsh')
+        cp.add_argument('--profile', default='desktop', help='Existing DSH profile')
+        cp.add_argument('--component-root', help='Separate component software/cache directory')
+        if verb != 'status':
+            cp.add_argument('--dsh-cli', help='Absolute official DSH CLI executable')
+            cp.add_argument('--host-stopped', action='store_true', help='Confirm initialization has ended and the target host is stopped')
+        if verb in ('install', 'update'):
+            cp.add_argument('--version', help='Select a pinned compatible component version')
+            cp.add_argument('--artifact', help='Local pinned bundle.zip or its containing directory')
+
     clients = command(commands, 'client').add_subparsers(dest='client_command', required=True)
     command(clients, 'check', 'client.check')
     command(clients, 'update', 'client.update')
@@ -327,7 +341,8 @@ def capabilities(product):
             'document_semantics': {'project': 'context', 'task': 'action', 'update': 'record'},
             "thread_schema_version": 2, "schema_versions": [1, 2, 3], "knowledge_schema_version":3,"primary_model": "thread",
             "coordination": {"default": "personal_agents", "delegation": "ordinary_request", "requires_server_agent": False},
-            "features": {"threads": True, "thread_requests": True, "thread_shared_references": True,
+            "features": {"component_management": True, "component_runtime_activation": "host_owned",
+                         "threads": True, "thread_requests": True, "thread_shared_references": True,
                          "personal_sharing": True, "personal_relay_protocol": 1, "personal_background_sync": False,
                          "thread_personal_protocol": "thread.personal.v1", "thread_personal_restore": True,
                          "legacy_personal_commands": "retired",
@@ -453,6 +468,9 @@ def execute(args, product):
         from .spaces import run
         return run(args.space_command, root_for(product, getattr(args, 'root', None)),
                    args.ssh, args.service, getattr(args, 'user', None)), None
+    if action.startswith('component.'):
+        from .components import execute as execute_component
+        return execute_component(args)
     if action.startswith('client.'):
         if action == 'client.mode':
             from .preferences import mode
@@ -757,7 +775,7 @@ def main(argv=None, product="cosmesh"):
     sync_state = {"state": "local_only", "source_revision": revision, "remote_revision": None,
                   "last_sync_at": None, "identity_verified": False}
     try:
-        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'invite.', 'space.', 'thread.', 'library.','user.','search.')):
+        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'component.', 'invite.', 'space.', 'thread.', 'library.','user.','search.')):
             root = root_for(product, getattr(args, "root", None))
             sync_state = state(Store(root), revision)
     except (Error, OSError, ValueError):
@@ -775,7 +793,7 @@ def main(argv=None, product="cosmesh"):
                 sync_state = workbench.status()
         except (Error, OSError, ValueError):
             pass
-    client_action = 'args' in locals() and args.action.startswith(('client.', 'invite.', 'space.', 'library.','user.','search.','personal.'))
+    client_action = 'args' in locals() and args.action.startswith(('client.', 'component.', 'invite.', 'space.', 'library.','user.','search.','personal.'))
     if 'args' in locals() and (args.action in {'thread.check','thread.chat'} or (args.action=='thread.read' and args.repo!='local') or
                               (args.action in {'thread.overview', 'thread.page', 'thread.list'} and args.scope == 'mesh')):
         # The shared envelope must not reveal private workbench roots, counts or bindings, including on errors.

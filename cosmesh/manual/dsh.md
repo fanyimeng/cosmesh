@@ -16,7 +16,9 @@ DSH 与 Codex、OpenCode 共用同一套 CosMesh 程序、工作台与一份标�
 
 ## 可选 DSH Connector（独立组件）
 
-标准 Skill 让 Agent 使用 CosMesh CLI；原生项目／新会话自动创建由独立可选组件 `@cosmesh/dsh-connector` 提供。两者不互相替代。组件目前位于源码项目的 `components/dsh-connector/`，独立版本；源码已独立发布，未发布到 npm 或 CLI 更新渠道，不随 0.4.7 CLI、pip 或 skills install 自动安装。
+0.4.8 提供统一入口：component list/status/install/update/rollback。安装或更新前完成初始化并退出目标宿主，然后用 component install dsh --host-stopped；启动 DSH 后核对运行版本。详见 guide show components。0.4.7 及更早客户端可沿下述宿主插件流程操作。
+
+标准 Skill 让 Agent 使用 CosMesh CLI；原生项目／新会话自动创建由独立可选组件 `@cosmesh/dsh-connector` 提供。两者不互相替代。组件目前位于源码项目的 `components/dsh-connector/`，独立版本；源码已独立发布，未发布到 npm；使用 component install 显式安装，不随 CLI、pip 或 skills install 自动启用。
 
 适配边界为 DSH 0.2.2-rc.3、CosMesh CLI 0.4.7+。组件复用本人已经安装的 CLI；不自带Python环境，业务仍需CLI可用。默认入口为本人home下 `.local/opt/cosmesh/bin/cosmesh`，自定义安装须由插件配置提供绝对cliPath，不通过模型工具参数接受任意命令。
 

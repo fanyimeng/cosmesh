@@ -399,9 +399,15 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
     if old_skill.exists() and 'cosbase' not in (state or {}).get('skills', {}):
         plan['preserved_unmanaged_skills'] = [str(old_skill)]
     plan["session_hint"] = "请新开 Agent 会话加载统一 CosMesh Skill；原数据保留。"
-    if meta['version'] in ('0.4.0', '0.4.2', '0.4.4', '0.4.5', '0.4.6', '0.4.7') and plan['from'] != plan['to'] and meta.get('wheel'):
+    notice = None
+    if plan['from'] != plan['to'] and meta.get('wheel'):
         with zipfile.ZipFile(release / meta['wheel']) as wheel:
-            notice = wheel.read('cosmesh/manual/upgrade.md').decode('utf-8')
+            member = 'cosmesh/manual/upgrade.md'
+            if member in wheel.namelist():
+                text = wheel.read(member).decode('utf-8')
+                if text and re.search(r'(?<![0-9.])' + re.escape(meta['version']) + r'(?![0-9.])', text.splitlines()[0]):
+                    notice = text
+    if notice:
         plan['update_notice'] = {'version':meta['version'], 'document':notice,
             'read_hint':'升级已完成。请向用户完整展示此更新说明，保留醒目标题和符号；说明本次新增能力、主动开启的共享边界、原数据保留，以及新开 Agent 会话。',
             'reopen':'cosmesh guide show upgrade --json'}

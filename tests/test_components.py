@@ -16,7 +16,8 @@ class ComponentPackagingTests(unittest.TestCase):
     def fixture(self, root):
         component = root / 'components/dsh-connector'
         component.mkdir(parents=True)
-        (root / 'components/catalog.json').write_text(json.dumps({'components': [{'id': 'dsh-connector', 'source': 'dsh-connector'}]}))
+        (root / 'cosmesh/resources').mkdir(parents=True)
+        (root / 'cosmesh/resources/components.json').write_text(json.dumps({'components': [{'id': 'dsh-connector', 'source': 'dsh-connector'}]}))
         files = ['index.js', 'cordis.patch.yml', 'locale', 'icon.svg']
         (component / 'package.json').write_text(json.dumps({'name': '@test/connector', 'version': '0.1.0', 'files': files}))
         (component / 'locale').mkdir()
@@ -48,7 +49,8 @@ class ComponentPackagingTests(unittest.TestCase):
         from cosmesh import guide
         doc = guide.document('dsh')
         self.assertIn('可选 DSH Connector（独立组件）', doc['text'])
-        self.assertIn('不随 0.4.7 CLI', doc['text'])
+        self.assertIn('component install', doc['text'])
+        self.assertIn('不随 CLI', doc['text'])
         self.assertIn('initialize:false', doc['text'])
         self.assertIn('cosmesh_open_work', doc['text'])
         for section in doc['sections']:

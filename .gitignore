@@ -20,7 +20,6 @@
 !/components/
 /components/*
 !/components/README.md
-!/components/catalog.json
 !/components/dsh-connector/
 /components/dsh-connector/*
 !/components/dsh-connector/package.json

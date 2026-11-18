@@ -24,7 +24,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release: **0.4.7**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release: **0.4.8**. Requires Python 3.9+ and Git; targets macOS and Linux.
 
 Use your configured Hub channel to update an existing installation. GitHub publishes source and version tags; build a matching fixed package locally with `tools/build_release.py`, or use a maintainer-provided package. See [installation and upgrades](docs/quickstart.md#installation-and-rollback--安装与回退).
 
@@ -66,7 +66,9 @@ For an independent user installation or upgrade, use a release package from GitH
 
 ## Optional host components
 
-The [DSH Connector](<components/README.md>) is a separately versioned, optional Host bundle for native Project/Session creation and one initialization-only acknowledgement. It is a **independent release**, not part of the 0.4.7 Python release or a published npm package. Installing the CLI or standard Skill does not install or enable it. Install explicitly through DSH's plugin manager after checking compatibility; ordinary CLI/Hub use remains independent of DSH.
+The [DSH Connector](<components/README.md>) is a separately versioned, optional Host bundle for native Project/Session creation and one initialization-only acknowledgement. It is an **independent release**, distributed separately from the Python CLI and not published to npm. Installing the CLI or standard Skill does not install or enable it. Install explicitly through DSH's plugin manager after checking compatibility; ordinary CLI/Hub use remains independent of DSH.
+
+CosMesh 0.4.8 provides unified `component list/status/install/update/rollback` commands, independent pinned releases and resumable rollback. See the [component guide](cosmesh/manual/components.md).
 
 ## Development
 

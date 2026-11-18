@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.8
+
+Released 2026-11-18. DSH Connector remains independently versioned at 0.1.1.
+
+- Add unified optional component list/status/install/update/rollback commands with host compatibility checks and pinned bundles.
+- Read independent component versions from the configured software release source; retain original bundles, profile backups and resumable installation records.
+- Keep installation and runtime activation distinct. Thread data and Hub permissions are unchanged.
+
 
 ## DSH Connector 0.1.1
 

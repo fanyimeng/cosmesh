@@ -10,6 +10,10 @@ CosMesh 保存工作身份与私人执行关联；连接器通过宿主接口操
 
 ## Build and install / 构建与安装
 
+CosMesh 0.4.8 provides `cosmesh component list/status/install/update/rollback` as the unified entry point. See the [component guide](<../cosmesh/manual/components.md>). Installation remains explicit and uses DSH's official CLI after the target host has stopped. The installed CLI does not carry or automatically activate Node bundles.
+
+The packaged [catalog](<../cosmesh/resources/components.json>) is the canonical compatibility baseline. A software release source can publish the same format at `components/catalog.json` with new pinned versions. Existing version digests and compatibility requirements remain immutable. This permits connector updates independently of a Python CLI release. Fixed ZIPs live at `components/dsh-connector-VERSION/bundle.zip` on that source.
+
 From the source checkout, with Python 3.9+:
 
 ```sh
@@ -37,7 +41,7 @@ plugin_manager({action: "install_bundle", target: "<absolute install_directory>"
 
 ## Architecture / 分层
 
-- [Catalog](<catalog.json>): the source component list, not a background service or remote registry.
+- [Catalog](<../cosmesh/resources/components.json>): the source component list, not a background service or remote registry.
 - [Host-independent work-link module](<dsh-connector/lib/work-link.js>): host-independent input validation, idempotency journal and step orchestration. The adapter supplies native operations, records and initialization content; no DSH imports belong here.
 - [CosMesh adapter](<dsh-connector/lib/cosmesh.js>): bounded CLI calls, private Thread validation and existing binding/update commands. No new Thread data format or Hub endpoint.
 - [DSH adapter](<dsh-connector/lib/dsh.js>): native Workspace/Session operations, durability, initialization admission and target-scoped tool guards.
