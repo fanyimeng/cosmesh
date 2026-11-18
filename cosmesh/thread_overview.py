@@ -78,7 +78,7 @@ def with_continuation(wb, view, value, mine=False):
         raise Error('INPUT_INVALID', 'Continuation includes private execution metadata; use a private overview.')
     pool = [item for item in wb.catalog.values() if item['doc']['meta']['kind'] == 'thread' and
             (view['scope'] != 'base' or item['repo'] == 'local') and
-            (not mine or item['doc']['meta']['author'] == (wb.config['user'] if item['repo'] == 'local' else wb.user))]
+            (not mine or item['doc']['meta']['author'] == wb.author_for(item))]
     from .thread_names import matches as alias_match
     matches = [item for item in pool if item['doc']['meta']['id'].startswith(value) or alias_match(wb,item,value)]
     if len(matches) != 1:
@@ -218,7 +218,7 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
     selected = []
     pool = [item for item in wb.catalog.values() if item['doc']['meta']['kind'] == 'thread' and
             (scope != 'base' or item['repo'] == 'local') and (scope != 'mesh' or item['repo'] != 'local') and
-            (not mine or item['doc']['meta']['author'] == (wb.config['user'] if item['repo'] == 'local' else wb.user))]
+            (not mine or item['doc']['meta']['author'] == wb.author_for(item))]
     if value:
         from .thread_names import matches as alias_match
         pool = [item for item in pool if item['doc']['meta']['id'].startswith(value) or alias_match(wb,item,value)]

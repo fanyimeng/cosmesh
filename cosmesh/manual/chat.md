@@ -1,53 +1,27 @@
-# 交互摘要与对话串
+# 消息、按人收录与检索
 
-请求、回应、承接、进展和交付由提交方个人 Agent 写简洁的交互摘要：说明做了什么、结果如何、还缺什么。两三句话是简洁程度的建议，可以按事情稍长。摘要与正文属于同一条版本化记录，沿用作者、请求关联、贡献信息与服务器同步，不新增 IM 消息实体或公共模型。
-
-## 写入摘要
+消息正文是发送者本人 Thread 中的普通版本化记录。Hub 保存固定记录引用、投递回执与各接收者的查看状态；回应写入回应者自己的 Thread。发送前校验接收者对来源 Thread 的当前查看权限，消息不会自动改权限。
 
 ```sh
-cosmesh thread request THREAD_ID --to REAL_NAME --body '必要的详细需求' \
-  --interaction-summary '请补齐说明与报告，保留固定版本引用。代码提供仓库和 commit。' --sync --ready
-cosmesh thread reply REQUEST_ID --file detail.md \
-  --interaction-summary '报告已入库，引用已补。代码仓库仍待补充。' --sync --ready
+cosmesh thread send OWN_THREAD --to USER --body '内容' --json
+cosmesh thread request OWN_THREAD --to USER --body '请求' --json
+cosmesh thread reply MESSAGE_ID --thread OWN_THREAD --body '回应' --json
+cosmesh thread inbox --json
+cosmesh thread outbox --json
+cosmesh thread chat --with USER --plain
+cosmesh thread mail show MESSAGE_ID --offset 0 --chars 8000 --json
+cosmesh thread mail mark MESSAGE_ID --seen --json
+cosmesh thread search '关键词' --messages --with USER --json
 ```
 
-也可 --interaction-summary-file FILE。摘要以普通正文中的“交互摘要”部分保存，详细正文保留在“正文”部分；同一提交方的同一记录保存两者。服务端接受后其他客户端即可读取，旧 Hub 无需新协议。生成工具与模型已知时 --generation-file 如实登记；不附完整 Agent 聊天。旧记录不改写，缺摘要显示“旧记录摘录”，原文与固定版本继续可读。
+send 支持重复 --to、--record RECORD_ID 选已有记录、--kind result 交付成果说明。仅选定记录进入投递，不顺带公开其他私人草稿。收件箱默认消息；--view requests 只筛请求，--unread 只筛未读，--before 使用返回的固定窗口游标。列表、搜索和展开原文都不标已读，明确 mark --seen/--unseen 修改本人标记。已接受与已查看分开；对方撤权后不再提供正文或索引命中。
 
-## 按人查看最近五轮
+首次读取新的有效来信时，自动复用按 Hub／用户 ID 登记的本人私人 Thread；没有登记且名称无冲突时，以发信人实名建立。第二设备恢复同一 ID。已有同名但未确认身份的 Thread 时提示选择，不自动合并，可用 thread track USER --use ID 明确关联。新入口只恢复本人收信 Thread，不下载发信人的完整 Thread。收录只追加消息固定引用，个人笔记保留；按人工作清单继续排除对方全员可见 Thread。全员可见 Thread 中明确发给本人的消息仍进收件箱。
 
-```sh
-cosmesh thread chat --with REAL_NAME --json
-cosmesh thread chat --with REAL_NAME --require-fresh --json
-cosmesh thread chat --with REAL_NAME --before NEXT_CURSOR --json
-cosmesh thread chat --with REAL_NAME --date YYYY-MM-DD --json
-```
+--local-only 或 --offline 保存草稿。随后以相同输入发送，复用同一记录；不确定是否投递成功时同输入重试，保持操作键，Hub 不重复投递。确需再次发送相同内容时提供新的 --idempotency-key。离线回复可用 send OWN_THREAD --to USER --reply-to MESSAGE_ID --local-only。当前收件箱和搜索需要联网核验权限，离线可读本人已保存资料。私人物品和草稿不因收信自动公开。
 
---with 接受唯一实名、账号或稳定用户 ID，只读取双方在共享 Thread 中实际关联的请求与回应。默认五轮，--rounds 1–20 可调；与五条记录区分。全局按时间排序，同话题、同一人的连续补充合并为一次发言，随后对方接话构成一轮；切换话题另起一轮，单方轮次保留，不制造回应。parts 保留每条原记录、固定版本和更正入口。业务上的待处理、已回应、已承接、已交付和已采用分别显示，单方轮次不代表请求未回应或未交付。
+thread search QUERY 搜索当前有权查看的 Thread 内容；加 --messages 搜索自己的收发消息。结果带 Thread、记录、固定版本、快照及摘要位置。消息用 mail show 读取；Thread 用 browse THREAD --snapshot REVISION --record RECORD --version VERSION --offset OFFSET 按需展开。全文索引首次查询按需建立，后续只更新变化记录，未变化版本复用；当前权限始终先于命中结果。
 
-每条显示实名、本人设置时区的时间、Thread 短名和状态。--date 使用该时区的日历日期。公开进展用 --include-progress 明确纳入，并标“共享进展”，不显示成发给自己的私聊。
+thread browse THREAD --changes PREVIOUS_REVISION 返回变化的记录、文件清单和新 revision。后续页同时传 --snapshot REVISION 与 next_offset，固定同一增量窗口；完成后再保存新的 revision。无变化返回 unchanged，不重复传正文或文件。正文按固定版本读取，原件明确选择才下载。个人同步沿用内容摘要去重、三方合并和历史保护；元数据快照仍整体提交，文件分块传输并复用已接受对象。
 
-next_cursor 固定到本次派生视图，向前读取只返回更早轮次，不重复刚才部分；同一日期／进展范围继续使用同一游标。新消息不混入已展开的旧窗口。重新不带游标读取查看最新，--require-fresh 同次拉取一次。缓存失效明确 VIEW_EXPIRED，可重新查看最近五轮。视图和游标只在私人临时缓存，不是新的权威消息或永久会话。
-
-## Thread、终端和聊天界面
-
-```sh
-cosmesh thread chat THREAD_ID --json
-cosmesh thread chat REQUEST_ID --json
-cosmesh thread chat --with REAL_NAME
-cosmesh thread chat --with REAL_NAME --tui
-cosmesh thread chat --with REAL_NAME --plain
-```
-
-指定 Thread 默认最近30条交互，可 --offset/--limit 查历史；指定请求只读该请求与实际回应。原文按消息 ID 通过 thread show/context 展开，材料按固定引用 library open。摘要视图不下载附件或校验原件。
-
-实际终端默认 TUI：🔵 他人在左，🔴 自己在右，中文按显示宽度换行。↑↓滚动，j/k选择消息，Enter读取该条或合并补充的正文，p读更早五轮，r明确刷新，q退出。--plain 输出相同的左右排版，适合日志或聊天窗口内的纯文本块；--json 给 Skill 有界摘要和固定来源，每段文字只返回一份。聊天中直接展示这些摘要、保留作者与顺序，已有概括够用就结束，不重新读全文再写一份。
-
-总览仍用 thread page --ready；合并查看请求及资料登记状态可用 thread check；收件箱用 thread inbox --ready。相关参数见 guide show pages。
-
-## 高频操作的预存与抓取
-
-个人总览的完整回执、按人最近五轮对话在内容更新后准备，查询直接读成品。写入／拉取后由最长45秒的有限后台程序局部更新；请求命中不加载工作台，不读完整记录或附件。更新未完成时可显示上次成品并标“正在更新”，等待用户进一步命令。
-
-启用新版 Hub 后，共享内容更新会触发服务器公共对话成品准备。按人查询 --require-fresh 一次 RPC 读取预存 JSON，无 Git fetch、知识库原件或 Agent 额外往返；客户端私人缓存取回结果，下次普通查看直接读取。服务器只准备已接受的共享内容，私人 Thread 总览与项目／会话绑定留在本机。服务器 SQLite 在机器本地，成品 JSON/文本在 Hub 的派生 views 目录，权威来源仍是原有记录和固定版本。
-
-首次缓存、旧 Hub 或显式详细操作保留有界回退。服务器准备中如实返回更新标记，不自动抓完整仓库来补满答案。个人 Agent 收到请求立即选择短入口、展示够用成品，等用户下一步命令；不顺手打开文件、查全量回链或重复验证成功写入。
+历史消息迁入时保留旧消息 ID、固定来源与显式查看标记，不把旧消息当新提醒或批量建人名 Thread。未曾明确查看的历史消息保持未知查看状态。旧多人追加、分配、采用等投递入口退役；普通结果记录和历史来源保留。软件回退不删除新消息账本与索引。

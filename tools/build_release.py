@@ -114,7 +114,7 @@ def main():
     ~/.local/opt/cosmesh/bin/cosmesh self status
     ~/.local/opt/cosmesh/bin/cosmesh --version
 
-首次建立工作台（0.2 的 Thread 模型）：
+首次初始化本地 Thread 数据：
 
     ~/.local/opt/cosmesh/bin/cosmesh thread init --json
 

@@ -21,14 +21,18 @@ def initialize(hub, limits=None):
         if set(limits)-set(DEFAULTS): raise Error('INPUT_INVALID','Unknown personal transfer limit.')
         for key,value in limits.items(): policy[key]=integer(value,2**63-1,1)
     save_json(path,policy)
+    if limits:save_json(directory/'policy-overrides.json',sorted(limits))
     return {'enabled':True,'limits':policy,'public':False}
 
 
 class Relay:
     def __init__(self, hub, actor):
         self.hub=hub
+        self.actor=actor
         self.policy=read_json(hub.root/'personal-v1/policy.json')
         if self.policy is None: raise Error('FEATURE_UNAVAILABLE','This Hub has not enabled personal relay v1.')
+        from .transfer_policy import effective
+        self.policy=effective(self.policy,read_json(hub.root/'personal-v1/policy-overrides.json',[]))
         self.owner=digest(actor.encode())
         self.root=private_dir(hub.root/'personal-v1'/self.owner)
         self.blobs=private_dir(self.root/'blobs')
@@ -42,6 +46,12 @@ class Relay:
             'personal_put':{'method','sha','offset','data'},
             'personal_get':{'method','sha','offset'},
             'personal_commit':{'method','workspace','sha','expect'},
+            'personal_thread_list':{'method'},
+            'personal_thread_head':{'method','thread'},
+            'personal_thread_commit':{'method','thread','sha','expect'},
+            'personal_execution_list':{'method'},
+            'personal_execution_head':{'method','thread'},
+            'personal_execution_commit':{'method','thread','sha','expect'},
         }
         method=payload.get('method')
         if method not in allowed or set(payload)!=allowed[method]:
@@ -60,6 +70,10 @@ class Relay:
                     CREATE TABLE IF NOT EXISTS heads(workspace TEXT PRIMARY KEY,sha TEXT);
                     CREATE TABLE IF NOT EXISTS history(workspace TEXT,sha TEXT,at REAL,UNIQUE(workspace,sha));
                     CREATE TABLE IF NOT EXISTS traffic(at REAL,bytes INTEGER);
+                    CREATE TABLE IF NOT EXISTS thread_heads(thread TEXT PRIMARY KEY,sha TEXT,title TEXT);
+                    CREATE TABLE IF NOT EXISTS thread_history(thread TEXT,sha TEXT,at REAL,UNIQUE(thread,sha));
+                    CREATE TABLE IF NOT EXISTS execution_heads(thread TEXT PRIMARY KEY,sha TEXT,title TEXT);
+                    CREATE TABLE IF NOT EXISTS execution_history(thread TEXT,sha TEXT,at REAL,UNIQUE(thread,sha));
                     CREATE INDEX IF NOT EXISTS traffic_time ON traffic(at);''')
                 with db:
                     db.execute('DELETE FROM traffic WHERE at < ?', (time.time()-86400,))
@@ -74,11 +88,23 @@ class Relay:
 
     def run(self, db, method, p):
         if method=='personal_info':
-            return {'protocol':'personal.v1','limits':self.policy,
+            return {'protocol':'personal.v1','thread_protocol':'thread.personal.v1','execution_protocol':'thread.execution.v1','limits':self.policy,
+                    'access_protocol':'thread.access.v1' if self.hub.community() else None,
+                    'unified':self.hub.settings().get('format')==2,
                     'stored_bytes':db.execute('SELECT COALESCE(SUM(size),0) FROM blobs').fetchone()[0],
                     'traffic_bytes':db.execute('SELECT COALESCE(SUM(bytes),0) FROM traffic').fetchone()[0]}
         if method=='personal_list':
             return {'workspaces':[dict(r) for r in db.execute('SELECT * FROM heads ORDER BY workspace')]}
+        if method in {'personal_thread_list','personal_execution_list'}:
+            table='execution_heads' if method=='personal_execution_list' else 'thread_heads'
+            return {'threads':[dict(r) for r in db.execute('SELECT * FROM '+table+' ORDER BY thread')], 'audience':'owner'}
+        if method in {'personal_thread_head','personal_thread_commit','personal_execution_head','personal_execution_commit'}:
+            from .thread_protocol import identifier
+            tid=identifier(p['thread'],'W')
+            table='execution_heads' if method.startswith('personal_execution_') else 'thread_heads'
+            current=db.execute('SELECT sha FROM '+table+' WHERE thread=?',(tid,)).fetchone()
+            head=current['sha'] if current else None
+            if method.endswith('_head'): return {'thread':tid,'sha':head}
         if method in {'personal_head','personal_commit'}:
             workspace=check_id(p['workspace'])
             current=db.execute('SELECT sha FROM heads WHERE workspace=?',(workspace,)).fetchone()
@@ -141,6 +167,10 @@ class Relay:
             with safe_path(final).open('rb') as stream: stream.seek(offset);raw=stream.read(count)
             if len(raw)!=count: raise Error('CHECKSUM_MISMATCH','Stored object size differs; retain local sources.')
             return {'sha':sha,'size':row['size'],'offset':offset,'data':base64.b64encode(raw).decode()}
+        if method=='personal_thread_commit':
+            return self.commit_thread(db,p,head,row,final)
+        if method=='personal_execution_commit':
+            return self.commit_execution(db,p,head,row,final)
         if p['expect'] is not None: check_id(p['expect'],HASH)
         if head==sha: return {'workspace':workspace,'sha':sha,'accepted':True,'replayed':True}
         if head!=p['expect']: raise Error('PERSONAL_CONFLICT','Personal workspace advanced; pull and merge before retrying.')
@@ -163,3 +193,51 @@ class Relay:
         db.execute('INSERT OR REPLACE INTO heads VALUES(?,?)',(workspace,sha))
         db.execute('INSERT OR IGNORE INTO history VALUES(?,?,?)',(workspace,sha,time.time()))
         return {'workspace':workspace,'sha':sha,'accepted':True,'replayed':False}
+
+    def commit_thread(self,db,p,head,row,final):
+        from .thread_personal_protocol import validate_manifest,protect_history
+        if p['expect'] is not None: check_id(p['expect'],HASH)
+        if head==p['sha']: return {'thread':p['thread'],'sha':head,'accepted':True,'replayed':True}
+        if head!=p['expect']: raise Error('PERSONAL_CONFLICT','Thread advanced; synchronize this Thread again.')
+        if row['size']>MAX_METADATA: raise Error('INPUT_TOO_LARGE','Thread manifest exceeds its limit.')
+        raw=final.read_bytes()
+        if digest(raw)!=p['sha']: raise Error('CHECKSUM_MISMATCH','Thread manifest checksum differs.')
+        value=json.loads(raw)
+        model=validate_manifest(value,Store(self.root/'validation'))
+        if value['thread']!=p['thread']: raise Error('POLICY_DENIED','Selected Thread differs from the manifest.')
+        if head: protect_history(json.loads((self.blobs/head).read_bytes()),value)
+        for asset in value['assets'].values():
+            if asset['blob']:
+                found=db.execute('SELECT size,complete FROM blobs WHERE sha=?',(asset['blob'],)).fetchone()
+                if not found or not found['complete'] or found['size']!=asset['size']:
+                    raise Error('SOURCE_PENDING','Selected file must be accepted in this owner space first.')
+                reason=content_reason(self.blobs/asset['blob'],asset['name'],asset['science'])
+                if reason: raise Error('TRANSFER_FILTERED','Selected file rejected: '+reason)
+        title=model.docs[p['thread']]['meta']['title']
+        db.execute('INSERT OR REPLACE INTO thread_heads VALUES(?,?,?)',(p['thread'],p['sha'],title))
+        db.execute('INSERT OR IGNORE INTO thread_history VALUES(?,?,?)',(p['thread'],p['sha'],time.time()))
+        return {'thread':p['thread'],'sha':p['sha'],'accepted':True,'replayed':False}
+
+    def commit_execution(self,db,p,head,row,final):
+        from .thread_execution_protocol import validate,protect
+        from .protocol import decode
+        if p['expect'] is not None: check_id(p['expect'],HASH)
+        if head==p['sha']: return {'thread':p['thread'],'sha':head,'accepted':True,'replayed':True}
+        if head!=p['expect']: raise Error('PERSONAL_CONFLICT','Private execution information advanced; retry this Thread.')
+        if row['size']>MAX_METADATA: raise Error('INPUT_TOO_LARGE','Private execution metadata exceeds its limit.')
+        raw=final.read_bytes()
+        if digest(raw)!=p['sha']: raise Error('CHECKSUM_MISMATCH','Execution manifest checksum differs.')
+        value=json.loads(raw);validate(value)
+        if value['thread']!=p['thread']: raise Error('POLICY_DENIED','Selected Thread differs from the execution manifest.')
+        if head: protect(json.loads((self.blobs/head).read_bytes()),value)
+        source=value['source'];policy=self.hub.policy(source['repo'],self.actor)
+        if not policy.get('thread_format') or policy['owner']!=source['owner']:
+            raise Error('REFERENCE_INVALID','The public Thread repository differs from its declared source.')
+        doc=self.hub.repo(source['repo']).git('show','refs/heads/main:documents/'+p['thread']+'.md',check=False)
+        if doc.returncode: raise Error('REFERENCE_UNAVAILABLE','Publish the Thread before syncing private execution information.')
+        doc=decode(doc.stdout)
+        if doc['meta']['kind']!='thread' or doc['meta']['id']!=p['thread']:
+            raise Error('REFERENCE_INVALID','The source is not the selected public Thread.')
+        db.execute('INSERT OR REPLACE INTO execution_heads VALUES(?,?,?)',(p['thread'],p['sha'],doc['meta']['title']))
+        db.execute('INSERT OR IGNORE INTO execution_history VALUES(?,?,?)',(p['thread'],p['sha'],time.time()))
+        return {'thread':p['thread'],'sha':p['sha'],'accepted':True,'replayed':False}

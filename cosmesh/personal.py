@@ -1,19 +1,17 @@
-"""Local references and opt-in personal workbench replicas; old stores stay schema 2."""
+"""Account transport and local file references, independent of Thread synchronization."""
 import base64
 import hashlib
-import json
 import os
 import socket
-import tempfile
 from pathlib import Path
 from uuid import uuid4
 
 from .errors import Error
-from .store import Store, atomic, safe_path
-from .threads import Workbench
-from .personal_protocol import (CHUNK, DEFAULTS, HASH, MAX_METADATA, check_id, digest,
-    fingerprint, inspect_file, integer, merge_maps, packed, private_dir, read_json,
-    save_json, sha_file, validate_snapshot, content_reason)
+from .store import atomic, safe_path
+from .transfer_policy import effective
+from .personal_protocol import (CHUNK, DEFAULTS, HASH, MAX_METADATA, check_id,
+    fingerprint, inspect_file, integer, private_dir, read_json,
+    save_json, sha_file, content_reason)
 
 
 def initialize(wb, device=None):
@@ -48,24 +46,25 @@ class Personal:
     def __init__(self, wb):
         self.wb=wb;self.root=wb.base.path('.cosmesh/personal-v1')
         self.state=read_json(self.root/'state.json')
-        if not self.state: raise Error('PERSONAL_NOT_ENABLED','Run personal init for this workbench first.')
+        if not self.state: raise Error('PERSONAL_NOT_ENABLED','Select a Thread with thread personal ID, or register a file with personal asset add ID FILE.')
         if self.state.get('format')!=1: raise Error('SCHEMA_UNSUPPORTED','Unsupported personal sidecar; original workbench is retained.')
         self.cache=private_dir(self.root/'cache');self.staging=private_dir(self.root/'staging')
-        pending=read_json(self.root/'apply.json')
-        if pending:
-            self._apply(pending)
+        if (self.root/'apply.json').exists():
+            raise Error('LEGACY_RECOVERY_REQUIRED','An old whole-store restore is unfinished. Complete it with the retained old version before using Thread sync; its journal is preserved.')
 
     def save(self): save_json(self.root/'state.json',self.state)
 
     def cache_room(self,additional):
+        from .transfer_policy import effective
+        policy=effective(self.state['policy'],self.state.get('policy_overrides',[]))
         used=sum(p.stat().st_size for p in self.cache.iterdir() if p.is_file())
-        if used+additional>self.state['policy']['cache_bytes']:
+        if used+additional>policy['cache_bytes']:
             raise Error('STORAGE_QUOTA','Local personal cache quota reached; original files are retained.')
 
     def rpc(self,payload):
         from .spaces import rpc
         config=self.state['connection']
-        if not config: raise Error('HUB_CONNECTION_REQUIRED','Connect this personal workbench to an enabled relay.')
+        if not config: raise Error('HUB_CONNECTION_REQUIRED','Use thread personal ID with your existing Hub connection.')
         reply=rpc(config,payload)
         if reply.get('actor')!=self.state['actor']:
             raise Error('AUTH_DENIED','Personal relay identity changed; retain all local sources.')
@@ -73,7 +72,7 @@ class Personal:
 
     def connect(self,ssh=None,service=None):
         from .spaces import connection,rpc
-        config=connection(self.wb.base.root,ssh,service)
+        config=connection(self.wb.base.root,ssh,service) if ssh or service else self.wb.client.get('connection') or connection(self.wb.base.root)
         try: reply=rpc(config,{'method':'personal_info'})
         except Error as exc:
             if exc.code in {'INPUT_INVALID','COMMAND_DENIED'}:
@@ -81,25 +80,25 @@ class Personal:
             raise
         if reply.get('protocol')!='personal.v1' or not isinstance(reply.get('actor'),str):
             raise Error('FEATURE_UNAVAILABLE','Server does not support personal relay v1.')
+        if self.wb.client.get('actor') and self.wb.client['actor']!=reply['actor']:
+            raise Error('AUTH_DENIED','Personal relay identity differs from the existing Thread client.')
         if self.state['connection'] and (config!=self.state['connection'] or reply['actor']!=self.state['actor']):
-            raise Error('STATE_CONFLICT','Use a separate workbench for another relay or identity.')
+            raise Error('STATE_CONFLICT','Another Hub or identity needs a separate local data directory.')
         self.state.update(connection=config,actor=reply['actor']);self.save()
         return {'connected':True,'actor':reply['actor'],'limits':reply['limits'],'audience':'owner'}
 
     def limits(self):
         remote=self.rpc({'method':'personal_info'})['limits']
-        return {k:min(v,remote[k]) for k,v in self.state['policy'].items()}
+        from .transfer_policy import effective
+        return {k:min(v,remote[k]) for k,v in effective(self.state['policy'],self.state.get('policy_overrides',[])).items()}
 
-    def status(self):
-        return {'mode':'personal','audience':'owner','workspace':self.state['workspace'],
-                'device':self.state['device'],'replica':self.state['replica'],
-                'connected':bool(self.state['connection']),'accepted_snapshot':self.state['base'],
-                'asset_count':len(self.state['assets']),'policy':self.state['policy'],
-                'automatic_background':False}
-
-    def add(self,tid,path,science=False):
+    def add(self,tid,path,science=False,relative_path=None):
         item=self.wb.find(tid,'thread')
-        if item['repo']!='local': raise Error('POLICY_DENIED','This first-stage personal workspace registers private Thread assets.')
+        tid=item['doc']['meta']['id']
+        if item['repo']!='local': raise Error('POLICY_DENIED','Register files on a private Thread; public attachments use thread share.')
+        if relative_path is not None:
+            from .thread_files import portable_path
+            relative_path=portable_path(relative_path)
         path=Path(path).expanduser().absolute()
         info=path.stat()
         existing=next((key for key,row in self.state['assets'].items() if row['thread']==tid and
@@ -110,19 +109,21 @@ class Personal:
         elif not existing:
             self.state['assets'][aid]={'name':path.name,'thread':tid,'device':self.state['device'],
                 'path':str(path),'science':science,'blob':None,'size':info.st_size}
+        if relative_path is not None:self.state.setdefault('asset_paths',{})[aid]=relative_path
         self.save()
-        return {'id':aid,'state':'local_reference','path':str(path),'copied_bytes':0,'transfer_limits_applied':False}
+        return {'id':aid,'state':'local_reference','path':str(path),'copied_bytes':0,'transfer_limits_applied':False,
+                'relative_path':self.state.get('asset_paths',{}).get(aid,path.name)}
 
     def plan(self,ids=None,explicit=False):
-        limits=self.state['policy']; rows=[];total=0;count=0
+        from .transfer_policy import effective
+        limits=effective(self.state['policy'],self.state.get('policy_overrides',[])); rows=[];total=0;count=0
         selected=list(self.state['assets']) if ids is None else ids
         for aid in selected:
             row=self.asset(aid);reason=None
-            if row['device']!=self.state['device']:
-                result={'reason':'other_source_device','bytes':row['size']}
-            else:
-                try: result=inspect_file(row['path'],limits['explicit_file' if explicit else 'auto_file'],row['science'])
-                except (OSError,Error) as exc: result={'reason':getattr(exc,'code','file_unavailable')}
+            try:
+                path=self.source_path(aid)
+                result=inspect_file(path,limits['explicit_file' if explicit else 'auto_file'],row['science'])
+            except (OSError,Error) as exc: result={'reason':getattr(exc,'code','file_unavailable'),'bytes':row['size']}
             reason=result.get('reason')
             if not reason:
                 if count>=limits['batch_files'] or total+result['bytes']>limits['batch_bytes']: reason='batch_limit'
@@ -130,6 +131,15 @@ class Personal:
             rows.append({'id':aid,'name':row['name'],'state':'skipped' if reason else 'eligible',
                          'reason':reason,'bytes':result.get('bytes')})
         return {'files':rows,'bytes':total,'files_eligible':count,'explicit':explicit}
+
+    def source_path(self,aid):
+        row=self.asset(aid);copy=self.state.get('asset_copies',{}).get(aid)
+        if copy and copy['device']==self.state['device']:
+            if copy['blob']!=row['blob']:
+                raise Error('LOCAL_FILE_DIVERGED','The server file advanced beyond this local copy; preserve and reconcile it before upload.')
+            return copy['path']
+        if row['device']==self.state['device']:return row['path']
+        raise Error('other_source_device','This device has no registered source file.')
 
     def asset(self,aid):
         check_id(aid)
@@ -158,7 +168,7 @@ class Personal:
         finally: self.state['policy']=local_policy
         for entry in plan['files']:
             if entry['reason']: continue
-            row=self.asset(entry['id']);path=safe_path(row['path']);before=path.stat()
+            row=self.asset(entry['id']);path=safe_path(self.source_path(entry['id']));before=path.stat()
             staged=self.staging/(entry['id']+'.part')
             h=hashlib.sha256();size=0
             try:
@@ -176,7 +186,9 @@ class Personal:
                 reason=content_reason(staged,row['name'],row['science'])
                 if reason:raise Error('TRANSFER_FILTERED','Frozen file rejected: '+reason)
                 sha=h.hexdigest();self.upload(staged,sha,size)
-                row.update(blob=sha,size=size);self.save()
+                row.update(blob=sha,size=size,device=self.state['device'],path=str(path),name=path.name)
+                self.state.setdefault('asset_copies',{})[entry['id']]={'device':self.state['device'],'path':str(path),'blob':sha}
+                self.save()
                 entry.update(state='server_available',sha=sha)
             finally: staged.unlink(missing_ok=True)
         return plan
@@ -193,7 +205,7 @@ class Personal:
             part.chmod(0o600)
             while size is None or offset<size:
                 reply=self.rpc({'method':'personal_get','sha':sha,'offset':offset})
-                observed=integer(reply.get('size'),MAX_METADATA if metadata else self.state['policy']['explicit_file'])
+                observed=integer(reply.get('size'),MAX_METADATA if metadata else effective(self.state['policy'],self.state.get('policy_overrides',[]))['explicit_file'])
                 if size is not None and size!=observed: raise Error('SYNC_PROTOCOL','Download size changed.')
                 size=observed
                 if reply.get('sha')!=sha or reply.get('offset')!=offset: raise Error('SYNC_PROTOCOL','Download object or offset changed.')
@@ -209,6 +221,14 @@ class Personal:
 
     def open(self,aid,offline=False):
         row=self.asset(aid)
+        copy=self.state.get('asset_copies',{}).get(aid)
+        if copy and copy['device']==self.state['device']:
+            path=safe_path(copy['path'])
+            if path.is_file() and path.stat().st_size==row['size'] and sha_file(path)==row['blob']:
+                return {'id':aid,'state':'local_available','path':str(path),'sha':row['blob'],'bytes':row['size'],'project_files_overwritten':False}
+            if path.is_file():
+                return {'id':aid,'state':'local_reference','path':str(path),'sha':None,'version':'mutable_source',
+                        'base_sha':copy['blob'],'server_sha':row['blob'],'copied_bytes':0}
         if row['device']==self.state['device'] and Path(row['path']).exists():
             return {'id':aid,'state':'local_reference','path':row['path'],'copied_bytes':0,
                     'version':'mutable_source','sha':None}
@@ -218,87 +238,3 @@ class Personal:
         path=self.download(row['blob'],row['size'])
         return {'id':aid,'state':'local_available','path':str(path),'sha':row['blob'],'bytes':row['size'],
                 'project_files_overwritten':False}
-
-    def snapshot(self):
-        _,files=self.wb.base.snapshot()
-        bindings=dict(self.state['bindings'])
-        bindings[self.state['replica']]={'device':self.state['device'],
-            'bindings':self.wb.client.get('bindings',[]),'project_bindings':self.wb.client.get('project_bindings',[])}
-        from .thread_protocol import references
-        from .protocol import encode
-        sources=read_json(self.root/'sources.json',{})
-        pending=[ref for doc in self.wb._models['local'][2].docs.values() for ref in references(doc['meta']) if ref['repo']=='local']
-        seen=set()
-        while pending:
-            ref=pending.pop();key=ref['id']+'@'+ref['version']
-            if key in seen:continue
-            seen.add(key);doc=self.wb.resolve(ref);sources[key]=encode(doc)
-            pending.extend(r for r in references(doc['meta']) if r['repo']=='local')
-        result={'format':1,'files':files,'assets':self.state['assets'],'bindings':bindings,'sources':sources}
-        validate_snapshot(result,self.wb.base)
-        return result
-
-    def _apply(self,pending):
-        value=pending['snapshot'];validate_snapshot(value,self.wb.base)
-        _,current=self.wb.base.snapshot()
-        if self.wb.base.head!=pending['before'] and current!=value['files']:
-            raise Error('RECOVERY_REQUIRED','Personal apply was interrupted and local work advanced; preserve the recovery journal.')
-        changes={k:v for k,v in value['files'].items() if current.get(k)!=v}
-        if set(current)-set(value['files']): raise Error('HISTORY_PROTECTED','Personal sync cannot remove source files.')
-        if changes: self.wb.base.commit(changes,'personal-sync')
-        save_json(self.root/'sources.json',value['sources'])
-        self.state.update(assets=value['assets'],bindings=value['bindings'],base=pending['base'])
-        self.save();(self.root/'apply.json').unlink(missing_ok=True);self.wb.load()
-        from .status_pages import schedule
-        schedule(self.wb)
-
-    def sync(self,pull=False,files=False):
-        transfers=self.push() if files and not pull else None
-        workspace=self.state['workspace']
-        head=self.rpc({'method':'personal_head','workspace':workspace})['sha']
-        local=self.snapshot()
-        remote=json.loads(self.download(head,metadata=True).read_bytes()) if head else None
-        if remote: validate_snapshot(remote,self.wb.base)
-        previous=self.state['base']
-        intent=read_json(self.root/'upload-intent.json')
-        if intent and head==intent.get('sha') and workspace==intent.get('workspace'):
-            # A reply may be lost after acceptance, followed by more local work.
-            # Merge from that exact accepted candidate instead of guessing from time.
-            previous=head
-        base=json.loads(self.download(previous,metadata=True).read_bytes()) if previous else None
-        if previous and not head: raise Error('HISTORY_PROTECTED','Previously accepted personal workspace is missing.')
-        merged=local
-        if remote:
-            if base is None:
-                if remote!=local: raise Error('PERSONAL_CONFLICT','Join the existing personal workspace in an empty workbench.')
-            else:
-                merged={'format':1,**{k:merge_maps(base[k],local[k],remote[k]) for k in ('files','assets','bindings','sources')}}
-        validate_snapshot(merged,self.wb.base)
-        raw=packed(merged).encode()
-        if len(raw)>MAX_METADATA: raise Error('INPUT_TOO_LARGE','Personal snapshot metadata exceeds its limit.')
-        accepted=head
-        if not pull:
-            sha=digest(raw);path=self.cache/sha
-            if not path.exists():
-                self.cache_room(len(raw));atomic(path,raw.decode());path.chmod(0o600)
-            self.upload(path,sha,len(raw))
-            save_json(self.root/'upload-intent.json',{'workspace':workspace,'sha':sha,'expect':head})
-            self.rpc({'method':'personal_commit','workspace':workspace,'sha':sha,'expect':head})
-            accepted=sha
-        pending={'before':self.wb.base.head,'snapshot':merged,'base':accepted}
-        save_json(self.root/'apply.json',pending);self._apply(pending)
-        (self.root/'upload-intent.json').unlink(missing_ok=True)
-        return {'workspace':workspace,'accepted_snapshot':accepted,'pulled':bool(head),
-                'published':False,'personal_uploaded':not pull,'transfers':transfers,'assets_fetched':0}
-
-    def join(self,workspace):
-        check_id(workspace)
-        if self.state['base'] or self.state['assets'] or self.wb.catalog:
-            raise Error('STORE_EXISTS','Join requires an empty initialized Thread workbench; existing work stays separate.')
-        head=self.rpc({'method':'personal_head','workspace':workspace})['sha']
-        if not head: raise Error('NOT_FOUND','Personal workspace is unavailable for this account.')
-        value=json.loads(self.download(head,metadata=True).read_bytes());validate_snapshot(value,self.wb.base)
-        self.state['workspace']=workspace;self.save()
-        pending={'before':self.wb.base.head,'snapshot':value,'base':head}
-        save_json(self.root/'apply.json',pending);self._apply(pending)
-        return {'workspace':workspace,'accepted_snapshot':head,'files_downloaded':0,'joined':True}

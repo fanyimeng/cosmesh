@@ -56,7 +56,7 @@ def update(wb, args, body, key=None, dry=False):
             wb.generation = {k: PRIVATE_PATH.sub('〔私人定位省略〕', v) for k, v in wb.generation.items()}
     kind = args.kind
     refs = [wb.citation(r) for r in args.ref]
-    author = wb.config['user'] if repo == 'local' else wb.user
+    author = wb.author_for(item)
     digest = hashlib.sha256(json.dumps([tid, author, kind, body.strip(), refs], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     # Author/content comparison also catches a fresh invocation with a different operation key.
     existing = next((r for r in reversed(wb.records(tid)) if r['doc']['meta']['type'] == kind and

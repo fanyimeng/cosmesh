@@ -83,6 +83,18 @@ def open_file(kb,value,offline=False,launch=False):
     if offline and not blob.is_file():raise Error('CONTENT_NOT_CACHED','Open this file once while connected before using it offline.')
     if offline and (blob.stat().st_size!=file['size'] or hashlib.sha256(blob.read_bytes()).hexdigest()!=file['sha256']):
         raise Error('CHECKSUM_MISMATCH','The offline cached original differs from its recorded checksum.')
+    if file['size']>20*1024*1024:
+        import shutil
+        from .personal_protocol import sha_file, private_dir
+        source=kb.download_path(file['sha256'],file['size'],offline)
+        directory=private_dir(Path(tempfile.gettempdir())/('cosmesh-open-'+str(os.geteuid()))/ref['id']/ref['version'])
+        target=safe_path(directory/name)
+        if target.exists() and sha_file(target)!=file['sha256']:raise Error('PATH_CONFLICT','Opened copy changed; preserve it and choose a new download path.')
+        if not target.exists():
+            with source.open('rb') as src,target.open('xb') as out:shutil.copyfileobj(src,out,256*1024)
+            target.chmod(0o600)
+        if launch:raise Error('EXPLICIT_DOWNLOAD_ONLY','Large files are prepared for explicit use; no automatic viewer or execution is started.')
+        return {'path':str(target),'sha256':file['sha256'],'bytes':file['size'],'verified':True,'launched':False}
     raw=kb.download(file['sha256'],file['size'])
     if len(raw)!=file['size'] or hashlib.sha256(raw).hexdigest()!=file['sha256']:
         raise Error('CHECKSUM_MISMATCH','The fixed file differs from its recorded size or checksum.')

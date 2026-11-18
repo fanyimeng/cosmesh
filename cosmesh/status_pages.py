@@ -119,7 +119,7 @@ def stamp(wb):
     public = {'sources': {r: v for r, v in sources.items() if r != 'local'}, 'knowledge': kb,
               'actor': client.get('actor'), 'spaces': client['spaces'], 'last_sync': client.get('last_sync')}
     return {'all': digest([FORMAT, sources, client, kb]),
-            'base': digest([FORMAT, sources, config, client.get('bindings'), client.get('project_bindings'), kb]),
+            'base': digest([FORMAT, sources, config, client.get('bindings'), client.get('project_bindings'), client.get('personal_thread_authors'), kb]),
             'mesh': digest([FORMAT, public])}
 
 
@@ -369,13 +369,14 @@ def rebuild(wb, root):
         for owner in owners:
             display = next((u['name'] for u in users if u['account'] == owner and u['name']), owner)
             for scope in (('all', 'base', 'mesh') if owner == wb.user else ('mesh',)):
-                selected = (wb.config['user'], wb.user) if owner == wb.user else owner
+                selected = (wb.config['user'], wb.user, list(wb.client.get('personal_thread_authors', {}))) if owner == wb.user else owner
                 rows = select_rows(con, scope, selected, False, None, 20, 0)
                 cards = [personal_card(row, scope) for row in rows]
                 for level in LEVELS:
                     save_page(con, root, scope + '/user-' + owner + '/' + level, md_user(display, cards, level, scope != 'mesh'))
         put_meta(con, 'tokens', stamp(wb));put_meta(con, 'users', users)
-        put_meta(con, 'identity', {'local': wb.config['user'], 'actor': wb.user, 'timezone': wb.config['timezone']})
+        put_meta(con, 'identity', {'local': wb.config['user'], 'actor': wb.user, 'timezone': wb.config['timezone'],
+                                  'personal_threads': list(wb.client.get('personal_thread_authors', {}))})
         put_meta(con, 'sync', wb.status());put_meta(con, 'generated_at', now())
         result = {'threads_rebuilt': rebuilt, 'threads_removed': removed, 'users_rebuilt': sorted(owners)}
         put_meta(con, 'last_update', result)
@@ -393,12 +394,12 @@ def prepare_products(root):
         tokens=meta(con,'tokens');identity=meta(con,'identity');users=meta(con,'users',[])
         sync=meta(con,'sync');generated=meta(con,'generated_at')
         for scope in ('all','base','mesh'):
-            rows=select_rows(con,scope,(identity['local'],identity['actor']),False,None,20,0)
+            rows=select_rows(con,scope,(identity['local'],identity['actor'],identity.get('personal_threads',[])),False,None,20,0)
             cards=[personal_card(row,scope) for row in rows]
             name=next((u['name'] for u in users if u['account']==identity['actor'] and u['name']),identity['actor'])
             body=md_user(name,cards,'brief',scope!='mesh')
             value={'target':'user','scope':scope,'private':scope!='mesh','level':'brief','threads':cards,'offset':0,
-                   'total':select_rows(con,scope,(identity['local'],identity['actor']),False,None,0,0,count=True),
+                   'total':select_rows(con,scope,(identity['local'],identity['actor'],identity.get('personal_threads',[])),False,None,0,0,count=True),
                    'cache':{'generated_at':generated,'local_sources_current':True,'remote_checked_at':(sync.get('last_sync') or {}).get('at'),
                             'hit':True,'page_version':hashlib.sha256(body.encode()).hexdigest()}}
             value['truncated']=value['total']>len(cards)
@@ -475,7 +476,13 @@ def select_rows(con, scope, user, all_states, query, limit, offset, count=False)
     if scope == 'mesh': where.append("repo!='local'")
     if scope == 'base': where.append("repo='local'")
     if isinstance(user, tuple):
-        where.append("((repo='local' AND author=?) OR (repo!='local' AND author=?))"); values += list(user)
+        own = user[2] if len(user) > 2 else []
+        private = "(repo='local' AND author=?)"
+        values.append(user[0])
+        if own:
+            private = '(' + private + " OR (repo='local' AND id IN (" + ','.join('?' for _ in own) + ')))'
+            values.extend(own)
+        where.append('(' + private + " OR (repo!='local' AND author=?))"); values.append(user[1])
     elif user is not None: where.append('author=?');values.append(user)
     if not all_states: where.append("lifecycle='active'")
     if query: where.append('(instr(lower(title),?)>0 OR instr(lower(card),?)>0)');values += [query.casefold()] * 2
@@ -601,7 +608,7 @@ def read_page(wb, args):
         mine = person == identity['actor']
         if not mine and args.scope != 'mesh':
             raise Error('PRIVATE_REFERENCE', 'Other users have Mesh-only status pages; use --scope mesh.')
-        selected_user = (identity['local'], identity['actor']) if mine else person
+        selected_user = (identity['local'], identity['actor'], identity.get('personal_threads', [])) if mine else person
         page_user = next((u['name'] for u in users if u['account'] == person and u['name']), person)
         request = None
         target = args.id

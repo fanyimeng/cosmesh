@@ -399,7 +399,7 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
     if old_skill.exists() and 'cosbase' not in (state or {}).get('skills', {}):
         plan['preserved_unmanaged_skills'] = [str(old_skill)]
     plan["session_hint"] = "请新开 Agent 会话加载统一 CosMesh Skill；原数据保留。"
-    if meta['version'] in ('0.4.0', '0.4.2') and plan['from'] != plan['to'] and meta.get('wheel'):
+    if meta['version'] in ('0.4.0', '0.4.2', '0.4.4', '0.4.5', '0.4.6', '0.4.7') and plan['from'] != plan['to'] and meta.get('wheel'):
         with zipfile.ZipFile(release / meta['wheel']) as wheel:
             notice = wheel.read('cosmesh/manual/upgrade.md').decode('utf-8')
         plan['update_notice'] = {'version':meta['version'], 'document':notice,

@@ -8,7 +8,7 @@ Agent 按当前问题选择最短入口：总览用 thread page --ready，请求
 
 ## Thread 日常操作
 
-cosmesh thread init 初始化；thread create 新建私人 Thread；thread page --ready 总览；thread update ID --body TEXT 记录进展；thread share ID --sync 明确公开。公开后的 request/reply/deliver 默认尝试发送，--local-only 保存草稿。私人 Thread 发送先显示“⚠️ 尚未发送”，确认公开范围后公开并重试。thread check ID 默认展示状态与待处理人，--details 展开背景和资料。
+cosmesh thread init 初始化；thread create 新建本人 Thread；thread page --ready 本地总览；thread update ID 记进展；thread sync ID 本人同步；thread access ID 管理私有／指定可见／全员可见；thread browse 在线查看；thread track 按人追踪。Library 用 library add --thread THREAD_ID 继承来源权限。旧 thread share 已退役。
 
 ## 程序、能力与数据位置
 
@@ -42,4 +42,4 @@ Task Lead 用 task state T_ID --to STATUS --reason TEXT --expect-revision REV �
 
 --expect VERSION 检查对象内容，--expect-revision REV 检查控制动作来源，来自最近一次读取。一次逻辑操作使用稳定 --idempotency-key；重试沿用原 key 和完整参数。STATE_CONFLICT 先保留输入再重新读取，IDEMPOTENCY_CONFLICT 表示同 key 的内容不同，STORE_DIRTY 表示手改现场需要保留诊断。
 
-私人 Thread 初始化和日常读写均不需要服务器。公开空间首次在线取得缓存后，--offline 明确只用本地，支持查询、创建任务和追加记录；恢复连接后显式 sync。回执提供上次同步时间、remote_revision 和 unpushed_count。网络失败保留提交；同步重试有上限。维护入口用 thread maintenance 查询，新反馈用 thread request --maintenance，--sync 明确发布；详见 feedback 主题。Profile 与说明读取不联系 Hub。
+私人 Thread 初始化和日常读写均不需要服务器。公开空间首次在线取得缓存后，--offline 明确只用本地，支持查询、创建任务和追加记录；恢复连接后显式 sync。回执提供上次同步时间、remote_revision 和 unpushed_count。网络失败保留提交；同步重试有上限。新反馈从本人 Thread 用 thread request OWN_THREAD --to MAINTAINER 发送；详见 feedback 主题。Profile 与说明读取不联系 Hub。

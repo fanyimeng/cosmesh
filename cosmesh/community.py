@@ -40,6 +40,10 @@ class Community:
         path=safe_path(self.root/'catalog.sqlite3')
         db=sqlite3.connect(str(path),timeout=15); db.row_factory=sqlite3.Row
         db.executescript('''PRAGMA synchronous=FULL;
+        CREATE TABLE IF NOT EXISTS resource_links(id TEXT,target TEXT,PRIMARY KEY(id,target));
+        CREATE TABLE IF NOT EXISTS resource_scopes(id TEXT PRIMARY KEY,sources TEXT,independent INTEGER);
+        CREATE TABLE IF NOT EXISTS scoped_snapshots(account TEXT,sha TEXT,epoch TEXT,PRIMARY KEY(account,sha));
+        CREATE TABLE IF NOT EXISTS upload_owners(account TEXT,sha TEXT,PRIMARY KEY(account,sha));
         CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,account TEXT UNIQUE,name TEXT,role TEXT,status TEXT,version TEXT,created TEXT);
         CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE,object TEXT,actor TEXT,person TEXT,action TEXT,at TEXT,payload TEXT,previous TEXT,hash TEXT);
         CREATE TABLE IF NOT EXISTS versions(id TEXT,version TEXT,doc TEXT,PRIMARY KEY(id,version));
@@ -99,7 +103,7 @@ class Community:
         return safe_path(self.root/'blobs'/sha[:2]/sha)
 
     def save_blob(self,raw):
-        if len(raw)>MAX_TOTAL:raise Error('INPUT_TOO_LARGE','Internal archive or catalog payload exceeds 100 MiB.')
+        if len(raw)>MAX_TOTAL:raise Error('INPUT_TOO_LARGE','Internal archive or catalog payload exceeds the configured metadata budget.')
         sha=digest(raw);path=self.blob(sha)
         if not path.exists():
             path.parent.mkdir(exist_ok=True,mode=0o700)
@@ -206,8 +210,8 @@ class Community:
             for f in files:
                 path=self.blob(f['sha256'])
                 if not path.is_file() or path.stat().st_size!=f['size']:raise Error('SOURCE_PENDING','Upload all file content before publishing metadata.')
-                if path.stat().st_size>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose a document up to 20 MiB.')
-                reason=attachment_reason(f['name'],path.read_bytes())
+                if path.stat().st_size>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose a document within the configured file limit.')
+                with path.open('rb') as source:reason=attachment_reason(f['name'],source.read(65536))
                 if reason:raise Error('INPUT_INVALID',f'Attachment {f["name"]} rejected: {reason}. Accepts UTF-8 text/source, PDF, Office and figures.')
                 if f['text_sha256'] and not self.blob(f['text_sha256']).is_file():raise Error('SOURCE_PENDING','Extracted text is missing.')
             refs=v.get('refs',old['meta']['refs'] if old else [])

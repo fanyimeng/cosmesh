@@ -152,7 +152,7 @@ def publish(wb,args,key=None,dry_run=False):
     from .knowledge import Knowledge
     item=wb.find(args.id,'thread');tid=item['doc']['meta']['id']
     if getattr(wb,'generation',None):wb.generation={k:PRIVATE_PATH.sub('〔私人定位省略〕',v) for k,v in wb.generation.items()}
-    if item['doc']['meta']['author'] not in {wb.config['user'],wb.user}:raise Error('AUTH_DENIED','The creator shares the Thread and its supporting materials.')
+    if item['doc']['meta']['author'] not in wb.owned_authors(item):raise Error('AUTH_DENIED','The creator shares the Thread and its supporting materials.')
     requested=bool(args.attach or args.materials or args.resource or args.git or args.commit or args.code_path)
     if args.summary_only and requested:raise Error('INPUT_INVALID','Choose a text-only brief or explicitly selected related files/code.')
     if not requested:

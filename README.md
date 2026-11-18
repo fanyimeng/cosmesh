@@ -7,7 +7,8 @@
 CosMesh gives people and their AI agents a durable workspace beyond a single chat. A **Thread** keeps a piece of work together: context, notes, requests, decisions, and results.
 
 - **Private Threads** — personal work, available offline.
-- **Public Threads** — collaborative work, readable by authenticated users on the same Hub.
+- **Restricted Threads** — owner-controlled access for selected Hub users.
+- **Public Threads** — owner-controlled access for all authenticated users on the same Hub.
 - **Knowledge library** — versioned documents with citations and backlinks to the work that used them.
 
 Your own agent provides the conversation. CosMesh provides Markdown records, Git history, deterministic commands, and explicit synchronization.
@@ -23,9 +24,9 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release: **0.4.0**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release: **0.4.7**. Requires Python 3.9+ and Git; targets macOS and Linux.
 
-Download a ready-made [release package](https://github.com/fanyimeng/cosmesh/releases/tag/v0.4.0) for Apple Silicon / Python 3.9 or Linux x86-64 / Python 3.12. Extract it and run `python3 install.py install --skills cosmesh` with the matching Python. Existing Hub-channel users can ask their agent to “update CosMesh”; see [installation and upgrades](docs/quickstart.md#independent-user-packages--独立用户安装包).
+Use your configured Hub channel to update an existing installation. GitHub publishes source and version tags; build a matching fixed package locally with `tools/build_release.py`, or use a maintainer-provided package. See [installation and upgrades](docs/quickstart.md#installation-and-rollback--安装与回退).
 
 For a source checkout:
 
@@ -48,7 +49,7 @@ Private Threads work immediately without a Hub. For collaboration, connect using
 cosmesh thread discover --ssh your-hub --json
 ```
 
-A compatible Hub must already be configured. Private work stays local. Outbound requests and replies attempt delivery automatically; a private Thread produces a prominent **NOT SENT** warning and guidance to publish it first. Publication requires your approval and makes the formal text readable to authenticated Hub users. Attachments remain opt-in.
+A compatible Hub must already be configured. Personal synchronization preserves the same Thread ID across devices. Choose private, restricted or public visibility explicitly. Messages live in the sender’s own Thread and require recipient access; accepted delivery and explicit read marks remain separate. Files transfer only when selected.
 
 ## Use with your agent
 
@@ -61,7 +62,7 @@ cosmesh skills install --agent codex --only cosmesh --json
 
 Then ask: “Use CosMesh to organize this work. Check existing Threads first and suggest what to continue or create.”
 
-For an independent user installation or upgrade, use a release package from GitHub or your Hub maintainer; see the [quick start](docs/quickstart.md). This repository provides the CLI, one standard Skill, build tools, and an optional in-memory TUI demo. Native Windows, private cross-device sync, and background notifications are future work.
+For an independent user installation or upgrade, use a release package from GitHub or your Hub maintainer; see the [quick start](docs/quickstart.md). This repository provides the CLI, one standard Skill, build tools, and an optional in-memory TUI demo. Private cross-device sync, on-demand viewing, person Threads, message search and version-based change lists are available. Native Windows and background notifications remain future work.
 
 ## Development
 

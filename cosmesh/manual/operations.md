@@ -2,7 +2,7 @@
 
 ## 本地源码与用户安装
 
-源码试用需要 Python 3.9+ 与 Git：在虚拟环境执行 python -m pip install -e .，用 thread init 初始化私人工作台。统一 Skill 可通过 skills install --agent codex --only cosmesh 安装；OpenCode 使用 --agent opencode，DeepSeek Harness 使用 --agent dsh。DSH 的完全访问与核验流程见 dsh 主题。以宿主实际发现和调用结果判断是否可用。
+源码试用需要 Python 3.9+ 与 Git：在虚拟环境执行 python -m pip install -e .，用 thread init 初始化私人 Thread 数据。统一 Skill 可通过 skills install --agent codex --only cosmesh 安装；OpenCode 使用 --agent opencode，DeepSeek Harness 使用 --agent dsh。DSH 的完全访问与核验流程见 dsh 主题。以宿主实际发现和调用结果判断是否可用。
 
 维护者用 tools/build_release.py 构建当前平台的固定包。用户解压后运行 python3 install.py install --skills cosmesh，默认程序位于 ~/.local/opt/cosmesh，统一 Skill 位于 ~/.agents/skills。--prefix 和 --skills-dir 可选择独立预览位置。
 
@@ -10,9 +10,9 @@
 
 ## 自托管 Hub
 
-Hub 由维护者配置兼容程序、受控身份入口、服务发现和共享存储。用户用自己已有的 SSH 别名执行 thread discover --ssh ALIAS；首次共享写入前本人填写姓名。默认服务发现位置为 /srv/cosmesh/service.json；COSMESH_SERVICE 可选择其他路径。
+Hub 由维护者配置兼容程序、受控身份入口、服务发现和共享存储。个人客户端用 client hub 设置默认服务，使用本人 SSH 身份；首次共享写入前本人填写姓名。默认服务发现位置为 /srv/cosmesh/service.json；COSMESH_SERVICE 可选择其他路径。
 
-私人 Thread 可独立离线运行；已缓存的公开 Thread 可离线读写。request/reply/deliver 等发送动作默认尝试提交，--local-only 保存草稿；其他变更用 --sync 或 thread sync 发布，thread sync --pull 和 --require-fresh 只拉取。Mesh 对该 Hub 的所有已核验用户公开读取，原作者和请求动作权限继续约束写入。
+本人 Thread 可离线读写，个人同步用 thread sync ID；查看他人 Thread 用 thread browse。权限用 thread access，Library 继承来源。旧公共 Git、旧版在线消息和旧成品接口在迁移后关闭，历史内容仍保留。
 
 发布工具的 --root、网关工具的 --base 和安装脚本的 --source/--bootstrap 可配置部署目录。远端引导程序使用服务器 PATH 中的 python3，其版本应匹配所发布的 Linux 包。发布目录可读，Hub 数据与维护控制入口由维护者管理；共享 home 的节点共用同一用户程序与数据，并通过 POSIX lockf 协调写入。
 
@@ -26,7 +26,7 @@ Hub 由维护者配置兼容程序、受控身份入口、服务发现和共享�
 
 AUTH_DENIED 检查已核验账号和权限。STATE_CONFLICT 刷新 context 并保留原输入。STORE_DIRTY 保留手工修改与恢复日志。IDEMPOTENCY_CONFLICT 要核对同键输入，避免换键重复写入。
 
-系统意见使用 thread request --maintenance 保存普通请求，默认尝试提交到维护 Thread；维护者登记方法见 feedback 主题。旧 feedback 队列保留兼容。未核验远端接受时，只说明已存本地。具体命令以当前 --help 和 guide 为准。
+系统意见写入本人 Thread，以 thread request OWN_THREAD --to MAINTAINER 发送；先明确授予维护者查看权限。旧 feedback 队列保留兼容。未核验远端接受时，只说明已存本地。具体命令以当前 --help 和 guide 为准。
 
 ## 备份与恢复
 
@@ -37,3 +37,18 @@ AUTH_DENIED 检查已核验账号和权限。STATE_CONFLICT 刷新 context 并�
 0.4 只安装 cosmesh Skill，原 cosbase 命令保留兼容。跨版本升级使用正常 `client update --json` 或新包的 `python3 install.py upgrade --prefix PREFIX`；0.3 自带的 self upgrade 安装器不具备 Skill 退役能力，应使用新包安装器。开发候选不进入 stable 渠道。
 
 托管 cosbase Skill 自动备份并停用；有自定义内容时备份完整资源，在回执报告位置，按需合并。用户文档、私人 Thread、Profile 与加密字段、项目／Session 绑定不搬迁。回退恢复旧 Skill，升级中断自动恢复原入口。未托管或符号链接副本保留并报告；新开 Agent 会话加载统一 Skill。
+
+## 统一 Thread 与 Library 的离线迁移
+
+先停止全部主／从网关与写入进程，使用当前新版管理端预览：
+
+```sh
+cosmesh hub migrate-threads --hub-root PATH --json
+cosmesh hub migrate-threads --hub-root PATH --apply --gateways-stopped --json
+```
+
+首步建立 Hub 与外置 Library 的独立 sources.tar 备份，再设置格式2屏障。原仓库不删除，所有已接受旧 Thread 按原 ID、原创建者迁入访问层，仍为全员可见；没有把私人未发布记录自动公开。原私人快照、绑定、资产及历史保留，拥有者流合并保全。Library 根据来源引用、共享资料索引及归档建立继承。无来源旧独立资料保持公开。
+
+中断时屏障维持维护状态，运行同一命令续跑；完成重试返回原回执。完成后再启动新版网关。程序升级与内容迁移是两个明确步骤，客户端不代管理员执行。
+
+旧版客户端程序可回退读取本人本地资料；旧 Hub 程序看到格式2会拒绝服务，保护新权限。不要自动恢复旧 hub.json 或旧访问目录以继续对外运行。需要审阅原状态时，在隔离目录从备份提取，只做离线核验；重新升级新版服务继续使用完整新数据。恢复旧访问范围必须另行决定，不能把软件回退等同权限回退。

@@ -13,7 +13,8 @@ from uuid import uuid4
 
 from cosmesh.errors import Error
 from cosmesh.hub import Hub
-from cosmesh.personal import Personal,initialize
+from cosmesh.personal import initialize
+from tests.legacy_personal import Personal
 from cosmesh.personal_protocol import CHUNK,DEFAULTS,digest,packed,save_json
 from cosmesh.personal_relay import Relay,initialize as enable
 from cosmesh.threads import Workbench,initialize as init_work
@@ -298,7 +299,7 @@ class PersonalGatewayTests(unittest.TestCase):
     start=_fixture.start
     stop=_fixture.stop
 
-    def test_real_gateway_cli_owner_relay_and_ssh_proxy(self):
+    def test_real_gateway_cli_selected_thread_and_ssh_proxy(self):
         enable(self.hub)
         def run(*arguments):
             result=subprocess.run([str(self.entry),*arguments,'--json'],capture_output=True,text=True)
@@ -308,13 +309,15 @@ class PersonalGatewayTests(unittest.TestCase):
         a=self.folder/'a';b=self.folder/'b'
         for root in (a,b):
             run('thread','init','--root',str(root))
-            run('personal','init','--root',str(root),'--device-id',uuid4().hex)
-            run('personal','connect','--root',str(root),'--service',str(self.discovery))
+            wb=Workbench(root)
+            with wb.base.locked(): wb.load();initialize(wb,uuid4().hex)
         tid=run('thread','create','--root',str(a),'--title','本人内核身份')['id']
         path=self.folder/'result.csv';path.write_bytes(b'col\n'+b'1\n'*(CHUNK//2))
         aid=run('personal','asset','add',tid,str(path),'--root',str(a))['id']
-        result=run('personal','sync','--files','--root',str(a))
-        run('personal','join',result['workspace'],'--root',str(b))
+        result=run('thread','personal',tid,'--files','--root',str(a),'--service',str(self.discovery))
+        run('thread','fetch',tid,'--root',str(b),'--service',str(self.discovery),
+            '--workdir',str(self.folder),'--agent','dsh')
+        self.assertEqual(result['thread'],tid)
         opened=run('personal','asset','open',aid,'--root',str(b))
         self.assertEqual(Path(opened['path']).read_bytes(),path.read_bytes())
         # Exercise the exact SSH stdlib proxy against the local kernel gateway.

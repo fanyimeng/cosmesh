@@ -1,0 +1,69 @@
+"""Thread-first private relay commands; no whole-store join or upload."""
+from .errors import Error
+from .personal import initialize
+from .thread_personal import ThreadPersonal
+from .thread_execution import ThreadExecution
+from .threads import Workbench
+
+
+def execute(args, root):
+    verb = args.thread_command
+    if getattr(args, 'dry_run', False) or getattr(args, 'require_fresh', False) or getattr(args, 'idempotency_key', None):
+        raise Error('INPUT_INVALID', 'Thread personal sync uses fixed manifest versions; omit dry-run, require-fresh and operation keys.')
+    if getattr(args, 'offline', False) and verb != 'locations':
+        raise Error('OFFLINE', 'This operation requires your private relay.')
+    if verb == 'list' and (not args.personal or not args.remote or args.scope != 'all' or args.mine or args.all or args.lifecycle):
+        raise Error('INPUT_INVALID', 'Use thread list --personal --remote [--query TEXT] for the private server index.')
+    if not root.exists() and verb in {'fetch', 'list'}:
+        from .threads import initialize as init_work
+        from .access import system_user
+        init_work(root, system_user()['user'])
+    wb = Workbench(root)
+    with wb.base.locked():
+        wb.load()
+        if verb == 'locations' and not wb.base.path('.cosmesh/personal-v1/state.json').exists():
+            item = wb.find(args.id, 'thread'); tid = item['doc']['meta']['id']
+            return {'thread': tid, 'private': True, 'sharing': 'local' if item['repo'] == 'local' else 'public', 'personal_sync': 'off',
+                    'bindings': [r for r in wb.client['bindings'] if r['thread'] == tid],
+                    'project_bindings': [r for r in wb.client.get('project_bindings', []) if r['thread'] == tid]}, wb.base.head
+        initialize(wb)
+        personal = ThreadPersonal(wb)
+        if verb != 'locations' and (not personal.state['connection'] or getattr(args, 'ssh', None) or getattr(args, 'service', None)):
+            personal.connect(getattr(args, 'ssh', None), getattr(args, 'service', None))
+        if verb == 'list':
+            info = personal.capability()
+            result = personal.rpc({'method': 'personal_thread_list'})
+            rows = {r['thread']: dict(r, sharing='personal', personal_sync='thread') for r in result['threads']}
+            if info.get('execution_protocol') == 'thread.execution.v1' and not info.get('unified'):
+                for row in personal.rpc({'method': 'personal_execution_list'})['threads']:
+                    rows[row['thread']] = dict(row, sharing='public', personal_sync='execution')
+            result['threads'] = [rows[k] for k in sorted(rows)]
+            if args.query: result['threads'] = [r for r in result['threads'] if args.query.casefold() in r['title'].casefold()]
+        elif verb == 'fetch':
+            known = wb.catalog.get(args.id)
+            info = personal.capability()
+            if info.get('unified'):
+                # Keep old caches on disk for offline history/rollback, detach their
+                # live catalog entries before importing an owner's canonical Thread.
+                try:online=personal.rpc({'method':'thread_access_status','thread':args.id})
+                except Error as exc:
+                    if exc.code!='NOT_FOUND':raise
+                    online={'writable':True}
+                if not online.get('writable'):raise Error('AUTH_DENIED','Use thread browse for another owner; only your own Thread is restored.')
+                wb.client.setdefault('retired_spaces',{}).update(wb.client['spaces'])
+                wb.client['spaces']={};wb.save_client();wb.load();known=wb.catalog.get(args.id)
+            execution = info.get('execution_protocol') == 'thread.execution.v1' and personal.rpc(
+                {'method': 'personal_execution_head', 'thread': args.id})['sha']
+            if not info.get('unified') and (execution or (known and known['repo'] != 'local')):
+                personal = ThreadExecution(wb)
+            result = personal.restore(args.id, args.workdir, args.agent, args.project_id, args.project_name, args.session_id, args.files)
+        else:
+            tid = wb.find(args.id, 'thread')['doc']['meta']['id']
+            if wb.find(tid)['repo'] != 'local' and not personal.capability().get('unified'):
+                personal = ThreadExecution(wb)
+            if verb == 'locations': return personal.locations(tid), wb.base.head
+            result = personal.synchronize(tid, getattr(args, 'pull', False), args.files)
+            if verb == 'sync' and not getattr(args, 'pull', False) and type(personal) is ThreadPersonal and getattr(personal,'server_info',{}).get('access_protocol')=='thread.access.v1':
+                from .thread_access_cli import refresh_published
+                result['access_update'] = refresh_published(wb, personal, tid, result['accepted_snapshot'])
+        return result, wb.base.head

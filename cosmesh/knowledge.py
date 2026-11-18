@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import tempfile
 import subprocess
 import sys
 import unicodedata
@@ -48,7 +50,10 @@ class Knowledge:
     def rpc(self,payload):
         from .spaces import rpc
         connection=self.wb.client.get('connection')
-        if not connection:raise Error('HUB_CONNECTION_REQUIRED','Use thread discover with your existing connection first.')
+        if not connection:
+            from .personal_protocol import read_json
+            from .spaces import connection as default_connection
+            connection=read_json(self.wb.base.path('.cosmesh/personal-v1/state.json'),{}).get('connection') or default_connection(self.wb.base.root)
         return rpc(connection,payload)
 
     def cache_blob(self,raw):
@@ -59,21 +64,36 @@ class Knowledge:
         return sha
 
     @networked
-    def download(self,sha,size):
+    def download_path(self,sha,size,offline=False):
+        from .personal_protocol import sha_file
         path=self.root/sha
-        if path.is_file():
-            raw=path.read_bytes()
-            if len(raw)==size and digest(raw)==sha:return raw
-        data=bytearray()
-        while len(data)<size:
-            part=self.rpc({'method':'community_get','sha256':sha,'offset':len(data)})
-            if part['sha256']!=sha or part['offset']!=len(data) or part['size']!=size:raise Error('SYNC_PROTOCOL','Document source changed during download.')
-            raw=base64.b64decode(part['data'],validate=True)
-            if not raw or len(raw)>CHUNK or len(data)+len(raw)>size:raise Error('SYNC_PROTOCOL','Invalid document chunk.')
-            data.extend(raw)
-        raw=bytes(data)
-        if digest(raw)!=sha:raise Error('CHECKSUM_MISMATCH','Downloaded document checksum differs.')
-        self.cache_blob(raw);return raw
+        cached=path.is_file() and path.stat().st_size==size and sha_file(path)==sha
+        if offline:
+            if not cached:raise Error('CONTENT_NOT_CACHED','A verified local copy is required offline.')
+            return path
+        # Recheck access even when a complete file is already cached.
+        part=self.rpc({'method':'community_get','sha256':sha,'offset':0})
+        if cached:return path
+        fd,tmp=tempfile.mkstemp(prefix='.download-',dir=str(self.root));offset=0;check=hashlib.sha256()
+        try:
+            with os.fdopen(fd,'wb') as out:
+                while True:
+                    if part['sha256']!=sha or part['offset']!=offset or part['size']!=size:raise Error('SYNC_PROTOCOL','Document source changed during download.')
+                    raw=base64.b64decode(part['data'],validate=True)
+                    if (not raw and offset<size) or len(raw)>CHUNK or offset+len(raw)>size:raise Error('SYNC_PROTOCOL','Invalid document chunk.')
+                    out.write(raw);check.update(raw);offset+=len(raw)
+                    if offset==size:break
+                    part=self.rpc({'method':'community_get','sha256':sha,'offset':offset})
+            if check.hexdigest()!=sha:raise Error('CHECKSUM_MISMATCH','Downloaded document checksum differs.')
+            os.replace(tmp,path)
+            return path
+        finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+
+    @networked
+    def download(self,sha,size):
+        if size>32*1024*1024:raise Error('INPUT_TOO_LARGE','Read large originals through a file download, not an in-memory text response.')
+        return self.download_path(sha,size).read_bytes()
 
     @networked
     def refresh(self):
@@ -100,13 +120,14 @@ class Knowledge:
         if sha in self._uploaded or sha in self._known_blobs:return
         path=self.root/sha
         if not path.is_file():raise Error('NOT_FOUND','Local document content is missing.')
-        raw=path.read_bytes()
-        if digest(raw)!=sha:raise Error('CHECKSUM_MISMATCH','Local document changed after registration.')
-        for offset in range(0,max(len(raw),1),CHUNK):
-            reply=self.rpc({'method':'community_put','sha256':sha,'size':len(raw),'offset':offset,'data':base64.b64encode(raw[offset:offset+CHUNK]).decode()})
-            if reply.get('sha256')!=sha or type(reply.get('complete'))is not bool:
-                raise Error('SYNC_PROTOCOL','Upload acknowledgement does not match its file.')
-            if reply['complete']:self._uploaded.add(sha);break
+        from .personal_protocol import sha_file
+        if sha_file(path)!=sha:raise Error('CHECKSUM_MISMATCH','Local document changed after registration.')
+        size=path.stat().st_size
+        with path.open('rb') as source:
+            for offset in range(0,max(size,1),CHUNK):
+                reply=self.rpc({'method':'community_put','sha256':sha,'size':size,'offset':offset,'data':base64.b64encode(source.read(CHUNK)).decode()})
+                if reply.get('sha256')!=sha or type(reply.get('complete'))is not bool:raise Error('SYNC_PROTOCOL','Upload acknowledgement differs.')
+                if reply['complete']:self._uploaded.add(sha);break
 
     @networked
     def apply(self,operation,value,key=None):
@@ -118,6 +139,7 @@ class Knowledge:
     def present(self,doc):
         from .protocol import public
         result=public(doc)
+        if self.data.get('access_scoped'):result['access']=self.data.get('resource_access',{}).get(doc['meta']['id'])
         for field in ('author','maintainer'):
             person=next((x for x in self.data['users'] if x['id']==doc['meta'][field+'_id']),None)
             result[field+'_name']=person['name'] if person else None
@@ -201,15 +223,23 @@ class Knowledge:
         known={(f['sha256'],Path(f['name']).suffix.lower()):f for doc in self.versions.values() for f in doc['meta']['files']}
         for name in paths:
             path=Path(name).expanduser()
-            if not path.is_file() or path.stat().st_size>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose an existing document up to 20 MiB.')
-            raw=path.read_bytes()
-            if len(raw)>MAX_FILE:raise Error('INPUT_TOO_LARGE','Choose a document up to 20 MiB.')
-            reason=attachment_reason(path.name,raw)
-            if reason:raise Error('INPUT_INVALID',f'Attachment {path.name} (suffix {path.suffix or "[none]"}) rejected: {reason}. Accepts UTF-8 text/source, PDF, Office and figures.')
-            sha=self.cache_blob(raw)
+            from .personal_protocol import inspect_file, sha_file
+            checked=inspect_file(path,MAX_FILE)
+            if checked['reason']:raise Error('TRANSFER_FILTERED','Selected file rejected: '+checked['reason'])
+            size=path.stat().st_size;sha=sha_file(path);target=self.root/sha
+            if not target.exists():
+                fd,tmp=tempfile.mkstemp(prefix='.import-',dir=str(self.root))
+                try:
+                    with os.fdopen(fd,'wb') as out,path.open('rb') as source:shutil.copyfileobj(source,out,CHUNK)
+                    if sha_file(tmp)!=sha:raise Error('STATE_CONFLICT','Selected file changed while importing.')
+                    os.replace(tmp,target)
+                finally:
+                    if os.path.exists(tmp):os.unlink(tmp)
             previous=known.get((sha,path.suffix.lower()))
             if previous:
                 files.append({**previous,'name':path.name});continue
+            if size>20*1024*1024 or path.suffix.lower() not in BINARY_DOCUMENTS|{'.md','.txt','.tex','.bib','.csv','.tsv','.json','.py','.sh','.html','.svg'}:
+                files.append({'name':path.name,'sha256':sha,'size':size,'text_sha256':None,'text_status':'not_extracted','extractor':'opaque_storage'});continue
             # Parsing runs in a separate process with a bounded lifetime; originals survive extraction failures.
             try:
                 result=subprocess.run([sys.executable,'-m','cosmesh.knowledge','extract',str(path.resolve())],capture_output=True,text=True,timeout=30)
@@ -217,7 +247,7 @@ class Knowledge:
             except (OSError,ValueError,subprocess.TimeoutExpired):extracted={'status':'failed','text':'','tool':'extractor_timeout'}
             text=extracted['text'].encode()
             if len(text)>MAX_FILE:extracted['status']='truncated';text=text[:MAX_FILE].decode('utf-8',errors='ignore').encode()
-            files.append({'name':path.name,'sha256':sha,'size':len(raw),'text_sha256':self.cache_blob(text) if text else None,
+            files.append({'name':path.name,'sha256':sha,'size':size,'text_sha256':self.cache_blob(text) if text else None,
                           'text_status':extracted['status'],'extractor':extracted['tool']})
         return files
 

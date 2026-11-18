@@ -1,49 +1,15 @@
-# 系统架构
+# Architecture / 架构
 
-## 默认的本地优先接入
+CosMesh is local-first: the user's Agent calls a deterministic CLI, which stores ordinary Markdown records with Git history. A Thread has a stable ID and exactly one owner. Private execution associations record actual devices, Agents, projects, directories and sessions.
 
-用户电脑的 Agent 读取一份标准 Skill，通过本机 CLI 操作私人 Thread、公开 Thread 的 Git 工作副本、Profile 和反馈队列。私人 Thread 不依赖 Hub，公开 Thread 的缓存离线可读写，变更保留为本地提交；对外发送或显式 sync 时通过已有 SSH 登录服务器并由 Hub 核验身份、权限与候选历史。
+Visibility has three values: private, restricted to named Hub users, and public to all authenticated Hub users. Personal synchronization is independent. The owner restores the same Thread on another device; other users browse online and explicitly download selected files. A reader never acquires ownership or write/delegation rights.
 
-通用安装包包含同一应用 wheel、独立安装器和固定依赖摘要锁。local-install.sh 自动选择本机 Python，缺少时在专用目录准备运行时。local_bootstrap.py 取得匹配平台的固定依赖后复用现有版本化安装器。client.py 仅在显式 client check/update 时访问稳定渠道，日常操作不检查网络或更新。
+The Hub authenticates the caller using the existing server/SSH identity boundary. Private relay storage is partitioned by owner. Published snapshots expose records and selected files through current per-Thread authorization, excluding private execution coordinates and operation receipts. Library versions, indexes, search and file reads inherit current source permissions; multiple sources require access to all of them.
 
-服务器账号下的 CLI 同时支持服务器 Agent 的个人客户端操作和现有 SSH 传输的身份入口。软件发布源、Hub 服务、个人客户端是三个角色；个人客户端默认 Hub 用 `client hub` 配置，与安装来源分别保存。DSH 等 Agent 使用本人私人工作台，按需连接 Hub；共享 Hub 由独立服务进程运行。旧 SSH Skill 可选，服务器原私人资料保持原位。Mac 与服务器之间没有自动私人资料迁移。
+Messages are ordinary records in the sender's own Thread. A private delivery ledger references exactly one accepted record version and stores recipients, idempotency and explicit read marks. Replies belong to the responder's own Thread. Recipient visibility is checked before delivery and every subsequent read. Sending a selected record does not publish unrelated private drafts.
 
-## 从交互到持久化的调用路径
+Incoming messages reuse a private person Thread keyed by Hub and stable person ID. If none exists and the name is unambiguous, an ordinary private Thread is created in the recipient's relay and restored locally. Another device restores the same ID. Existing ambiguous names require explicit choice; historical migration does not create a flood of Threads. Person work lists include only restricted shares, while explicitly delivered messages can originate from any authorized Thread.
 
-用户 → 自己的 Agent → 标准 Skill → CLI/JSON → 确定性服务 → 文档仓库。共享操作再经身份入口和 Git 传输到 Hub。Skill 教 Agent 如何使用接口；权限、版本、幂等、历史保护由程序强制执行。
+Text indexes are disposable SQLite/FTS products, incrementally refreshed by record content version. Current permissions constrain candidate scopes before search; results point to fixed records. Version-to-version change lists expose changed record/file metadata, pin the destination snapshot for pagination and stop after revocation. Personal synchronization keeps three-way merging and content-addressed files; changed metadata manifests are still submitted as complete bounded snapshots.
 
-cli.py 解析命令与稳定信封。service.py 管理业务规则、状态重建与视图。protocol.py 处理 Markdown/YAML 和内容版本。store.py 提供 Git 快照、显式文件提交、原子替换、锁与恢复。sync.py 管理有界同步与合并。hub.py 接受并核验候选历史。gateway.py/access.py 取得可信系统身份和传递 Git 字节流。
-
-说明 guide.py 读取安装包内 manual/*.md；Profile 在 profile.py 的私人文件中；系统维护复用普通 Thread 请求；feedback.py 仅兼容旧 outbox、专用缓存与 Update 历史。这些适配复用同一 CLI、发布和身份设施。
-
-## 源记录、状态与快照
-
-每个业务空间是专用 Git 仓库。schema 1 当前把文档放在 documents/ID.md，操作回执位于 .cosmesh/operations。定义与有效 Update 是事实来源，来源 revision 固定一次读取。任务参与关系、状态、日期、Inbox 与 Agenda 从记录重建。
-
-新的本地事务先保存恢复材料，以原子写和显式路径列表生成提交。幂等键在用户和仓库内标识同一操作，版本前提阻止覆盖已变化状态。时间用于呈现；任务控制使用因果链。清除派生结果后仍能从源记录恢复。
-
-共享 Update 被接受后不可修改；回复和更正追加新 Update。两端独立追加可以合并，双方修改同一定义或互斥状态时保留现场。预览 --dry-run 不写入实际变更。
-
-## 系统身份如何核验
-
-用户已通过服务器原有方式登录。Unix domain socket 使用 Linux SO_PEERCRED 或 macOS getpeereid 取得真实进程 UID，再经系统账号库解析。客户端核对服务进程的内核身份、受保护的发现配置和入口标识。环境 USER、YAML author、Git author 或客户端 --user 不能替代核验。
-
-共享 home 的多个节点可作为一台逻辑机器，使用同一用户程序与工作副本；权威 Hub 写入在其数据所在节点执行。跨节点转交通过维护者配置的受控通道核验身份。服务器外客户端复用自己的 SSH 别名，登录现有服务器账号后调用同一身份入口。
-
-旧专用公钥入口保持兼容并承担内部维护转交；只有显式 relay 维护密钥允许转交 UID。普通请求只传仓库与白名单操作。用户无需额外 CosMesh 注册或公钥登记。
-
-## 仓库授权、业务责任与反馈范围
-
-私人工作留在本地，公开仓库及历史对全部已核验用户公开读取。原 writer 与已声明的项目协作者可按业务规则写入，Lead/Member、作者和任务接受仍由 hook 核验。旧版个人文档库保留单一所有者规则。显示名与偏好不改变身份。
-
-系统维护使用已登记的普通共享 Thread；意见、回应、分配、交付与采用均复用 Thread 请求和记录。Hub 配置只保存入口的 repo/ID，不复制正文；作者与请求角色由同一套校验约束。旧 system_feedback 仓库策略仅兼容原历史与队列。
-
-## Hub 接受与恢复
-
-Hub 是维护者私有的 bare Git remote。受控入口只提供状态和指定 Git 操作。pre-receive 检查 main、fast-forward、全部新提交、作者、动作权限、路径、引用、格式和历史；反馈仓库另检查专用元数据与完全追加规则。
-
-每仓库用 POSIX lockf 串行化接受。网关按连接 fork 子进程，保持进程级锁有效。接受前意向与完成日志、实际 ref 用于崩溃后对账。派生结果可重建。网络失败保留本地材料，反馈提交前先持久排队。
-
-## 每账号自动空间
-
-spaces.py 复用既有 SSH/gateway；Hub 根据内核核验的账号幂等准备一个个人 Mesh 仓库，初始化空的 schema 1 源配置。空间控制只有 ensure/list；不提供用户可选的隐私或空间成员机制。客户端缓存本人空间并记住活动 root，其他公开空间按需 fetch。业务普通读写不主动连接网络。
+The software distribution source, Hub administration and a server-hosted personal client are separate roles. Programs and managed Skills are versioned independently of data. Legacy public Git repositories remain as historical originals after an explicit, stopped-gateway migration and backup; format fencing disables old broad read/write paths. Reverting software preserves current permissions and new data. The compatibility modules remain for old formats and rollback, while user guidance uses the unified Thread interfaces.

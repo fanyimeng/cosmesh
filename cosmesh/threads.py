@@ -102,7 +102,7 @@ class Workbench:
                 old = self.catalog.get(doc_id)
                 if old and old['repo'] != 'local' and old['repo'] != repo:
                     raise Error('ID_CONFLICT', 'One Thread record appears in two authoritative spaces.')
-                if old and old['repo'] == 'local' and (repo != self.client.get('own_repo') or doc['meta']['author'] != self.user or old['doc']['meta']['author'] not in {self.config['user'], self.user}):
+                if old and old['repo'] == 'local' and (repo != self.client.get('own_repo') or doc['meta']['author'] != self.user or old['doc']['meta']['author'] not in self.owned_authors(old)):
                     raise Error('ID_CONFLICT', 'Shared identity conflicts with a private record.')
                 self.catalog[doc_id] = {'doc': doc, 'repo': repo, 'store': store}
         # Rebuilt from source records: no mirrored content or synthetic authorship.
@@ -230,16 +230,49 @@ class Workbench:
     def records(self, thread):
         return list(self._records.get(thread, []))
 
+    def author_for(self, item):
+        if item['repo'] != 'local': return self.user
+        meta = item['doc']['meta']
+        tid = meta['id'] if meta['kind'] == 'thread' else meta['thread']
+        return self.client.get('personal_thread_authors', {}).get(tid, self.config['user'])
+
+    def owned_authors(self, item):
+        """Local aliases belong to this private Thread; public authors use Hub identity."""
+        return {self.config['user'], self.user, self.author_for(item)} if item['repo'] == 'local' else {self.user}
+
     def _commit(self, store, action, payload, build, key=None, dry_run=False):
         key = key or str(uuid4())
         if not isinstance(key, str) or not key or len(key) > 200:
             raise Error('INPUT_INVALID', 'Idempotency key must contain 1–200 characters.')
-        identity={'action': action, 'payload': payload, 'actor': self.user}
+        target = payload.get('thread') or payload.get('id')
+        actor = self.user
+        if target:
+            item = self.find(target)
+            meta = item['doc']['meta']; tid = meta.get('thread', meta['id'])
+            if store is self.base and item['repo'] == 'local' and tid in self.client.get('personal_thread_authors', {}):
+                actor = self.author_for(item)
+        identity={'action': action, 'payload': payload, 'actor': actor}
         if getattr(self,'generation',None):identity['generation']=self.generation
         fingerprint = hashlib.sha256(json.dumps(identity,sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        receipt_path = '.cosmesh/operations/' + hashlib.sha256((self.user + ':' + key).encode()).hexdigest() + '.json'
+        receipt_path = '.cosmesh/operations/' + hashlib.sha256((actor + ':' + key).encode()).hexdigest() + '.json'
         def apply():
             files = store.snapshot()[1]
+            if store is self.base and receipt_path not in files and target and item['repo'] == 'local' and tid in self.client.get('personal_thread_authors', {}):
+                # Before personal sync, a local write may have used the connected
+                # Hub alias for its operation key. Retain those receipts across
+                # device/local-name changes without rewriting historical keys.
+                for path, text in files.items():
+                    if not path.startswith('.cosmesh/operations/'): continue
+                    prior = json.loads(text)
+                    if prior.get('key') != key: continue
+                    result_id = prior.get('result', {}).get('id')
+                    result_doc = self._models['local'][2].docs.get(result_id)
+                    if not result_doc or result_doc['meta'].get('thread', result_id) != tid: continue
+                    prior_identity = dict(identity, actor=prior['actor'])
+                    expected = hashlib.sha256(json.dumps(prior_identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+                    if prior['fingerprint'] != expected:
+                        raise Error('IDEMPOTENCY_CONFLICT', 'This key already identifies different input in this Thread.')
+                    return {**prior['result'], 'replayed': True, 'saved_locally': True}
             if receipt_path in files:
                 receipt = json.loads(files[receipt_path])
                 if receipt['fingerprint'] != fingerprint:
@@ -250,7 +283,7 @@ class Workbench:
             Snapshot(store, candidate)
             if dry_run:
                 return {**result, 'dry_run': True, 'saved_locally': False}
-            receipt = {'actor': self.user, 'key': key, 'fingerprint': fingerprint, 'result': result,
+            receipt = {'actor': actor, 'key': key, 'fingerprint': fingerprint, 'result': result,
                        'operation':action,'generation':getattr(self,'generation',{'tool':'unspecified','verification':'not_provided'})}
             changes[receipt_path] = json.dumps(receipt, ensure_ascii=False, sort_keys=True) + '\n'
             store.commit(changes, key)
@@ -286,7 +319,7 @@ class Workbench:
                 raise Error('INPUT_INVALID', 'Provide a complete one-line title (at most 200 characters); rewrite rather than truncate.')
             payload['title']=title.strip()
         if lifecycle is None:payload.pop('lifecycle')
-        author = self.config['user'] if parent['repo'] == 'local' else self.user
+        author = self.author_for(parent)
         def build():
             placement = thread_state([x['doc']['meta'] for x in self.records(payload['thread'])])['lifecycle']
             responding = placement in {'withdrawn', 'merged'} and record_type in CONTROL | {'reply'} and request
@@ -339,7 +372,7 @@ class Workbench:
         item = self.find(value, 'thread')
         def build():
             doc = copy.deepcopy(item['doc'])
-            allowed = {self.config['user']} if item['repo'] == 'local' else {self.user}
+            allowed = {self.author_for(item)}
             if doc['meta']['author'] not in allowed:
                 raise Error('AUTH_DENIED', 'Only the creator can revise this work overview.')
             if content_version(doc) != expect:
@@ -419,6 +452,8 @@ class Workbench:
 
     def share(self, value, key=None, dry_run=False, extra=None, rewrite=None, materials=None, overview_notice=None):
         item = self.find(value, 'thread')
+        if item['doc']['meta']['id'] in self.client.get('thread_access',{}):
+            raise Error('POLICY_DENIED', 'This Thread uses owner-controlled access. Use thread access instead of legacy public Git sharing.')
         if item['repo'] != 'local':
             return {**public(item['doc']), 'already_shared': True, 'saved_locally': True}
         repo = self.client.get('own_repo')
@@ -428,7 +463,7 @@ class Workbench:
         original = [item] + self.records(item['doc']['meta']['id'])
         originals = {x['doc']['meta']['id']: x['doc'] for x in original}
         if extra is not None:originals[extra['meta']['id']]=extra
-        if item['doc']['meta']['author'] not in {self.config['user'], self.user}:
+        if item['doc']['meta']['author'] not in self.owned_authors(item):
             raise Error('AUTH_DENIED', 'Only your own private work can be published.')
         def build():
             converted, visiting = {}, set()
@@ -444,7 +479,7 @@ class Workbench:
                     if doc['meta'].get('generation',{}).get('instruction'):
                         doc['meta']['generation']['instruction']=rewrite(doc['meta']['generation']['instruction'])
                 if overview_notice and doc['meta']['kind']=='thread':doc['body']=doc['body'].rstrip()+'\n\n'+overview_notice+'\n'
-                if doc['meta']['author'] not in {self.config['user'], self.user}:
+                if doc['meta']['author'] not in self.owned_authors(item):
                     raise Error('AUTH_DENIED', 'Private work contains another unverified author.')
                 doc['meta']['author'] = self.user
                 if doc['meta'].get('lifecycle') == 'trash':
@@ -595,6 +630,8 @@ class Workbench:
             state = thread_state([x['doc']['meta'] for x in self.records(item['doc']['meta']['id'])])
             extra = {key: state[key] for key in ('work_state', 'lifecycle', 'merged_into')}
             extra['naming'] = self._thread_names[item['doc']['meta']['id']]
+            extra['sharing'] = ('public' if item['repo'] != 'local' else
+                                'personal' if item['doc']['meta']['id'] in self.client.get('personal_thread_authors', {}) else 'local')
         from .knowledge import Knowledge
         users=Knowledge(self).data['users']
         author=next((x for x in users if x['account']==item['doc']['meta']['author']),None)

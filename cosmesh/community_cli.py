@@ -30,6 +30,7 @@ def add_commands(commands,command):
     for verb in ('add','revise'):
         p=command(library,verb,'library.'+verb)
         if verb=='revise':p.add_argument('id');p.add_argument('--expect',required=True)
+        p.add_argument('--thread',action='append',default=[]);p.add_argument('--public',action='store_true',dest='independent_public')
         p.add_argument('--title');p.add_argument('--body',default=None);p.add_argument('--file',action='append',default=[])
         p.add_argument('--kind',choices=('document','reference'));p.add_argument('--status',choices=('draft','published','withdrawn'))
         p.add_argument('--doi');p.add_argument('--arxiv');p.add_argument('--authors');p.add_argument('--ref',action='append',default=[])
@@ -47,7 +48,9 @@ def execute(args):
     wb=Workbench(workspace_root(getattr(args,'root',None)))
     with wb.base.locked():
         wb.load();kb=Knowledge(wb)
-        if fresh:
+        if not offline and (args.action.startswith('library.') or args.action.startswith('user.')):
+            kb.refresh()
+        if fresh and not kb.data.get('access_scoped'):
             result=wb.synchronize(publish=False)
             if result['errors']:raise Error('FRESHNESS_UNAVAILABLE','Some shared sources could not be refreshed.')
             kb=Knowledge(wb)
@@ -91,6 +94,8 @@ def execute(args):
                 for field in ('title','body','kind','status'):
                     if getattr(args,field) is not None:value[field]=getattr(args,field)
                 if args.file:value['files']=kb.import_files(args.file)
+                if args.thread:value['source_threads']=args.thread
+                if args.independent_public:value['independent_public']=True
                 if args.ref:
                     value['refs']=[wb.citation(x) for x in args.ref]
                     if any(x['repo']=='local' for x in value['refs']):raise Error('PRIVATE_REFERENCE','Share source work explicitly before citing it in the shared library.')
@@ -133,9 +138,10 @@ def execute(args):
             output=Path(args.output).expanduser()
             if output.exists() or output.is_symlink():raise Error('PATH_CONFLICT','Choose a new output file; existing content is preserved.')
             if offline and not (kb.root/file['sha256']).exists():raise Error('CONTENT_NOT_CACHED','This file is not cached locally.')
-            raw=kb.download(file['sha256'],file['size'])
-            with output.open('xb') as handle:handle.write(raw)
-            return {'path':str(output.absolute()),'sha256':file['sha256'],'bytes':len(raw)},None
+            source=kb.download_path(file['sha256'],file['size'],offline)
+            import shutil
+            with output.open('xb') as handle,source.open('rb') as stream:shutil.copyfileobj(stream,handle,256*1024)
+            return {'path':str(output.absolute()),'sha256':file['sha256'],'bytes':file['size']},None
         if action=='library.show':
             usage=kb.backlinks(args.id)
             return {**usage,'events':[x for x in kb.data['events'] if x['object']==usage['source']['id']]},None

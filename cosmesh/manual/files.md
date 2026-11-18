@@ -2,13 +2,13 @@
 
 ## 项目更新与消息
 
-thread_sending.py 检查公开范围，生成草稿／待发送／已发送回执，只提交选定消息和明确引用的待提交来源；公开分支仅复制指定文本，来源关系留私人。
+thread_messages.py 管理单一所有者消息的固定引用、幂等投递、显式查看状态与历史迁移；thread_messages_cli.py 负责本人记录和私人待发回执。thread_tracking.py 将来信引用收录到本人按人 Thread，身份与 Thread ID 跨设备保持。
 
-thread_updates.py 提交Agent撰写的项目增量、精确去重、私人检查点与限定同步，阻止捎带其他草稿。thread_mail.py 从已接受的请求／回应／更正关系准备私人收发件箱索引，提供固定窗口、按用户的查看状态与一次RPC快读；普通项目进展不自动通知。消息原文仍在普通Thread记录，查看状态不进入共享Git历史。
+thread_search.py 按记录版本维护可重建全文索引，先核验当前权限再检索，并提供固定版本差异；thread_updates.py 保存普通项目进展，不自动通知。旧 thread_mail 仅支持旧格式与历史迁移依赖；旧 thread_sending 实现已删除，统一 Hub 不开放旧投递路径。
 
 ## 交互摘要、对话与快速成品
 
-thread_materials.py 管理明确选定的共享资料、后缀／大小预检与先入库后引用；material_links.py 解析固定文件引用、校验原件及按需启动查看器。默认分享只发正式文本，原文件保持。
+thread_materials.py 管理明确选定的共享资料、后缀／大小预检与先入库后引用；material_links.py 解析固定文件引用、校验原件及按需启动查看器。该模块仅供未迁移 Hub 的历史发送兼容；新 CLI share 已退役。新权限、迁移、Library继承和宽限额分别由 thread_access.py、thread_migration.py、library_access.py、transfer_policy.py 管理。
 
 thread_chat.py 保存、读取作者的交互摘要，生成左右排版与终端 TUI；contact_chat.py 从现有共享记录派生按人的五轮对话和固定历史窗口，合并补充并保留每条来源。thread_checks.py 提供紧凑状态、资料登记与写入回执，不下载原件。
 
@@ -136,10 +136,12 @@ threads.py 的 Workbench 组织私人 Thread、专用 Mesh 缓存、明确分享
 
 threads.py 的 coordination 只读导出请求、分配工作、来源和更正，供当前个人 Agent 汇总；note/result 的 --ref 保存固定版本依据。协调结果仍是普通工作记录。
 
-## 个人共享与私人中转（候选）
+## Thread 个人同步与私人中转
 
-personal_cli.py 提供 personal init/connect/sync/join、资源登记、传输预检和按需打开。personal.py 保存独立私人侧车、原位引用、工作台快照、固定历史来源与本机缓存；原 schema 2 和公开操作保持。
+thread_personal_cli.py 提供 thread personal/sync ID/fetch/locations；thread_personal.py 负责选定 Thread 清单、增量历史收集、各端位置和幂等合并；thread_personal_protocol.py 校验单条 Thread 范围。personal.py 提供本地资产、连接和分块传输；thread_files.py 负责显式文件的相对路径与无覆盖恢复。旧整库客户端实现已删除，tests/legacy_personal.py 仅作旧协议测试夹具，personal_relay.py 保留服务端兼容接口。
+
+thread_execution.py 与 thread_execution_protocol.py 处理公开 Thread 的 owner 私人执行关联，清单只有公共来源和绑定，正文仍从原 Mesh 仓库读取。thread_locations.py 复用私人／公开两条路径的绑定和目的地登记。新 executions 侧车与索引独立保留，公共记录、作者映射与旧私人快照保持原语义。
 
 personal_protocol.py 定义个人策略、路径／内容过滤、版本化清单与三方合并。personal_relay.py 通过已核验账号隔离对象和清单，执行流式分块、断点恢复、容量与流量配额，使用 Hub 内独立 personal-v1 目录；不加入公开 Git、搜索或知识库。
 
-manual/personal.md 说明候选入口、范围、上限和回退；tests/test_personal_sharing.py 使用独立副本与实际本机网关检查上述能力。
+manual/personal.md 说明范围、上限和回退；tests/test_thread_personal.py 验证单 Thread 隔离、恢复及目录关联，tests/test_personal_sharing.py 保留旧协议与底层传输兼容检查。

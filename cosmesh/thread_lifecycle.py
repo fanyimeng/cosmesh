@@ -14,7 +14,7 @@ def state(wb, item):
 
 
 def owner(wb, item):
-    actor = wb.config['user'] if item['repo'] == 'local' else wb.user
+    actor = wb.author_for(item)
     if item['doc']['meta']['author'] != actor:
         raise Error('AUTH_DENIED', 'Only the creator can reorganize or remove this Thread.')
     return actor

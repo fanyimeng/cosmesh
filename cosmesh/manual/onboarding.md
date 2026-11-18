@@ -1,5 +1,7 @@
 # 给朋友安装与首次登记
 
+当前入口为 thread access/browse/track/send/inbox/search，Library继承来源权限。本人资料以同一 Thread ID 跨设备接续；完整工作流见 sharing、personal、chat、knowledge，管理员迁移见 operations。
+
 ## 生成一段可转发的安装 prompt
 
 已安装的用户运行：

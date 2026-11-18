@@ -12,12 +12,13 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from .errors import Error
+from .personal_protocol import read_json
 from .service import Service, initialize
 from .protocol import USER
 from .store import Store, atomic, safe_path
@@ -162,7 +163,7 @@ class Hub:
         if not path.is_file():
             raise Error("HUB_NOT_INITIALIZED", "No Hub at " + str(self.root))
         value = json.loads(path.read_text())
-        if value.get("format") != 1 or value.get("host") != socket.gethostname():
+        if value.get("format") not in (1,2) or value.get("host") != socket.gethostname():
             raise Error("HUB_WRONG_NODE", "The authoritative Hub runs on " + str(value.get("host")))
         if value.get("admin_uid") != os.getuid():
             raise Error("AUTH_DENIED", "Hub administration requires the owning Unix account.")
@@ -289,6 +290,7 @@ class Hub:
         community = self.community()
         if community:
             community.check(user)
+        if self.settings().get('format')==2:raise Error('COMMAND_RETIRED','Public Git transport has retired; use Thread online access.')
         policy = json.loads((self.root / 'policy/repos.json').read_text()).get(name)
         if not policy:
             raise Error('AUTH_DENIED', 'Repository access denied.')
@@ -372,6 +374,18 @@ class Hub:
 
     def spaces(self, payload, user):
         """One public Mesh space per authenticated server account."""
+        settings=self.settings()
+        if settings.get('format')==2:
+            if settings.get('thread_access_state')!='ready':raise Error('MAINTENANCE_REQUIRED','Thread migration is incomplete; resume the offline migration.')
+            method=payload.get('method','')
+            if not method.startswith(('thread_access_','thread_message_','personal_','community_')):raise Error('COMMAND_RETIRED','Use Thread online access; legacy public listing, messages and Git paths have retired.')
+        if isinstance(payload.get('method'),str) and payload['method'].startswith('thread_message_'):
+            if settings.get('format')!=2:raise Error('FEATURE_UNAVAILABLE','Messages require the unified Thread Hub migration.')
+            from .thread_messages import Messages
+            return Messages(self,user).dispatch(payload)
+        if isinstance(payload.get('method'), str) and payload['method'].startswith('thread_access_'):
+            from .thread_access import Access
+            return Access(self, user).dispatch(payload)
         if isinstance(payload.get('method'),str) and payload['method'].startswith('personal_'):
             if self.community(): self.community().check(user)
             from .personal_relay import Relay
@@ -379,7 +393,8 @@ class Hub:
         if isinstance(payload.get('method'),str) and payload['method'].startswith('community_'):
             community=self.community()
             if not community:raise Error('FEATURE_UNAVAILABLE','This Hub has not enabled its knowledge library and user directory.')
-            result=community.rpc(payload,user,self)
+            with self.locked('thread-access-v1'):
+                result=community.rpc(payload,user,self)
             if payload['method'] in {'community_apply','community_name','community_reindex'}:
                 from .hub_pages import schedule
                 schedule(self)
@@ -541,6 +556,9 @@ class Hub:
         if path.is_symlink() or path.stat().st_uid!=os.geteuid() or path.stat().st_mode & 0o077:
             raise Error('AUTH_DENIED','Unsafe community configuration.')
         from .community import Community
+        if self.settings().get('format')==2:
+            from .library_access import ScopedCommunity
+            return ScopedCommunity(json.loads(path.read_text())['root'],self.settings()['admin'],self)
         return Community(json.loads(path.read_text())['root'],self.settings()['admin'])
 
     def initialize_community(self,root):
@@ -564,6 +582,17 @@ class Hub:
         if ref['repo']=='library':
             community=self.community()
             if community:return community.resource(ref)
+        if self.settings().get('format')==2:
+            from .thread_access import read_manifest
+            catalog=read_json(self.root/'thread-access-v1/catalog.json',{'threads':{}})
+            mapping=read_json(self.root/'thread-access-v1/legacy-records.json',{'records':{}})['records']
+            tid=ref['id'] if ref['id'].startswith('W-') else mapping.get(ref['repo']+'@'+ref['id'])
+            row=catalog['threads'].get(tid)
+            if row:
+                value,_=read_manifest(self,row)
+                text=value['history'].get(ref['id']+'@'+ref['version'])
+                if text:return decode(text)
+            raise Error('REFERENCE_UNAVAILABLE','The fixed Thread version is unavailable.')
         policy=json.loads((self.root/'policy/repos.json').read_text()).get(ref['repo'])
         if not policy or not policy.get('thread_format'):raise Error('REFERENCE_UNAVAILABLE','Shared source space is unavailable.')
         source=Store(self.repo(ref['repo']).root)
@@ -620,6 +649,10 @@ class Hub:
                                 before[path] = text
             model = validate_change(store, before, after, policy["product"], user)
             if policy.get('thread_format'):
+                from .thread_access import protected_ids
+                guarded = protected_ids(self)
+                if any(doc['meta'].get('thread', doc['meta']['id']) in guarded for doc in model.docs.values()):
+                    raise Error('POLICY_DENIED', 'Access-controlled Threads cannot be copied into legacy public Git.')
                 self.validate_thread_references(name, model, before, after)
                 community=self.community()
                 if community:
@@ -685,7 +718,7 @@ class Hub:
         if operation not in {'cosmesh-status', 'git-upload-pack', 'git-receive-pack'}:
             raise Error('COMMAND_DENIED', 'Unsupported Hub operation.')
         self.policy(name, user, operation == 'git-receive-pack')
-        with self.locked(name):
+        with self.locked(name), (self.locked('thread-access-v1') if operation == 'git-receive-pack' else nullcontext()):
             if operation == "cosmesh-status":
                 value = self.status(name, user)
                 if system_uid is not None:

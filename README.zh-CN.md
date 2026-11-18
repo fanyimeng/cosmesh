@@ -7,7 +7,8 @@
 CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工作串）** 保存一件工作的背景、记录、请求、决定和结果。
 
 - **私人 Thread**：个人工作，可独立离线使用。
-- **公开 Thread**：公开科研写作与协作，同一 Hub 的已核验用户可读。
+- **指定可见 Thread**：所有者授予一个或多个指定用户查看权限。
+- **全员可见 Thread**：同一 Hub 的已核验用户可读，所有者保持唯一。
 - **知识库**：保存文档版本，通过引用和回链找到使用过它的工作与成果。
 
 用户自己的 Agent 负责交互与理解，程序负责 Markdown 记录、Git 历史、确定性操作和显式同步。
@@ -19,16 +20,16 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 - 将 Thread 关联 Codex、DSH、OpenCode 的项目／工作区，跨会话继续。
 - 分裂、合并工作，保留原作者、记录和来源。
 - 发出请求、交付结果，沿引用核验依据。
-- 默认共享工作简报；明确允许后附带说明、报告与小型结果，以固定版本引用打开。
+- 按选定范围提供完整 Thread 记录与历史，文件明确选择后传输，固定版本按需打开。
 - 统一搜索工作、记录、知识资料及旧版工作库。
 - 离线读写，恢复连接后按需同步共享变更。
 - 私人工作删除进回收站，共享工作撤回后保留历史与引用。
 
 ## 本地试用
 
-当前版本 **0.4.0**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前版本 **0.4.7**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
-普通用户可直接下载 [GitHub 安装包](https://github.com/fanyimeng/cosmesh/releases/tag/v0.4.0)，无需自行构建。ZIP 包支持 Apple Silicon／Python 3.9 和 Linux x86-64／Python 3.12；解压后使用匹配的 Python 运行 `python3 install.py install --skills cosmesh`。已有服务器渠道安装的用户直接对 Agent 说“升级 CosMesh”。详见[安装与升级](docs/quickstart.md#independent-user-packages--独立用户安装包)。
+已有服务器渠道安装的用户可对 Agent 说“升级 CosMesh”。GitHub 提供源码和版本标签；可用 `tools/build_release.py` 构建匹配本机的固定包，或使用维护者分发的包。详见[安装与升级](docs/quickstart.md#installation-and-rollback--安装与回退)。
 
 源码试用：
 
@@ -51,7 +52,7 @@ cosmesh thread overview --mine --compact --json
 cosmesh thread discover --ssh your-hub --json
 ```
 
-私人工作留在本地。对外请求和回复默认尝试发送；关联私人 Thread 时显著显示 **⚠️ 尚未发送**，引导确认公开当前 Thread 后再发送。公开范围为当前 Hub 用户，附件仍需明确选择。只有目标消息获服务器接受才显示已发送。
+个人同步让同一 Thread 跨设备接续。查看范围为私有／指定可见／全员可见；消息写在发送者自己的 Thread 中，发送前核验接收者权限。只有目标消息获服务器接受才显示已发送，已读需明确标记。文件仅明确选择才传输。
 
 ## 交给自己的 Agent
 
@@ -64,7 +65,7 @@ cosmesh skills install --agent codex --only cosmesh --json
 
 然后说：“用 CosMesh 整理当前工作，先检查已有 Thread，再建议续接或新建。”
 
-GitHub 与服务器渠道提供独立版本化安装包，见[快速上手](docs/quickstart.md)。系统提供 CLI、统一 Skill 与独立的内存 TUI 演示。原生 Windows、私人资料跨设备同步、后台通知列入后续规划。
+GitHub 与服务器渠道提供独立版本化安装包，见[快速上手](docs/quickstart.md)。系统提供 CLI、统一 Skill 与独立的内存 TUI 演示。已支持同一 Thread 跨设备恢复、按人收信、全文检索和版本增量；原生 Windows 与后台通知留后续。
 
 ## 开发
 

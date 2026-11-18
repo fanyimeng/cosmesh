@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.4.7
+
+Released 2026-11-18. Includes the previously unreleased 0.4.4–0.4.6 changes.
+
+- Deliver pinned records from the sender’s own Thread, with recipient ACL checks, idempotent retries, offline drafts and explicit per-recipient read marks. Preserve legacy message IDs and historical read state.
+- File new incoming message references into ordinary private person Threads; preserve the same ID on another device, reuse stable identity bindings and require explicit choice on name collisions.
+- Add permission-filtered full-text Thread/message indexes with per-record refresh, fixed-source retrieval and pinned version-to-version change lists.
+- Set decimal defaults to personal 5 GB/file, 10 GB/batch, 30 GB/account; outward 2 GB/file, 5 GB/batch, 15 GB/Thread including history. Preserve explicit custom policies and accepted data.
+- Retire old multi-author sending entrances, align active manuals and managed Skill, retain historical formats and reversible software upgrades.
+
+## 0.4.6
+
+Unreleased candidate. Production unchanged.
+
+- Migrate accepted legacy public Threads offline with the same IDs, creator ownership and complete available history; preserve original repositories, private streams and an independent backup. Interrupted migration stays closed and resumes.
+- Fence migrated Hubs against older runtimes. Retire public Git, legacy online message/page endpoints and CLI share; keep old data for offline review and rollback.
+- Inherit current source Thread access across all Library versions, catalogs, search, extracted text and files. Require explicit authorization for independent publication and prove upload ownership by received content.
+- Raise private transfer defaults to 20 GiB per file / 100 GiB per batch and published defaults to 10 GiB / 50 GiB, with 100 GiB current and 1 TiB retained Thread capacity. Allow opaque science data, archives, binaries and unknown suffixes while retaining credential/path checks. Stream large Library files and skip automatic extraction above 20 MiB.
+- Replace obsolete managed guidance, keep previous packages and make migration/rollback boundaries explicit.
+
+## 0.4.5
+
+Unreleased candidate; includes 0.4.4. Production remains unchanged.
+
+- Add single-owner private/restricted/public Thread snapshots with authenticated online access to records, history and explicitly selected files. Readers never gain write or delegation rights.
+- Suggest a private ordinary person-tracking Thread for incoming restricted work; reuse existing Threads, retain personal notes, follow stable user IDs, exclude all-user publications, and recheck access on each view/download chunk.
+- Enforce file, transfer and retained Thread quotas. Keep private execution coordinates out of online responses and preserve current accepted content on failure.
+- Isolate access-managed content from legacy public Git and Library; block legacy-ID narrowing and protected-ID Git publication pending explicit migration. Legacy Library promotion is deferred.
+- Preserve schema 2, personal synchronization, installed software rollback and original materials. No production deployment or automatic creation of user Threads.
+
+## 0.4.4
+
+Unreleased candidate. Production remains 0.4.3.
+
+- Add owner-only synchronization and recovery of a selected Thread with the same ID, full available document history and per-device project/directory associations.
+- Restore into existing local data without replacing its identity or other Threads; transfer only selected Thread assets and fetch files on demand.
+- Restore explicitly selected files into portable relative paths without overwriting local work; report missing files, conflicts and skipped large data, and sync subsequent edits with stale-copy protection.
+- Remove the whole-store client implementation; retire its commands and asset push with migration guidance. Keep the server compatibility protocol, existing snapshots and previous software for older clients and rollback.
+- Preserve authenticated public authorship when publishing a restored Thread; isolate each participant's private execution locations and reject ownership inferred from a colliding local username.
+- Sync an owner's execution locations for a public Thread across devices under the same ID. Fetch public facts from their existing repository, keep private bindings in a separate owner-only relay stream, and preserve prior private snapshots when the Thread becomes public.
+- Replace managed Skill/help on upgrade and show a prominent migration notice; original documents, configuration and previous software remain intact.
+
 ## 0.4.3
 
 - Add a personal-client default Hub setting, separate from the software update source and Hub administration.

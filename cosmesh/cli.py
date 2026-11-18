@@ -203,9 +203,11 @@ def parser(product):
         p.add_argument('--service', help='Local service discovery; defaults to the shared service')
         p.add_argument('--ssh', help='Use an existing SSH host alias and its normal system login')
     hub = command(commands, "hub").add_subparsers(dest="verb", required=True)
-    for verb in ("init", "repo-create", "grant", "key-add", "key-revoke", "status", "serve", "validate", 'run','community-init','maintenance','personal-init'):
+    for verb in ("init", "repo-create", "grant", "key-add", "key-revoke", "status", "serve", "validate", 'run','community-init','maintenance','personal-init','migrate-threads'):
         p = command(hub, verb, "hub." + verb)
         p.add_argument("--hub-root", required=True)
+        if verb=='migrate-threads':
+            p.add_argument('--apply',action='store_true');p.add_argument('--gateways-stopped',action='store_true')
         if verb=='community-init':p.add_argument('--library-root',required=True)
         if verb=='maintenance':
             p.add_argument('--repo');p.add_argument('--thread');p.add_argument('--clear',action='store_true')
@@ -327,6 +329,8 @@ def capabilities(product):
             "coordination": {"default": "personal_agents", "delegation": "ordinary_request", "requires_server_agent": False},
             "features": {"threads": True, "thread_requests": True, "thread_shared_references": True,
                          "personal_sharing": True, "personal_relay_protocol": 1, "personal_background_sync": False,
+                         "thread_personal_protocol": "thread.personal.v1", "thread_personal_restore": True,
+                         "legacy_personal_commands": "retired",
                          "knowledge_library":True,"knowledge_backlinks":True,"thread_archives":True,"real_name_directory":True,"contribution_history":True,
                          "thread_coordination_context": True, "thread_cited_results": True,
                          "thread_record_backlinks": True,
@@ -339,11 +343,11 @@ def capabilities(product):
                          "ready_status_pages": True,
                          "project_thread_updates": True, "private_interaction_mail": True, "explicit_mail_seen": True,
                          "quick_thread_checks": True, "compact_thread_inbox": True, "compact_thread_writes": True,
-                         "interaction_summaries": True, "thread_chat": True, "thread_chat_tui": True,
-                         "prepared_contact_documents": True, "content_update_preparation": True, "bounded_thread_source_reads": True,
+                         "interaction_summaries": True, "thread_chat": True, "thread_chat_tui": False, "thread_messages_protocol": "thread.messages.v1", "thread_search": True, "thread_changes": True,
+                         "prepared_contact_documents": "legacy_only", "content_update_preparation": True, "bounded_thread_source_reads": True,
                          "fast_mode": True, "agent_project_bindings": True,
-                         "thread_share_materials": True, "fixed_knowledge_file_links": True,
-                         "private_session_bindings": True, "maintenance_requests": True,
+                         "thread_share_materials": "retired", "thread_access_files": True, "fixed_knowledge_file_links": True,
+                         "private_session_bindings": True, "maintenance_requests": "send_from_own_thread",
                          "markdown_yaml": True, "local_git_history": True, "context": True,
                          "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,
                          "personal_lifecycle": True, "local_control_updates": True, "unified_cosmesh": True, "explicit_send_receipts": True,
@@ -413,6 +417,9 @@ def execute(args, product):
     if action.startswith('personal.'):
         from .personal_cli import execute as execute_personal
         return execute_personal(args)
+    if action=='hub.migrate-threads':
+        from .thread_migration import migrate
+        return migrate(Hub(args.hub_root),args.apply,args.gateways_stopped),None
     if action=='hub.personal-init':
         from .personal_relay import initialize as initialize_personal_relay
         if getattr(args,'dry_run',False):
@@ -807,51 +814,11 @@ def main(argv=None, product="cosmesh"):
     if error is None and args.action == 'thread.check' and not machine:
         print(data['document'], end='')
         return 0
-    if error is None and isinstance(data, dict) and data.get('format') == 'thread.mail.v1' and not machine:
+    if error is None and isinstance(data, dict) and data.get('format') in {'thread.mail.v1','thread.messages.v1'} and not machine:
         print(data['document'])
         return 0
-    if error is None and args.action == 'thread.chat' and not machine:
-        if args.tui or (not args.plain and sys.stdin.isatty() and sys.stdout.isatty()):
-            if not sys.stdin.isatty() or not sys.stdout.isatty():
-                print('交互 TUI 需要终端；可用 --plain 或 --json。',file=sys.stderr)
-                return 2
-            from .thread_chat import tui
-            def refresh_chat():
-                if getattr(args,'offline',False): raise Error('INPUT_INVALID','离线模式下请退出后联网刷新。')
-                args.require_fresh = True
-                args.before = None
-                return execute(args,product)[0]
-            def older_chat(cursor):
-                args.before = cursor;args.require_fresh = False
-                return execute(args,product)[0]
-            def detail(message,sources):
-                wb=Workbench(workspace_root(getattr(args,'root',None)))
-                refs=[sources[part['source']] for part in message.get('parts',[])] or [sources[message['source']]]
-                if not getattr(args,'offline',False) and wb.client.get('connection'):
-                    from .spaces import rpc
-                    result=[]
-                    for offset in range(0,len(refs),5):
-                        group=refs[offset:offset+5]
-                        reply=rpc(wb.client['connection'],{'method':'thread_read','sources':group,'chars':32000//len(group)})
-                        if reply.get('actor')!=wb.client.get('actor'):raise Error('AUTH_DENIED','Source read identity differs.')
-                        result.extend(r['source']['id']+'\n'+r['body']+('\n〔原文截断，可用 thread read 分页〕' if r['truncated'] else '') for r in reply['records'])
-                    return '\n\n'.join(result)
-                with wb.base.locked():
-                    wb.load()
-                    return '\n\n'.join(ref['id']+'\n'+wb.resolve(ref)['body'] for ref in refs)
-            from .threads import Workbench, workspace_root
-            import curses
-            try:tui(data,refresh_chat,detail,older_chat if args.contact else None)
-            except KeyboardInterrupt:return 130
-            except (curses.error,OSError):
-                from .thread_chat import document
-                print(document(data),end='')
-        else:
-            from .thread_chat import document
-            print(document(data),end='')
-        return 0
     if not machine and error and error['code'] == 'PRIVATE_THREAD_NOT_SENT':
-        print(error['message'] + '\n' + error['hint']); return 2
+        print(error['message'] + '\n' + (error.get('hint') or '')); return 2
     if not machine and isinstance(data,dict) and data.get('format') == 'thread.send.v1':
         print(data['document'],end='')
         if data['publication'].get('error'): print(data['publication']['error']['message'])

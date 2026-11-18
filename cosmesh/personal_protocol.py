@@ -13,15 +13,9 @@ MIB = 1024 ** 2
 GIB = 1024 ** 3
 CHUNK = 256 * 1024
 MAX_METADATA = 32 * MIB
-DEFAULTS = dict(auto_file=256*MIB, batch_bytes=2*GIB, batch_files=1000,
-                daily_bytes=10*GIB, server_bytes=50*GIB, cache_bytes=10*GIB,
-                explicit_file=2*GIB)
+from .transfer_policy import PERSONAL as DEFAULTS
 HASH = re.compile(r'^[0-9a-f]{64}$')
 ID = re.compile(r'^[0-9a-f]{32}$')
-SCIENCE = ('.fits', '.fit', '.fts', '.npy', '.h5', '.hdf5', '.parquet', '.nc')
-ARCHIVES = ('.zip', '.gz', '.tgz', '.tar', '.bz2', '.xz', '.npz', '.7z', '.zst', '.rar')
-TEXT = {'.md','.txt','.tex','.bib','.csv','.tsv','.json','.yaml','.yml','.toml',
-        '.py','.sh','.c','.h','.cpp','.js','.css','.html','.htm','.svg','.rst','.ini'}
 
 
 def packed(value):
@@ -82,41 +76,12 @@ def fingerprint(info):
 
 
 def file_reason(name, head, science=False):
-    lower = name.casefold()
-    if lower.endswith(ARCHIVES) or head.startswith((b'PK\x03\x04',b'\x1f\x8b',b'7z\xbc\xaf',b'Rar!',b'BZh',b'\xfd7zXZ')):
-        return 'archive_requires_separate_policy'
-    if head.startswith((b'\x7fELF',b'MZ',b'\xfe\xed\xfa',b'\xcf\xfa\xed\xfe',b'\xca\xfe\xba\xbe',b'\x00asm')):
-        return 'executable_content'
-    scientific = lower.endswith(SCIENCE) or head.startswith((b'SIMPLE  =',b'\x93NUMPY',b'\x89HDF',b'PAR1',b'CDF'))
-    if scientific:
-        return None if science else 'science_rule_required'
-    if head.startswith((b'%PDF-',b'\x89PNG\r\n',b'\xff\xd8\xff',b'GIF87a',b'GIF89a')): return None
-    try: text = head.decode('utf-8')
-    except UnicodeDecodeError as exc:
-        # A bounded prefix may end in the middle of one UTF-8 character.
-        try: text = head[:exc.start].decode('utf-8') if exc.reason=='unexpected end of data' else None
-        except UnicodeDecodeError: text = None
-    if text is None or re.search(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', text): return 'unknown_binary'
-    if '-----BEGIN ' in text and 'PRIVATE KEY-----' in text: return 'credential_content'
-    return None if Path(lower).suffix in TEXT or not Path(lower).suffix else 'unrecognized_type'
+    from .transfer_policy import content_reason as reason
+    return reason(name,head)
 
 
 def content_reason(path,name,science=False):
-    with Path(path).open('rb') as stream: head=stream.read(65536)
-    if Path(name).suffix.lower() in {'.docx','.pptx','.xlsx'} and head.startswith(b'PK\x03\x04'):
-        import zipfile
-        try:
-            with zipfile.ZipFile(path) as archive:
-                entries=archive.infolist()
-                names={r.filename for r in entries}
-                if '[Content_Types].xml' not in names: return 'invalid_office_container'
-                if len(entries)>1000 or sum(r.file_size for r in entries)>256*MIB: return 'expanded_container_limit'
-                if any(r.flag_bits&1 or r.filename.startswith(('/','\\')) or '..' in Path(r.filename).parts or
-                       '\\' in r.filename or r.filename.lower().endswith(('.bin','.exe','.dll')) for r in entries):
-                    return 'unsafe_office_container'
-                return None
-        except (ValueError,OSError,zipfile.BadZipFile): return 'invalid_office_container'
-    return file_reason(name,head,science)
+    with Path(path).open('rb') as stream:return file_reason(name,stream.read(65536),science)
 
 
 def inspect_file(path, limit, science=False):
