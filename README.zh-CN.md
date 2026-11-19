@@ -27,7 +27,7 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 本地试用
 
-当前版本 **0.4.8**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前版本 **0.4.9**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 已有服务器渠道安装的用户可对 Agent 说“升级 CosMesh”。GitHub 提供源码和版本标签；可用 `tools/build_release.py` 构建匹配本机的固定包，或使用维护者分发的包。详见[安装与升级](docs/quickstart.md#installation-and-rollback--安装与回退)。
 

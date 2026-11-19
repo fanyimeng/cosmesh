@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.9
+
+Released 2026-11-19. DSH Connector remains 0.1.1.
+
+- Fix first-install component rollback with pnpm 10 by using supported remove configuration options.
+- Keep lifecycle scripts disabled and preserve offline behavior, existing data, cached bundles and interrupted rollback recovery.
+
 ## 0.4.8
 
 Released 2026-11-18. DSH Connector remains independently versioned at 0.1.1.

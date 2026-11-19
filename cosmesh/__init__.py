@@ -1,3 +1,3 @@
 """Shared documents, actions and records with optional private and team policies."""
 
-__version__ = "0.4.8"
+__version__ = "0.4.9"

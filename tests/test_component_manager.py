@@ -27,7 +27,10 @@ if sys.argv[1:] == ['--version']:
 with (home / 'calls.jsonl').open('a') as f: f.write(json.dumps(sys.argv[1:])+'\n')
 failure = c.pop('fail', None); control.write_text(json.dumps(c))
 if failure == 'before': sys.exit(1)
-a = sys.argv[1:]; profile = home/'profiles'/a[2]; p = profile/'package.json'
+a = sys.argv[1:]
+if a[3] == 'remove' and any(x in a for x in ('--ignore-scripts', '--offline')):
+    sys.exit(1)  # pnpm 10 rejects add-only flags on remove.
+profile = home/'profiles'/a[2]; p = profile/'package.json'
 m = json.loads(p.read_text()); name = '@cosmesh/dsh-connector'
 link = profile/'node_modules'/name
 if link.is_symlink(): link.unlink()
@@ -192,6 +195,16 @@ class ComponentManagerTests(unittest.TestCase):
             with zipfile.ZipFile(raw,'w') as z:z.writestr(name,'private')
             item=copy.deepcopy(self.item);item['releases']['0.1.1']['archive_sha256']=artifacts.digest(raw.getvalue())
             self.assert_code('COMPONENT_INTEGRITY',lambda:artifacts.unpack(raw.getvalue(),item,'0.1.1'))
+
+    def test_remove_disables_scripts_and_preserves_offline_policy(self):
+        for offline in (False, True):
+            with patch.object(host, 'invoke') as invoke:
+                host.apply(str(self.cli), 'desktop', None, self.item['package'], offline)
+            args = invoke.call_args.args[1]
+            self.assertIn('--config.ignore-scripts=true', args)
+            self.assertEqual('--config.offline=true' in args, offline)
+            self.assertNotIn('--ignore-scripts', args)
+            self.assertNotIn('--offline', args)
 
     def test_successful_first_install_can_be_rolled_back_without_deleting_files(self):
         self.run_op('install','0.1.1')

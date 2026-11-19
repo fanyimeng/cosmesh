@@ -84,9 +84,10 @@ def installed(profile, package):
 
 def apply(cli, profile, bundle, package, offline=False):
     args = ['plugin', '--profile', profile]
-    args += ['add', '--ignore-scripts', str(bundle)] if bundle else ['remove', '--ignore-scripts', package]
+    # pnpm remove accepts configuration options, not add's command flags.
+    args += ['add', '--ignore-scripts', str(bundle)] if bundle else ['remove', '--config.ignore-scripts=true', package]
     if offline:
-        args.append('--offline')
+        args.append('--offline' if bundle else '--config.offline=true')
     invoke(cli, args)
 
 
