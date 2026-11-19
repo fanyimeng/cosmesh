@@ -31,17 +31,18 @@ def read_journal(value):
     if info.st_uid != os.geteuid() or info.st_mode & 0o077 or info.st_size > 100000:
         raise Error('AUTH_DENIED', 'Connector journals must be private, owned and at most 100000 bytes.')
     try:
-        value = json.loads(path.read_text())
+        raw = path.read_bytes()
+        value = json.loads(raw)
     except (OSError, json.JSONDecodeError):
         raise Error('INPUT_INVALID', 'The Connector journal is not valid bounded JSON.')
     if not isinstance(value, dict) or value.get('format') != 1 or not isinstance(value.get('input'), dict):
         raise Error('INPUT_INVALID', 'Unsupported Connector journal format.')
-    return {'document': value, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    return {'document': value, 'sha256': hashlib.sha256(raw).hexdigest()}
 
 
 def _owned_active(wb, tid):
     item = wb.find(tid, 'thread')
-    if item['repo'] != 'local':
+    if item['repo'] != 'local' or item['doc']['meta']['author'] != wb.author_for(item):
         raise Error('AUTH_DENIED', 'Associate execution metadata only from an owner workbench.')
     shown = wb.present(item)
     if shown['lifecycle'] != 'active':
@@ -56,7 +57,7 @@ def _synthetic_shared(raw, device, project):
     return shared_projection(locations)
 
 
-def _journal_row(wb, tid, journal, raw):
+def _journal_row(wb, tid, journal, bindings):
     document = journal['document']
     if document['input'].get('thread_id') != tid:
         raise Error('INPUT_INVALID', 'The Connector journal belongs to another Thread.')
@@ -77,12 +78,12 @@ def _journal_row(wb, tid, journal, raw):
         raise Error('PATH_INVALID', 'The Connector journal directory is unavailable.')
     if steps.get('project_binding') and not any(row.get('project_id') == project_id for row in active(wb, tid)):
         raise Error('INCONSISTENT_EVIDENCE', 'The journal records a completed project binding that is currently missing.')
-    if steps.get('session_binding') and not any(row['kind'] == 'bindings' and row['binding'].get('session_id') == session_id for row in raw.values()):
+    if steps.get('session_binding') and not any(row['binding'].get('session_id') == session_id and agent_name(row['binding']['agent']) == 'dsh' for row in bindings):
         raise Error('INCONSISTENT_EVIDENCE', 'The journal records a completed Session binding that is currently missing.')
     return {'device': personal_state(wb).get('device'), 'replica': None, 'kind': 'bindings',
             'binding': {'thread': tid, 'agent': 'dsh', 'host': machine,
                         'workdir': workdir, 'session_id': session_id},
-            '_journal_hash': journal['sha256']}
+            '_journal_hash': journal['sha256'], '_journal_project': project_id}
 
 
 def preview(wb, tid, host=None, journal=None):
@@ -99,9 +100,15 @@ def preview(wb, tid, host=None, journal=None):
     observed = host_snapshot(host)
     sessions = {(agent_name(row['agent']), row['host'], row['id']): row for row in observed.get('sessions', [])}
     projects = {(agent_name(row['agent']), row['host'], row['id']): row for row in observed.get('projects', [])}
-    bindings = [row for row in raw.values() if row['kind'] == 'bindings']
+    # Only the local client table is authoritative for locally writable bindings.
+    device = personal_state(wb).get('device')
+    machine_name = socket.gethostname()
+    bindings = [{'binding': binding, 'device': device}
+                for binding in wb.client.get('bindings', [])
+                if binding['thread'] == tid and binding['host'] == machine_name]
     if journal is not None:
-        bindings.append(_journal_row(wb, tid, journal, raw))
+        entry = _journal_row(wb, tid, journal, bindings)
+        bindings = [row for row in bindings if row['binding'] != entry['binding']] + [entry]
     candidates = []
     for row in bindings:
         binding = row['binding']
@@ -111,6 +118,8 @@ def preview(wb, tid, host=None, journal=None):
         session = sessions.get(key)
         if session is None or session['status'] in {'archived', 'unavailable'}:
             continue
+        if row.get('_journal_project') and session.get('project_id') != row['_journal_project']:
+            raise Error('INCONSISTENT_EVIDENCE', 'The native Session belongs to a different Project than the journal.')
         agent, machine = key[:2]
         matching = []
         if session.get('project_id'):
@@ -122,10 +131,10 @@ def preview(wb, tid, host=None, journal=None):
             path = normalize_workdir(session.get('cwd') or binding.get('workdir'))
             matching = [(project, 'unique_workdir_clue', False) for project in projects.values()
                         if agent_name(project['agent']) == agent and project['host'] == machine
-                        and normalize_workdir(project.get('path')) == path]
+                        and path is not None and normalize_workdir(project.get('path')) == path]
         for project, evidence, confirmable in matching:
             workdir = normalize_workdir(session.get('cwd') or binding.get('workdir') or project.get('path'))
-            paths = [normalize_workdir(value) for value in (binding.get('workdir'), session.get('cwd'), project.get('path')) if value]
+            paths = [normalize_workdir(value) for value in (binding.get('workdir'), session.get('cwd')) if value]
             if workdir is None or any(value != workdir for value in paths):
                 candidates.append({'status': 'conflict', 'reason': 'Registered and observed directories differ.',
                                    'device': {'id': row.get('device'), 'host': machine}, 'agent': agent})
@@ -133,13 +142,14 @@ def preview(wb, tid, host=None, journal=None):
             kind = 'workspace' if agent == 'dsh' else 'project'
             try:
                 registration = bind_project(wb, tid, agent, project['name'], project['id'], kind=kind,
-                                            host=machine, workdir=workdir, observation=observed, dry_run=True)
+                                            host=machine, workdir=project.get('path') or workdir, observation=observed, dry_run=True)
             except Error as exc:
                 candidates.append({'status': 'conflict', 'reason': exc.message,
                                    'device': {'id': row.get('device'), 'host': machine}, 'agent': agent})
                 continue
             identity = {'thread': tid, 'device': row.get('device'), 'host': machine, 'agent': agent,
-                        'project_id': project['id'], 'workdir': workdir, 'session_id': session['id'],
+                        'project_id': project['id'], 'project_name': project['name'], 'project_path': project.get('path'),
+                        'workdir': workdir, 'session_id': session['id'],
                         'observed_at': observed['observed_at'], 'source': observed['source'],
                         'evidence': evidence, 'journal_sha256': row.get('_journal_hash')}
             candidate = {
@@ -150,7 +160,7 @@ def preview(wb, tid, host=None, journal=None):
                 'evidence': [{'code': evidence, 'source': observed['source'],
                               'observed_at': observed['observed_at']}],
                 'confirmable': confirmable, 'already_linked': registration['unchanged'],
-                '_registration': registration['project'],
+                'project_workdir': registration['project']['workdir'],
             }
             candidate['shared_summary_preview'] = _synthetic_shared(raw, row.get('device'), registration['project'])
             candidates.append(candidate)
@@ -164,14 +174,10 @@ def preview(wb, tid, host=None, journal=None):
         status = 'ambiguous'
     else:
         status = 'no_candidates'
-    if status in {'ambiguous', 'no_candidates'}:
-        for candidate in candidates:
-            if not candidate.get('already_linked'):
-                candidate.pop('candidate_id', None)
-    public = []
     for candidate in candidates:
-        public.append({key: value for key, value in candidate.items() if key != '_registration'})
-    result = dict(empty, status=status, candidates=public)
+        if not candidate.get('confirmable') or (status == 'ambiguous' and not candidate['already_linked']):
+            candidate.pop('candidate_id', None)
+    result = dict(empty, status=status, candidates=candidates)
     if status == 'confirmation_required':
         result['shared_summary_preview'] = confirmable[0]['shared_summary_preview']
     return result
@@ -208,13 +214,14 @@ def confirm(wb, tid, candidate_id, expect, host, key=None, journal=None):
         if len(matches) != 1:
             raise Error('STATE_CONFLICT', 'The association candidate changed; preview it again.')
         candidate = matches[0]
-        raw = raw_locations(wb, tid)
-        current = build_execution_model(raw)['execution_revision']
+        if not candidate['confirmable']:
+            raise Error('STATE_CONFLICT', 'The host has not confirmed Session membership.')
+        current = result['execution_revision']
         if current != expect and not candidate.get('already_linked'):
             raise Error('STATE_CONFLICT', 'Execution metadata advanced; preview the candidate again.')
         registration = bind_project(wb, tid, candidate['agent'], candidate['project']['name'],
                                     candidate['project']['id'], kind=candidate['project']['kind'],
-                                    host=candidate['device']['host'], workdir=candidate['workdir'],
+                                    host=candidate['device']['host'], workdir=candidate['project_workdir'],
                                     observation=host, dry_run=True)
         session = wb.bind(tid, candidate['agent'], candidate['workdir'], candidate['session_id'],
                           candidate['device']['host'], dry_run=True)['binding']
@@ -233,6 +240,9 @@ def confirm(wb, tid, candidate_id, expect, host, key=None, journal=None):
                     'execution_revision': metadata['execution_revision'],
                     'shared_revision': metadata['shared_revision'],
                     'shared_summary_preview': shared_projection(raw_locations(wb, tid)),
+                    'association': {'device': candidate['device'], 'agent': candidate['agent'],
+                                    'project_id': candidate['project']['id'], 'session_id': candidate['session_id'],
+                                    'evidence': candidate['evidence'][0]['code']},
                     'records_created': 0}
 
     return wb._commit(wb.base, 'associate', payload, build, key or 'associate-' + candidate_id[:32])

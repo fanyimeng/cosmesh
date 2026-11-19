@@ -194,7 +194,7 @@ def locate(wb, workdir=None, session_id=None, host=None, agent=None, project_id=
             by_project = bool((project_id and project.get('id') == project_id) or
                               (not project_id and project_name and project.get('name') == project_name))
             by_session = bool(session_id and any(row['id'] == session_id for row in context['sessions']))
-            by_directory = bool(normalized and context.get('workdir') and normalize_workdir(context['workdir']) == normalized)
+            by_directory = bool(normalized and normalized in context['workdirs'])
             if not (by_project or by_session or by_directory):continue
             item = wb.find(source_item['doc']['meta']['id'], 'thread')
             trail, seen = [], set()

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePath
 import socket
 
+from .agent_projects import agent_name
 from .errors import Error
 
 
@@ -46,7 +47,7 @@ def host_snapshot(value):
                         raise ValueError()
                     if row.get('updated_at'):
                         timestamp(row['updated_at'])
-                identity = (row['agent'].casefold(), row['host'], row['id'])
+                identity = (agent_name(row['agent']), row['host'], row['id'])
                 if identity in seen:
                     raise ValueError()
                 seen.add(identity)

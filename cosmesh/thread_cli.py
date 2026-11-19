@@ -11,6 +11,7 @@ def add_commands(commands, command, body):
     p=command(group,'access','thread.access');p.add_argument('id')
     p.add_argument('--visibility',choices=('private','restricted','public'));p.add_argument('--to',action='append',default=[])
     p.add_argument('--files',action='store_true');p.add_argument('--expect-acl',type=int)
+    p.add_argument('--share-projects', action='store_true', help='Approve the current Agent and Project display labels for readers')
     p=command(group,'browse','thread.browse');p.add_argument('id',nargs='?')
     p.add_argument('--owner');p.add_argument('--direct',action='store_true');p.add_argument('--files',action='store_true')
     p.add_argument('--records',action='store_true')

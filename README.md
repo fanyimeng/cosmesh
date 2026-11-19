@@ -16,7 +16,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 ## What you can do
 
 - Continue existing Threads across agent sessions and working directories.
-- Track devices, agents and Projects as first-class Thread execution metadata; share the Project summary under the same ACL while keeping absolute paths and Sessions owner-only.
+- Keep device, directory and Session associations private across devices. Owners can approve Project labels for Thread readers.
 - Backfill missing associations through evidence-based, explicitly confirmed candidates.
 - Split or merge work while keeping its authorship and sources.
 - Send requests, deliver results, and follow references back to their evidence.

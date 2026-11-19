@@ -24,7 +24,7 @@ status_pages.py 在当前机器私人缓存中维护 Markdown 成品与 SQLite �
 
 preferences.py 保存CosMesh 与旧兼容 CLI 共用的私人快速模式偏好；agent_projects.py 保留旧 v1 项目绑定写入适配；thread_names.py 用普通版本化记录保存中英文短名、简介与历史别名，显示时区分命名和语义归纳。
 
-thread_execution_model.py 统一执行关联校验、身份折叠、去重和 execution_revision；thread_execution_projection.py 生成 shared／owner 白名单投影；thread_execution_reader.py 离线合并当前登记与个人侧车并管理 shared 缓存。thread_execution_associate.py 提供只读候选和确认式补关联，复用操作回执幂等，不创建普通工作记录。overview、page、list、browse、locations 与 locate 消费同一执行 DTO。thread_access.py 在服务端当前 ACL 边界发布和读取 shared；thread_access_cli.py 仅缓存通过白名单校验的 shared 摘要并保留缓存来源。
+thread_execution_model.py 统一执行关联校验、身份折叠、去重和 execution_revision；thread_execution_projection.py 生成 shared／owner 白名单投影；thread_execution_reader.py 离线合并当前登记与个人侧车并管理 shared 缓存。thread_execution_associate.py 提供只读候选和确认式补关联，复用操作回执幂等，不创建普通工作记录。本人页面读取执行关联，browse 读取快照已批准的项目名称。thread_access.py 在服务端当前 ACL 边界发布和读取 shared；thread_access_cli.py 仅缓存通过白名单校验的 shared 摘要并保留缓存来源。
 
 thread_overview.py 从现有 Thread、进展记录和私人绑定生成只读总览。可选的个人 Agent 宿主元数据只在本次调用中核验会话与实际项目归属，目录检查按主机/路径去重；不联网、不写绑定或源历史。thread_cli.py 路由 overview，cli.py 为 --scope public 去除私人同步定位信息。统一 Skill 负责按宿主能力取元数据、解释证据并简短展示。
 

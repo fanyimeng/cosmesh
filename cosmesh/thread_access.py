@@ -40,6 +40,8 @@ class Access:
             if data is None:
                 data = {'format': FORMAT, 'hub_id': 'hub-'+uuid4().hex, 'threads': {}}
                 save_json(path, data)
+            # Older Hubs replace Thread rows on publish, but preserve catalog extensions.
+            self.project_approvals = data.setdefault('project_approvals', {})
             yield data
 
     def readable(self, row):
@@ -61,24 +63,14 @@ class Access:
             raise Error('USER_DISABLED', 'A selected account is disabled.')
         return sorted({r['id'] for r in rows if r['id'] != self.person['id']})
 
-    def execution(self, row, value=None):
-        """Return only the shared projection; raw paths and Sessions stay private."""
-        cached = row.get('execution_shared')
-        if value is None and cached and row.get('execution_cache_version') == 1:
-            return cached
-        if value is None:
-            value, _ = self.manifest(row)
-        from .thread_execution_projection import shared_projection
-        metadata = shared_projection(value.get('bindings', {}))
-        row['execution_shared'] = metadata
-        row['execution_revision'] = metadata['execution_revision']
-        row['execution_cache_version'] = 1
-        return metadata
-
-    def ensure_execution(self, row):
-        before = row.get('execution_cache_version') == 1 and 'execution_shared' in row
-        self.execution(row)
-        return not before
+    def execution(self, row, revision=None):
+        """A pinned snapshot inherits only approvals at or before its publication."""
+        approvals = self.project_approvals
+        if not approvals:
+            return None
+        history = row['history']
+        end = history.index(revision) if revision else len(history) - 1
+        return next((approvals[history[i]] for i in range(end, -1, -1) if history[i] in approvals), None)
 
     def brief(self, tid, row):
         # Labels are current; identity is the stable person ID, never the label.
@@ -89,8 +81,9 @@ class Access:
                       visibility=row['visibility'], acl_revision=row['acl_revision'],
                       content_revision=row['sha'], writable=row['owner_id']==self.person['id'],
                       usage=row['usage'], migrated=bool(row.get('migrated')))
-        if 'execution_shared' in row:
-            result['execution_metadata'] = row['execution_shared']
+        metadata = self.execution(row)
+        if metadata is not None:
+            result['execution_metadata'] = metadata
         return result
 
     def manifest(self, row, sha=None):
@@ -117,15 +110,19 @@ class Access:
             raise Error('NOT_FOUND', 'This Thread is unavailable to this account.')
         sha = check_id(p['sha'], HASH)
         expect = integer(p['expect'], 2**63-1)
-        if old and (old['sha'], old['visibility'], old['readers']) == (sha, mode, readers):
-            if self.ensure_execution(old): save_json(self.root / 'catalog.json', data)
+        approval = p.get('approve_projects')
+        if approval is not None:
+            check_id(approval, HASH)
+            if mode == 'private': raise Error('INPUT_INVALID', 'Project approval needs reader access.')
+        prior = self.execution(old) if old else None
+        changed_approval = approval is not None and (prior or {}).get('shared_revision') != approval
+        if old and not changed_approval and (old['sha'], old['visibility'], old['readers']) == (sha, mode, readers):
             return dict(self.brief(tid, old), accepted=True, replayed=True)
         if expect != (old['acl_revision'] if old else 0):
             raise Error('STATE_CONFLICT', 'Thread access changed; review the current access before retrying.')
         if mode == 'private':
             if not old:
                 raise Error('NOT_FOUND', 'This Thread is already private; use personal sync for owner-only content.')
-            self.ensure_execution(old)
             old.update(visibility='private', readers=[], acl_revision=expect+1)
             save_json(self.root / 'catalog.json', data)
             return dict(self.brief(tid, old), accepted=True, replayed=False)
@@ -137,9 +134,22 @@ class Access:
         candidate = {'sha': sha, 'owner_account': self.account, 'history': [sha]}
         value, relay = self.manifest(candidate)
         if value['thread'] != tid: raise Error('POLICY_DENIED', 'The source belongs to another Thread.')
+        metadata = prior
+        if changed_approval:
+            from .thread_execution_projection import shared_projection
+            metadata = shared_projection(value['bindings'])
+            if metadata['shared_revision'] != approval or (old and sha in old['history']):
+                raise Error('STATE_CONFLICT', 'Review and approve a fresh Project snapshot.')
         if old:
             before, _ = self.manifest(old)
             protect_history(before, value)
+            if not changed_approval and public_content(before) == public_content(value):
+                # Private paths, sessions and operation receipts never advance the shared head.
+                unchanged = (mode, readers) == (old['visibility'], old['readers'])
+                if not unchanged:
+                    old.update(visibility=mode, readers=readers, acl_revision=expect + 1)
+                    save_json(self.root / 'catalog.json', data)
+                return dict(self.brief(tid, old), accepted=True, replayed=unchanged)
         # Raw coordinates and receipts stay private; only the whitelist projection is public.
         objects = {sha: len(packed(value).encode()), **{k:v for k,v in (old['objects'] if old else {}).items() if k.startswith('message:')}}
         for asset in value['assets'].values():
@@ -159,11 +169,11 @@ class Access:
         if mode != 'private' and (usage['current'] > LIMITS['current'] or usage['retained'] > LIMITS['retained']):
             raise Error('STORAGE_QUOTA', 'Thread current or retained capacity exceeds the public limit; accepted content is retained.')
         doc = decode(value['documents']['documents/'+tid+'.md'])
-        execution = self.execution({}, value)
         row = dict(owner_id=self.person['id'], owner_account=self.account, visibility=mode, readers=readers,
                    acl_revision=expect+1, sha=sha, title=doc['meta']['title'], usage=usage, objects=retained,
-                   direct_current=sum(objects.values()), history=list(dict.fromkeys([*(old['history'] if old else []), sha])),
-                   execution_shared=execution, execution_revision=execution['execution_revision'], execution_cache_version=1)
+                   direct_current=sum(objects.values()), history=list(dict.fromkeys([*(old['history'] if old else []), sha])))
+        if changed_approval:
+            self.project_approvals[sha] = metadata
         if old and old.get('migrated'):
             row['migrated']=old['migrated']
             row['migration_review']=old.get('migration_review',False) and sha==old['sha']
@@ -185,11 +195,13 @@ class Access:
             'thread_access_records': {'method','thread','revision','record','offset','limit'},
             'thread_access_file': {'method','thread','revision','asset','offset'},
         }
-        if method not in allowed or set(p) != allowed[method]:
+        fields = set(p)
+        if method == 'thread_access_set': fields.discard('approve_projects')
+        if method not in allowed or fields != allowed[method]:
             raise Error('INPUT_INVALID', 'Invalid Thread access request; caller identity is server-derived.')
         with self.state() as data:
             if method == 'thread_access_info':
-                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'execution_protocol': 'thread.execution.v2'}
+                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'project_summary_protocol': 'thread.projects.v1'}
             if method == 'thread_access_set': return self.publish(data, p)
             if method == 'thread_access_list':
                 if type(p['direct']) is not bool: raise Error('INPUT_INVALID', 'direct must be boolean.')
@@ -201,8 +213,6 @@ class Access:
                         and (not owner or row['owner_id']==owner)
                         and (not p['direct'] or (row['owner_id']!=self.person['id'] and row['visibility']=='restricted' and self.person['id'] in row['readers']))]
                 selected = rows[offset:offset+limit]
-                changed = [self.ensure_execution(row) for _, row in selected]
-                if any(changed): save_json(self.root / 'catalog.json', data)
                 return {'threads':[self.brief(tid,row) for tid,row in selected],
                         'next_offset':offset+limit if offset+limit<len(rows) else None, 'hub_id':data['hub_id'], 'server_current':True}
             if method=='thread_access_search':
@@ -221,7 +231,6 @@ class Access:
                     return result
             row = self.lookup(data, p['thread'])
             if method == 'thread_access_status':
-                if self.ensure_execution(row): save_json(self.root / 'catalog.json', data)
                 result=self.brief(p['thread'],row)
                 if row['owner_id']==self.person['id']:
                     result['readers']=row['readers'];result['migration_review']=row.get('migration_review',False)
@@ -246,7 +255,7 @@ class Access:
                 return dict(thread=p['thread'], owner_id=row['owner_id'], record=rid, title=doc['meta']['title'],
                             author=doc['meta']['author'], version=content_version(doc), content_revision=p['revision'] or row['sha'],
                             body=body[offset:offset+chars], next_offset=offset+chars if offset+chars<len(body) else None,
-                            execution_metadata=self.execution({}, value),
+                            **({'execution_metadata': metadata} if (metadata := self.execution(row, p['revision'])) is not None else {}),
                             read_only=True, acl_revision=row['acl_revision'],
                             records=[{'id':decode(t)['meta']['id'],'title':decode(t)['meta']['title']} for t in list(value['documents'].values())[:100]] if rid==p['thread'] and offset==0 else [])
             if method == 'thread_access_files':
@@ -260,6 +269,15 @@ class Access:
             # ACL is held through every bounded chunk read; revocation gates the next chunk.
             result=relay.dispatch({'method':'personal_get','sha':asset['blob'],'offset':p['offset']})
             return dict(result, name=asset['name'], read_only=True)
+
+
+def public_asset(asset):
+    return {key: asset.get(key) for key in ('name', 'size', 'blob', 'relative_path')} if asset else None
+
+
+def public_content(value):
+    return (value['documents'], value['history'],
+            {aid: public_asset(asset) for aid, asset in value['assets'].items()})
 
 
 def read_manifest(hub, row, sha=None):

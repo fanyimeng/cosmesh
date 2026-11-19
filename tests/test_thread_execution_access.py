@@ -37,8 +37,9 @@ class ExecutionAccessTests(ThreadFixture):
             personal.state.update(connection=self.connection('alice'), actor='alice'); personal.save()
             return tid
 
-    def grant(self, tid, mode='public', readers=()):
+    def grant(self, tid, mode='public', readers=(), approve=True):
         args = ['access', tid, '--visibility', mode]
+        if approve and mode != 'private': args.append('--share-projects')
         for person in readers: args.extend(['--to', person])
         return self.command('alice', *args)
 
@@ -55,7 +56,7 @@ class ExecutionAccessTests(ThreadFixture):
         for secret in (str(self.root), 'private-project', 'secret-session', 'session_id', 'workdir', 'replica'):
             self.assertNotIn(secret, encoded)
         metadata = value['execution_metadata']
-        self.assertEqual(metadata['format'], 'thread.execution.v2')
+        self.assertEqual(metadata['format'], 'thread.projects.v1')
         self.assertEqual(metadata['audience'], 'shared')
         self.assertEqual(metadata['summary']['project_count'], expected_projects)
         self.assertNotIn('session_count', metadata['summary'])
@@ -78,12 +79,12 @@ class ExecutionAccessTests(ThreadFixture):
         metadata = self.assert_safe_shared(row, 1)
         context = metadata['contexts'][0]
         self.assertEqual(context['agent'], 'dsh')
-        self.assertEqual(context['project'], {'kind': 'workspace', 'id': 'project-one', 'name': 'CosMesh'})
-        self.assertTrue(context['device']['id']); self.assertTrue(context['device']['host'])
+        self.assertEqual(context['project'], {'kind': 'workspace', 'name': 'CosMesh'})
+        self.assertEqual(set(context), {'agent', 'project'})
         detail = self.command('bob', 'browse', tid)
-        self.assertEqual(self.assert_safe_shared(detail, 1)['execution_revision'], metadata['execution_revision'])
+        self.assertEqual(self.assert_safe_shared(detail, 1)['shared_revision'], metadata['shared_revision'])
         with self.use('bob') as wb:
-            self.assertEqual(shared_execution(wb, tid)['execution_revision'], metadata['execution_revision'])
+            self.assertEqual(shared_execution(wb, tid)['shared_revision'], metadata['shared_revision'])
         with self.assertRaises(Error) as error: self.command('carol', 'browse', tid)
         self.assertEqual(error.exception.code, 'NOT_FOUND')
         self.grant(tid)
@@ -113,30 +114,31 @@ class ExecutionAccessTests(ThreadFixture):
         self.assertIn('execution_metadata', next(item for item in current['threads'] if item['thread'] == tid))
 
     def test_fixed_snapshot_empty_directory_and_execution_revision(self):
-        empty = self.work('Empty execution')
-        self.grant(empty)
-        metadata = self.assert_safe_shared(self.command('bob', 'browse', empty), 0)
-        self.assertEqual(metadata['contexts'], [])
-        tid = self.work('Versioned execution')
-        with self.use('alice') as wb:
-            bind_project(wb, tid, 'codex', 'students', None, kind='directory', workdir=str(self.root/'secret-directory'))
+        tid = self.work('Fixed scopes')
+        self.bind(tid)
+        legacy = self.grant(tid, approve=False)
+        original = legacy['content_revision']
+        self.assertNotIn('execution_metadata', self.command('bob', 'browse', tid))
         first = self.grant(tid)
-        old = self.command('bob', 'browse', tid)
-        old_metadata = self.assert_safe_shared(old, 1)
-        self.assertEqual(old_metadata['contexts'][0]['project']['id'], None)
-        self.assertEqual(old_metadata['contexts'][0]['project']['name'], 'students')
+        self.assertNotEqual(original, first['content_revision'])
+        self.assertNotIn('execution_metadata', self.command('bob', 'browse', tid, '--snapshot', original))
+        metadata = self.assert_safe_shared(first, 1)
+        self.bind(tid, project_id='project-two', name='New private project', session='secret-session-2')
+        sync = self.command('alice', 'sync', tid)['access_update']
+        self.assertEqual((sync['content_revision'], sync['acl_revision']),
+                         (first['content_revision'], first['acl_revision']))
+        self.assertEqual(self.command('bob', 'browse', tid, '--changes', first['content_revision'])['changes'], [])
         with self.use('alice') as wb:
-            bind_project(wb, tid, 'codex', 'CosMesh', 'native-two', kind='project', workdir=str(self.root/'other-secret'))
-        self.command('alice', 'sync', tid)
-        current = self.command('bob', 'browse', tid)
-        current_metadata = self.assert_safe_shared(current, 2)
-        self.assertNotEqual(current_metadata['execution_revision'], old_metadata['execution_revision'])
-        changes = self.command('bob', 'browse', tid, '--changes', first['content_revision'])
-        event = next(row for row in changes['changes'] if row['kind'] == 'execution')
-        self.assertEqual(event['previous_execution_revision'], old_metadata['execution_revision'])
-        self.assertEqual(event['execution_revision'], current_metadata['execution_revision'])
-        self.assert_safe_shared({'execution_metadata': event['execution_metadata']}, 2)
+            wb.append(tid, 'New public record')
+        public = self.command('alice', 'sync', tid)['access_update']
+        self.assertNotEqual(public['content_revision'], first['content_revision'])
+        self.assertEqual(public['execution_metadata'], metadata)
+        second = self.grant(tid)
+        self.assert_safe_shared(second, 2)
+        delta = self.command('bob', 'browse', tid, '--changes', first['content_revision'])
+        self.assertEqual(sum(e['kind'] == 'execution' for e in delta['changes']), 1)
         pinned = self.command('bob', 'browse', tid, '--snapshot', first['content_revision'])
-        self.assertEqual(self.assert_safe_shared(pinned, 1)['execution_revision'], old_metadata['execution_revision'])
+        self.assertEqual(pinned['execution_metadata'], metadata)
+        self.assertNotIn('execution_metadata', self.command('bob', 'browse', tid, '--snapshot', original))
         self.grant(tid, 'private')
-        with self.assertRaises(Error): self.command('bob', 'browse', tid, '--snapshot', first['content_revision'])
+        with self.assertRaises(Error): self.command('bob', 'browse', tid, '--snapshot', original)

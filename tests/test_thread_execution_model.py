@@ -37,16 +37,15 @@ class ExecutionModelTests(unittest.TestCase):
     def test_empty_input_and_public_shared_revision(self):
         for rows in ([], {}, iter(())):
             shared = shared_projection(rows)
-            self.assertEqual(shared['format'], 'thread.execution.v2')
+            self.assertEqual(shared['format'], 'thread.projects.v1')
             self.assertEqual(shared['audience'], 'shared')
             self.assertEqual(shared['contexts'], [])
-            self.assertEqual(shared['removed_count'], 0)
-            self.assertEqual(shared['summary']['context_count'], 0)
+            self.assertNotIn('removed_count', shared)
+            self.assertEqual(shared['summary']['project_count'], 0)
             self.assertNotIn('session_count', shared['summary'])
-            self.assertFalse(shared['truncated'])
             self.assertEqual(shared['shared_revision'], compute_shared_revision(shared))
         owner = owner_projection([])
-        self.assertEqual(owner['execution_revision'], shared_projection([])['execution_revision'])
+        self.assertEqual(owner['shared_revision'], shared_projection([])['shared_revision'])
         self.assertIsNone(owner['current_device'])
 
     def test_directory_lexical_path_agent_and_legacy_host_fallback(self):
@@ -80,7 +79,7 @@ class ExecutionModelTests(unittest.TestCase):
         self.assertEqual(context['source'], 'host-api')
         self.assertEqual(context['verification'], 'personal_agent_reported')
 
-    def test_directory_fallback_merges_with_unique_workspace_and_session(self):
+    def test_directory_is_a_session_clue_not_project_membership(self):
         rows = [
             project('directory', project_id=None, kind='directory', name='fallback', at=T1),
             project('workspace', project_id='native-workspace', kind='workspace', name='Native', at=T2,
@@ -88,13 +87,23 @@ class ExecutionModelTests(unittest.TestCase):
             session('session', workdir='/work/repo/../repo'),
         ]
         owner = owner_projection(rows)
-        self.assertEqual(len(owner['contexts']), 1)
-        context = owner['contexts'][0]
-        self.assertEqual(context['project']['id'], 'native-workspace')
-        self.assertEqual(context['project']['kind'], 'workspace')
-        self.assertTrue(context['recovery']['directory_fallback'])
-        self.assertEqual(context['sessions'][0]['id'], 'session-a')
-        self.assertEqual(context['sessions'][0]['project_match'], 'unique')
+        self.assertEqual(len(owner['contexts']), 2)
+        native = next(c for c in owner['contexts'] if c['project']['id'])
+        self.assertEqual(native['sessions'], [])
+        directory = next(c for c in owner['contexts'] if c['sessions'])
+        self.assertEqual(directory['project']['kind'], 'directory')
+        self.assertEqual(directory['sessions'][0]['project_match'], 'directory_clue')
+
+    def test_bare_directory_two_sessions_and_multiple_project_paths(self):
+        bare = owner_projection([session('dir', session_id=None)])['contexts'][0]
+        self.assertEqual((bare['project'], bare['workdir'], bare['sessions']), (None, '/work/repo', []))
+        rows = [session('one'), session('two', session_id='other')]
+        ctx = owner_projection(rows)['contexts'][0]
+        self.assertIsNone(ctx['project'])
+        self.assertEqual([s['project_match'] for s in ctx['sessions']], ['unmatched'] * 2)
+        projects = [project('a', at=T1), project('b', at=T2, workdir='/other')]
+        self.assertEqual(owner_projection(projects)['contexts'][0]['workdirs'], ['/other', '/work/repo'])
+        self.assertEqual(shared_projection(projects + rows), shared_projection(projects[:1]))
 
     def test_same_project_on_multiple_agents_does_not_merge(self):
         rows = [project('dsh', agent='DeepSeek-Harness'), project('codex', agent='Codex')]
@@ -122,20 +131,19 @@ class ExecutionModelTests(unittest.TestCase):
     def test_removed_tombstone_is_counted_not_active(self):
         rows = [project('active', project_id='keep'), project('before', at=T1),
                 project('removed', at=T2, removed=True, name='Project A')]
-        shared = shared_projection(rows)
-        self.assertEqual([context['project']['id'] for context in shared['contexts']], ['keep'])
-        self.assertEqual(shared['removed_count'], 1)
-        self.assertEqual(shared['summary']['removed_count'], 1)
+        owner = owner_projection(rows)
+        self.assertEqual([c['project']['id'] for c in owner['contexts']], ['keep'])
+        self.assertEqual(owner['removed_count'], 1)
+        self.assertEqual(shared_projection(rows), shared_projection(rows[:1]))
 
     def test_cross_device_project_and_session_identity_and_current_device(self):
         rows = []
         for device in ('device-a', 'device-b'):
             rows.extend([project('project-' + device, device=device), session('session-' + device, device=device)])
         owner = owner_projection(rows, current_device='device-b')
-        self.assertEqual(len(owner['contexts']), 2)
+        self.assertEqual(owner['summary']['device_count'], 2)
         self.assertEqual(owner['summary']['session_count'], 2)
-        self.assertEqual([context['current_device'] for context in owner['contexts']], [False, True])
-        self.assertEqual(owner['current_device'], 'device-b')
+        self.assertTrue(all(c['current_device'] == (c['device']['id'] == 'device-b') for c in owner['contexts']))
 
     def test_shared_recursive_canary_and_key_whitelist(self):
         canaries = ('CANARY_WORKDIR', 'CANARY_SESSION', 'CANARY_REPLICA', 'CANARY_URL', 'CANARY_CURRENT')
@@ -146,6 +154,8 @@ class ExecutionModelTests(unittest.TestCase):
         session_row = session('private-session', workdir='/private/CANARY_WORKDIR', session_id='CANARY_SESSION',
                               url='https://CANARY_URL.invalid', operation_key='CANARY_OPERATION')
         shared = shared_projection([project_row, session_row])
+        from cosmesh.status_receipts import project_text
+        self.assertEqual(project_text({'execution_metadata': shared}, False), 'DSH · Project A')
         encoded = json.dumps(shared)
         for canary in canaries:
             self.assertNotIn(canary, encoded)
@@ -161,13 +171,13 @@ class ExecutionModelTests(unittest.TestCase):
                     walk(child)
         walk(shared)
         for context in shared['contexts']:
-            self.assertEqual(set(context['device']), {'id', 'host'})
+            self.assertNotIn('device', context)
             if context['project'] is not None:
-                self.assertEqual(set(context['project']), {'kind', 'id', 'name'})
+                self.assertEqual(set(context['project']), {'kind', 'name'})
         owner = owner_projection([project_row, session_row])
         self.assertIn('/private/CANARY_WORKDIR', json.dumps(owner))
         self.assertIn('CANARY_SESSION', json.dumps(owner))
-        self.assertEqual(owner['execution_revision'], shared['execution_revision'])
+        self.assertEqual(owner['shared_revision'], shared['shared_revision'])
 
     def test_shared_projection_validation_rejects_owner_fields_and_tampering(self):
         shared = shared_projection([project('one'), session('session')])

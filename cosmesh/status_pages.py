@@ -21,7 +21,7 @@ from .store import Store, atomic, safe_path
 from .threads import Workbench, now
 from .thread_protocol import REPO, reference_edges
 
-FORMAT = 12
+FORMAT = 13
 LEVELS = ('brief', 'status', 'index')
 
 
@@ -170,7 +170,7 @@ def dependency(wb, ref, private):
     return {'current': current, 'corrections': corrections}, records
 
 
-def input_signature(wb, item, users):
+def input_signature(wb, item, users, owner_revision, shared):
     """Only regenerate cards whose facts, references or personal bindings changed."""
     from .knowledge import Knowledge
     docs = [item, *wb.records(item['doc']['meta']['id'])]
@@ -187,13 +187,13 @@ def input_signature(wb, item, users):
     contributors.update(x['doc']['meta']['to'] for x in docs if x['doc']['meta'].get('to'))
     from .agent_projects import active
     from .thread_checks import material_status
-    return digest([FORMAT, inputs, related,
+    return digest([FORMAT, inputs, related, owner_revision, shared,
                    [u for u in users if u['account'] in contributors],
                    [b for b in wb.client['bindings'] if b['thread'] == item['doc']['meta']['id']],
                    active(wb,item['doc']['meta']['id']), material_status(wb,item,docs[1:])])
 
 
-def thread_data(wb, item, users):
+def thread_data(wb, item, users, owner, shared):
     doc, m = item['doc'], item['doc']['meta']; records = wb.records(m['id'])
     corrected = {}
     for r in records:
@@ -269,11 +269,9 @@ def thread_data(wb, item, users):
     status['materials'] = material_status(wb, item, active)
     # Raw owner locations stay out of Mesh; the same model drives every private page.
     from .agent_projects import active
-    from .thread_execution_reader import owner_execution
-    shared = wb.client.get('shared_execution', {}).get(m['id'])
     execution = {'sessions':[b for b in wb.client['bindings'] if b['thread'] == m['id']],
-                 'projects':active(wb,m['id']), 'metadata': owner_execution(wb, m['id']),
-                 'shared_metadata': shared['execution_metadata'] if shared else None}
+                 'projects':active(wb,m['id']), 'metadata': owner,
+                 'shared_metadata': shared}
     signature = digest([card, status, index, execution])
     return card, status, index, execution, signature
 
@@ -337,9 +335,12 @@ def rebuild(wb, root):
             if item['doc']['meta']['kind'] != 'thread': continue
             tid = item['doc']['meta']['id']; ids.add(tid)
             old = con.execute('SELECT signature, author, repo FROM threads WHERE id=?', (tid,)).fetchone()
-            signature = input_signature(wb, item, users)
+            from .thread_execution_reader import owner_execution, shared_execution
+            owner = owner_execution(wb, tid)
+            shared = shared_execution(wb, tid)
+            signature = input_signature(wb, item, users, owner['execution_revision'], shared)
             if old and old['signature'] == signature: continue
-            card, status, index, execution, _ = thread_data(wb, item, users)
+            card, status, index, execution, _ = thread_data(wb, item, users, owner, shared)
             rebuilt.append(tid); owners.add(wb.user if item['repo'] == 'local' else card['author'])
             if old: owners.add(wb.user if old['repo'] == 'local' else old['author'])
             status['local_execution'] = execution['sessions'];status['local_projects'] = execution['projects']

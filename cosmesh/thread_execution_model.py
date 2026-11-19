@@ -159,7 +159,11 @@ def _project_group(event):
 def _fold_project(events, quality):
     latest = max(events, key=_event_key)
     binding = latest['binding']
-    observations = [event for event in events if event['binding']['observed_at'] is not None]
+    removed = max((_event_key(event) for event in events if event['binding']['removed']), default=None)
+    active = [event for event in events if removed is None or _event_key(event) > removed]
+    workdirs = sorted({event['binding']['workdir'] for event in active if event['binding']['workdir']})
+    observations = [event for event in active if event['binding']['observed_at'] is not None
+                    and all(event['binding'][key] == binding[key] for key in ('workdir', 'name'))]
     observed = max(observations, key=_observation_key) if observations else None
     evidence = observed['binding'] if observed else binding
     verified = bool(observed and evidence['status'] == 'verified' and evidence['source'] and evidence['verification'])
@@ -170,7 +174,7 @@ def _fold_project(events, quality):
     return {
         'device_key': latest['device_key'], 'device': latest['device'], 'host': latest['host'],
         'agent': binding['agent'], 'native': binding['project_id'] is not None,
-        'identity_quality': quality, 'workdir': binding['workdir'], 'removed': binding['removed'],
+        'identity_quality': quality, 'workdirs': workdirs, 'workdir': binding['workdir'], 'removed': binding['removed'],
         'project': {'kind': binding['kind'], 'id': binding['project_id'], 'name': binding['name']},
         'status': 'verified' if verified else 'registered', 'observed_at': evidence['observed_at'],
         'source': evidence['source'], 'verification': evidence['verification'],
@@ -191,7 +195,7 @@ def _project_context(fold):
         'device': {'id': fold['device'], 'host': fold['host']}, 'agent': fold['agent'],
         'project': fold['project'], 'status': fold['status'], 'observed_at': fold['observed_at'],
         'source': fold['source'], 'verification': fold['verification'], 'workdir': workdir,
-        'sessions': [], 'conflicts': fold['conflicts'],
+        'workdirs': fold['workdirs'], 'sessions': [], 'conflicts': fold['conflicts'],
         'recovery': {'method': 'workdir' if workdir else 'metadata_only',
                      'status': 'registered' if workdir else 'metadata_only',
                      'project_match': 'unique' if native else 'directory_fallback',
@@ -205,38 +209,45 @@ def _add_conflict(context, conflict):
         context['conflicts'].append(conflict)
 
 
-def _fold_sessions(events):
-    groups = {}
+def _attach_directories(contexts, events):
+    """Keep registered working directories, including those with no native Project."""
+    projects = {}
+    for context in contexts:
+        for path in context['workdirs']:
+            projects.setdefault((context['_device_key'], context['agent'], path), []).append(context)
+    directories = {}
     for event in events:
-        binding = event['binding']
-        if binding['session_id'] is None:
+        if event['kind'] != 'bindings':
             continue
-        key = (event['device_key'], binding['agent'], binding['session_id'])
-        groups.setdefault(key, []).append(event)
-    result = []
-    for (device_key, agent, session_id), rows in groups.items():
-        latest = max(rows, key=lambda event: event['id'])
-        binding = latest['binding']
-        result.append({
-            'device_key': device_key, 'device': latest['device'], 'host': latest['host'], 'agent': agent,
-            'workdir': binding['workdir'], 'conflicts': _conflicts(rows, ('workdir', 'host')),
-            'context_id': _context_id('session', device_key, agent, session_id),
-            'session': {'id': session_id, 'workdir': binding['workdir'],
-                        'status': 'registered', 'project_match': 'unmatched'},
-        })
-    return result
-
-
-def _session_context(fold):
-    return {
-        'context_id': fold['context_id'], 'device': {'id': fold['device'], 'host': fold['host']},
-        'agent': fold['agent'], 'project': None, 'status': 'registered', 'observed_at': None,
-        'source': None, 'verification': None, 'workdir': fold['workdir'], 'sessions': [],
-        'conflicts': list(fold['conflicts']),
-        'recovery': {'method': 'host_session_id', 'status': 'registered',
-                     'project_match': fold['session']['project_match'], 'identity_quality': 'session'},
-        '_device_key': fold['device_key'], '_native': False,
-    }
+        binding = event['binding']
+        key = (event['device_key'], binding['agent'], binding['workdir'])
+        directories.setdefault(key, []).append(event)
+    for key, rows in directories.items():
+        device, agent, path = key
+        related = projects.get(key, [])
+        sessions = sorted({row['binding']['session_id'] for row in rows if row['binding']['session_id']})
+        if related and not sessions:
+            continue
+        natives = [c for c in related if c['_native']]
+        match = 'ambiguous' if len(natives) > 1 else 'directory_clue' if related else 'unmatched'
+        # A path is a recovery location. It cannot establish native Session membership.
+        directory = next((c for c in related if c['project']['kind'] == 'directory'), None)
+        if directory is None:
+            directory = {
+                'context_id': _context_id('directory', device, agent, path),
+                'device': {'id': rows[0]['device'], 'host': rows[0]['host']}, 'agent': agent,
+                'project': None, 'workdir': path, 'workdirs': [path] if path else [],
+                'status': 'registered', 'observed_at': None, 'source': None, 'verification': None,
+                'sessions': [], 'conflicts': [], 'recovery': {'identity_quality': 'directory_workdir'},
+            }
+            contexts.append(directory)
+        directory['sessions'] = [{'id': sid, 'workdir': path, 'status': 'registered', 'project_match': match}
+                                 for sid in sessions]
+        directory['recovery'].update(method='host_session_id' if sessions else 'workdir',
+                                     status='registered', project_match=match)
+        if len(natives) > 1:
+            _add_conflict(directory, {'field': 'project_id', 'reason': 'ambiguous_session_workdir',
+                                      'values': sorted(c['project']['id'] for c in related if c['project']['id'])})
 
 
 def _context_sort_key(context):
@@ -279,36 +290,12 @@ def build_execution_model(locations):
         else:
             active.append(fold)
 
-    # Merge only a directory fallback with one unambiguous native project.
-    natives = [fold for fold in active if fold['native']]
-    fallbacks = [fold for fold in active if not fold['native']]
-    contexts = [_project_context(fold) for fold in natives]
-    for fallback in fallbacks:
-        matches = [context for context in contexts
-                   if context['_device_key'] == fallback['device_key'] and context['agent'] == fallback['agent']
-                   and fallback['identity_quality'] == 'directory_workdir'
-                   and fallback['workdir'] is not None and context['workdir'] == fallback['workdir']]
-        if len(matches) == 1:
-            context = matches[0]
-            context['conflicts'].extend(fallback['conflicts'])
-            context['recovery']['directory_fallback'] = True
-            context['recovery']['identity_quality'] = 'native+directory_workdir'
-            continue
-        context = _project_context(fallback)
-        if len(matches) > 1:
-            candidates = sorted(item['project']['id'] for item in matches)
-            _add_conflict(context, {'field': 'project_id', 'reason': 'ambiguous_directory_fallback',
-                                    'values': candidates})
-            context['recovery']['project_match'] = 'ambiguous'
-            context['recovery']['directory_ambiguous'] = True
-        contexts.append(context)
-
-    # Equal directories do not merge native projects; expose the ambiguity to the owner.
+    contexts = [_project_context(fold) for fold in active]
     directories = {}
     for context in contexts:
-        if context['_native'] and context['workdir'] is not None:
-            key = (context['_device_key'], context['agent'], context['workdir'])
-            directories.setdefault(key, []).append(context)
+        if context['_native']:
+            for path in context['workdirs']:
+                directories.setdefault((context['_device_key'], context['agent'], path), []).append(context)
     for group in directories.values():
         if len(group) > 1:
             candidates = sorted(context['project']['id'] for context in group)
@@ -317,34 +304,7 @@ def build_execution_model(locations):
                                         'values': candidates})
                 context['recovery']['directory_ambiguous'] = True
 
-    session_events = [event for event in normalized_events if event['kind'] == 'bindings']
-    for fold in _fold_sessions(session_events):
-        session = fold['session']
-        candidates = [] if session['workdir'] is None else [
-            context for context in contexts if context['_device_key'] == fold['device_key']
-            and context['agent'] == fold['agent'] and context['workdir'] == session['workdir']]
-        if len(candidates) == 1:
-            session['project_match'] = 'unique'
-            target = candidates[0]
-        else:
-            if len(candidates) > 1:
-                session['project_match'] = 'ambiguous'
-                fold['conflicts'].append({'field': 'project_id', 'reason': 'ambiguous_session_workdir',
-                                          'values': sorted(context['project']['id'] or context['context_id']
-                                                           for context in candidates)})
-            # An existing directory-only context can hold an ambiguous session without
-            # pretending that any one of its native projects owns that session.
-            directory = [context for context in candidates if not context['_native']
-                         and context['recovery']['identity_quality'] == 'directory_workdir']
-            target = directory[0] if len(directory) == 1 else _session_context(fold)
-            if target not in contexts:
-                contexts.append(target)
-        target['sessions'].append(session)
-        for conflict in fold['conflicts']:
-            _add_conflict(target, conflict)
-        target['recovery'].update(method='host_session_id', status='registered',
-                                  project_match=session['project_match'])
-
+    _attach_directories(contexts, normalized_events)
     for context in contexts:
         context['sessions'].sort(key=lambda session: session['id'])
         context['conflicts'] = [json.loads(packed) for packed in sorted({_packed(item) for item in context['conflicts']})]

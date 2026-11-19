@@ -1,6 +1,6 @@
 # 同一 Thread 跨设备接续
 
-个人同步保持原 Thread ID，由同一用户在不同设备、Agent、项目和目录继续。它独立于私有／指定可见／全员可见。本人可恢复完整内容与 owner 执行元数据；其他查看者默认在线按需读，并按当前 Thread 权限取得 device／Agent／Project shared 摘要，不取得绝对 workdir 或 Session。
+个人同步保持原 Thread ID，在不同设备上恢复本人的完整执行关联。查看者在线读取已发布内容及所有者批准的 Project 摘要。
 
 ```sh
 cosmesh thread personal THREAD_ID --json

@@ -68,6 +68,8 @@ def cache_shared(wb, hub_id, rows):
     for row in rows:
         metadata = row.get('execution_metadata')
         if not metadata:
+            if wb.client.get('shared_execution', {}).pop(row['thread'], None) is not None:
+                updated = True
             continue
         from .errors import Error
         from .thread_execution_projection import validate_shared_projection
@@ -91,7 +93,11 @@ def shared_execution(wb, tid):
     entry = wb.client.get('shared_execution', {}).get(tid)
     if not entry:
         return None
-    return entry['execution_metadata']
+    from .thread_execution_projection import validate_shared_projection
+    try:
+        return validate_shared_projection(entry['execution_metadata'])
+    except (ValueError, KeyError):
+        return None
 
 
 def shared_execution_cache(wb, tid):

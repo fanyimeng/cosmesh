@@ -58,7 +58,7 @@ class Online:
             offset=result['next_offset']
             if offset>=10000: raise Error('INPUT_TOO_LARGE','Use an owner filter for this incoming-work list.')
 
-    def publish(self, tid, mode, readers, files=False, expect=None):
+    def publish(self, tid, mode, readers, files=False, expect=None, share_projects=False):
         if mode!='restricted' and readers:raise Error('INPUT_INVALID','A reader list applies only to restricted visibility.')
         if mode=='restricted' and not readers:mode='private'
         try:item=self.wb.find(tid,'thread');tid=item['doc']['meta']['id']
@@ -74,6 +74,25 @@ class Online:
         if online_only and files:raise Error('OWNER_RESTORE_REQUIRED','Recover your Thread before adding local files.')
         revision=old['acl_revision'] if old else 0
         if expect is not None and expect != revision:raise Error('STATE_CONFLICT','Thread access changed; review current access.')
+        options = {}
+        if share_projects:
+            from .thread_execution_projection import SHARED_FORMAT, shared_projection
+            from .thread_execution_reader import raw_locations
+            if mode == 'private' or online_only:
+                raise Error('INPUT_INVALID', 'Approve a Project summary from the restored owner Thread with reader access.')
+            if self.info.get('project_summary_protocol') != SHARED_FORMAT:
+                raise Error('FEATURE_UNAVAILABLE', 'This Hub cannot preserve approved Project summaries.')
+            summary = shared_projection(raw_locations(self.wb, tid))
+            revision_id = summary['shared_revision']
+            options['approve_projects'] = revision_id
+            if (old or {}).get('execution_metadata', {}).get('shared_revision') != revision_id:
+                # A normal private receipt gives the approval its own immutable snapshot,
+                # even when all records and files are identical to a legacy publication.
+                payload = {'thread': tid, 'acl_revision': revision, 'summary': revision_id}
+                self.wb._commit(self.wb.base, 'approve-projects', payload,
+                                lambda: ({}, {'id': tid, 'approved_projects': revision_id}),
+                                f'approve-projects-{tid}-{revision}-{revision_id}')
+                self.wb.load()
         if mode=='private' and not old:return {'thread':tid,'visibility':'private','unchanged':True,'accepted':True}
         if mode=='private' or online_only:sha=old['content_revision']
         else:
@@ -82,7 +101,7 @@ class Online:
                 raise Error('AUTH_DENIED','Personal content and access must use the same Hub identity.')
             personal.state.update(connection=self.config,actor=self.info['person']['account']);personal.save()
             sha=personal.synchronize(tid, files=files)['accepted_snapshot']
-        result=self.call('thread_access_set', thread=tid,sha=sha,visibility=mode,readers=readers,expect=revision)
+        result=self.call('thread_access_set', thread=tid,sha=sha,visibility=mode,readers=readers,expect=revision,**options)
         self.wb.client.setdefault('thread_access',{})[tid]={'hub_id':self.info['hub_id'],'visibility':result['visibility'],
                 'acl_revision':result['acl_revision']}
         self.wb.save_client()
@@ -122,10 +141,10 @@ def execute(args, root):
         wb.load(); online=Online(wb); verb=args.thread_command
         if verb=='access':
             if not args.visibility:
-                if args.to or args.files:raise Error('INPUT_INVALID','Choose a visibility before changing readers or files.')
+                if args.to or args.files or args.share_projects:raise Error('INPUT_INVALID','Choose a visibility before changing readers or files.')
                 result=online.status(args.id)
                 if result is None:raise Error('NOT_FOUND','This Thread has no online access entry.')
-            else:result=online.publish(args.id,args.visibility,args.to,args.files,args.expect_acl)
+            else:result=online.publish(args.id,args.visibility,args.to,args.files,args.expect_acl,args.share_projects)
         elif verb=='browse':
             if getattr(args,'changes',None):
                 if any((args.asset,args.output,args.files,args.records,args.record,args.version)) or not args.id:raise Error('INPUT_INVALID','Use a selected Thread and --changes alone; pin --snapshot for subsequent pages.')
@@ -172,7 +191,7 @@ def execute(args, root):
                 shared_rows.append(result)
             for key in ('threads', 'sources'):
                 shared_rows.extend(row for row in result.get(key, []) if isinstance(row, dict) and row.get('content_revision'))
-        if shared_rows:
+        if shared_rows and not getattr(args, 'snapshot', None):
             from .thread_execution_reader import cache_shared
             cache_shared(wb, online.info['hub_id'], shared_rows)
         return result,wb.base.head

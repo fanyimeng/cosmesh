@@ -45,6 +45,10 @@ def project_text(card, private):
     metadata = card.get('execution_metadata')
     if metadata:
         contexts = metadata.get('contexts', [])
+        if metadata.get('audience') == 'shared':
+            values = [labels.get(c['agent'], c['agent']) + ' · ' + c['project']['name'] for c in contexts[:3]]
+            if len(contexts) > 3: values.append('另有' + str(len(contexts) - 3) + '个已共享项目')
+            return '\n'.join(values) if values else '尚无已共享的项目'
         if not contexts: return '未关联项目／工作区（未登记执行位置）'
         values = []
         for context in contexts[:3]:

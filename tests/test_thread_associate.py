@@ -68,6 +68,8 @@ class AssociateTests(unittest.TestCase):
                               '--expect', result['execution_revision'], '--idempotency-key', 'associate-one')
         self.assertEqual(confirmed['status'], 'applied')
         self.assertEqual(confirmed['thread'], self.tid)
+        self.assertEqual(confirmed['association']['project_id'], 'project-one')
+        self.assertEqual(confirmed['association']['session_id'], 'session-one')
         with self.w.base.locked():
             self.w.load(); projects = active(self.w, self.tid)
             self.assertEqual(len(projects), 1); self.assertEqual(projects[0]['project_id'], 'project-one')
@@ -136,6 +138,30 @@ class AssociateTests(unittest.TestCase):
         self.assertEqual(result['status'], 'no_candidates')
         with self.w.base.locked():
             self.w.load(); self.assertEqual(active(self.w, other), [])
+
+    def test_mixed_evidence_and_remote_same_hostname(self):
+        observed = self.host()
+        local = observed['sessions'][0]
+        directory = self.root/'second'
+        directory.mkdir()
+        with self.w.base.locked():
+            self.w.load()
+            self.w.bind(self.tid, 'codex', str(directory), 'loose')
+        observed['projects'].append(dict(observed['projects'][0], id='two', path=str(directory)))
+        observed['sessions'].append(dict(local, id='loose', cwd=str(directory), project_id=None))
+        observed['sessions'].append(dict(local, id='remote'))
+        remote = {'kind': 'bindings', 'device': 'another-device', 'replica': 'another-replica',
+                  'binding': {'thread': self.tid, 'host': local['host'], 'agent': 'codex',
+                              'session_id': 'remote', 'workdir': str(self.root)}}
+        from cosmesh import thread_execution_associate as assoc
+        original = assoc.raw_locations
+        with patch.object(assoc, 'raw_locations', lambda wb, tid: dict(original(wb, tid), remote=remote)):
+            result = self.preview(observed)
+        by_session = {c['session_id']: c for c in result['candidates']}
+        self.assertEqual(set(by_session), {'session-one', 'loose'})
+        self.assertTrue(by_session['session-one']['confirmable'])
+        self.assertNotIn('candidate_id', by_session['loose'])
+        self.assertFalse(by_session['loose']['confirmable'])
 
     def test_interrupted_receipt_recovers_without_duplicate_association(self):
         result = self.preview(self.host())

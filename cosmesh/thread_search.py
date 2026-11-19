@@ -78,9 +78,9 @@ def changes(access,row,p):
     target=p['revision'] or row['sha']
     previous,_=access.manifest(row,p['since'])
     current,_=access.manifest(row,target)
-    from .thread_execution_projection import shared_projection
-    previous_execution = shared_projection(previous.get('bindings', {}))
-    current_execution = shared_projection(current.get('bindings', {}))
+    from .thread_access import public_asset
+    previous_execution = access.execution(row, p['since'])
+    current_execution = access.execution(row, target)
     events=[]
     for path,text in sorted(current['documents'].items()):
         if previous['documents'].get(path)==text:continue
@@ -90,13 +90,12 @@ def changes(access,row,p):
     for aid,asset in sorted(current['assets'].items()):
         old=previous['assets'].get(aid)
         # Local paths and device bindings never appear in public change receipts.
-        def public(a):return {k:a.get(k) for k in ('name','size','blob','relative_path')} if a else None
-        if public(old)!=public(asset):events.append(dict(kind='file',action='upsert',asset=aid,**public(asset)))
+        if public_asset(old)!=public_asset(asset):events.append(dict(kind='file',action='upsert',asset=aid,**public_asset(asset)))
     for aid in sorted(set(previous['assets'])-set(current['assets'])):events.append(dict(kind='file',action='remove',asset=aid))
-    if previous_execution['shared_revision'] != current_execution['shared_revision']:
+    if previous_execution != current_execution:
         events.append(dict(kind='execution', action='upsert',
-                           previous_execution_revision=previous_execution['execution_revision'],
-                           execution_revision=current_execution['execution_revision'],
+                           previous_execution_revision=(previous_execution or {}).get('shared_revision'),
+                           execution_revision=(current_execution or {}).get('shared_revision'),
                            execution_metadata=current_execution))
     return dict(thread=p['thread'],from_revision=p['since'],revision=target,changes=events[offset:offset+limit],
                 next_offset=offset+limit if offset+limit<len(events) else None,unchanged=not events,acl_revision=row['acl_revision'],read_only=True)

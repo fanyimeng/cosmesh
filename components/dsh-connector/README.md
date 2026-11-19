@@ -2,7 +2,7 @@
 
 可选、独立安装的 Host bundle：`@cosmesh/dsh-connector`，版本 **0.1.1**。此组件随 CosMesh 源码独立发布，**未在 npm 发布**；与 CosMesh CLI 的版本独立。
 
-**0.1.2 更新：新增统一 execution_revision 与 owner 执行元数据回执，保持旧参数、旧回执、journal 和初始化语义；修复已初始化操作以 initialize:false 重试时状态回退的问题。绝对目录与 Session 仍只在本机回执和日志中，跨 Thread 查看者仅获得 device／Agent／Project shared 摘要。升级保留原项目、会话、资料和回退包。**
+**0.1.2 更新：新增统一 execution_revision 与 owner 执行元数据回执，保持旧参数、旧回执、journal 和初始化语义；修复已初始化操作以 initialize:false 重试时状态回退的问题。绝对目录与 Session 仍只在本机回执和日志中，查看者可读所有者批准的 Agent／Project 显示摘要。升级保留原项目、会话、资料和回退包。**
 
 ## 能力与边界
 

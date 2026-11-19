@@ -5,7 +5,7 @@ description: 管理本人 Thread、跨设备接续、按人追踪与按权限在
 
 ## 一个 Thread，一位所有者
 
-Thread 有私有／指定可见／全员可见三种范围，个人同步独立设置。本人多设备、多 Agent 沿用原 ID，项目、目录和会话分别登记。设备、Agent、Project 是一手执行元数据：其摘要与 Thread 可见性一致，绝对 workdir、Session、恢复 URL 和 journal 仅本人可见。其他用户获得查看权限，自己的工作和反馈记录到本人 Thread。复用已有合适 Thread；新建、绑定、改权限和发布按用户授权执行，首次收取有效新消息会自动建立无重名的私人按人 Thread；其余工作按明确授权执行。
+Thread 有私有／指定可见／全员可见三种范围，个人同步独立设置。本人多设备、多 Agent 沿用原 ID，项目、目录和会话分别登记。设备、路径与会话由本人管理。其他用户获得查看权限，自己的工作和反馈记录到本人 Thread。复用已有合适 Thread；新建、绑定、改权限和发布按用户授权执行，首次收取有效新消息会自动建立无重名的私人按人 Thread；其余工作按明确授权执行。
 
 明确工作目标后直接使用已知 ID；缺少才一次 thread locate。本人本地总览 thread page --ready --json；记录进展 thread update ID --file FILE --interaction-summary TEXT --ready --json。已授权同步的新访问 Thread，再 thread sync ID。edit 使用 --expect，重试沿用原输入／操作键。只读取任务必需材料，不扫描聊天数据库或整个目录，不重复查成功回执。
 
@@ -17,7 +17,7 @@ thread personal ID 主动保存选定 Thread，完整记录、可用历史和完
 
 ## 执行元数据与补关联
 
-overview、page、list、browse 和 locations 的 execution_metadata 使用同一 execution_revision。shared 只含 device/host、Agent、Project 类型／ID／名称及登记／观测状态；owner 才含 workdir、Session、current_device 和恢复细节。verified 仅表示附来源和时间的宿主元数据匹配。
+本人按设备和 Agent 登记 Project、目录和 Session。用 thread associate ID 预览摘要，发布时在 thread access ID --visibility public 或 restricted 命令中加 --share-projects，只批准本次的 Agent、Project 类型和显示名称。设备标识、主机名、原生 ID、目录和会话保留在本人视图。旧快照维持原范围，私人变动不推进共享版本。
 
 旧 Thread 没有关联时用 thread associate --missing 查看，再以 thread associate ID --host-file FILE 只读预览；可另加明确选择的 --journal FILE，但仍须宿主观测核验。只有唯一有效候选才可 --confirm CANDIDATE --expect REVISION，重试沿用原 host-file、候选和幂等键。标题、generation.tool、目录相似或同名不单独构成关联；歧义先厘清，不在 sync/fetch/browse 中自动补写。
 

@@ -5,7 +5,7 @@
 Unreleased candidate. Production remains 0.4.9; DSH Connector candidate is independently versioned at 0.1.2.
 
 - Make device, Agent and Project first-class Thread execution metadata with deterministic execution revisions and shared/owner whitelist projections.
-- Return the Project summary under the Thread's current ACL in online lists, details, fixed snapshots and change receipts. Keep absolute workdirs, Sessions, recovery URLs, journals and operation receipts owner-only.
+- Pin explicitly approved Agent/Project display labels to shared snapshots. Existing snapshots and shared revisions survive private-only updates unchanged.
 - Unify overview, page, list, locate, locations, fetch and sync around canonical execution contexts; deduplicate project/workspace records, preserve directory workspaces and expose ambiguity instead of silently guessing.
 - Add `thread associate` for read-only evidence previews and explicitly confirmed, idempotent backfill, including selected Connector journals and stale-revision/crash recovery.
 - Add execution metadata to bind/fetch/sync receipts and persist compatible Connector execution revisions. Existing v1 manifests, records, authors, Thread IDs and permission lists are retained.
