@@ -102,10 +102,12 @@ test('npm pack is self-contained and root, locale and icon exports resolve witho
   assert.deepEqual(files, ['README.md', 'cordis.patch.yml', 'icon.svg', 'index.js', 'lib/cosmesh.js', 'lib/dsh.js', 'lib/work-link.js', 'locale/en.json', 'locale/zh.json', 'package.json'].sort());
   const installed = path.join(dir, 'node_modules', '@cosmesh', 'dsh-connector');
   await fs.mkdir(installed, { recursive: true });
-  execFileSync('tar', ['-xzf', path.join(dir, packed.filename), '--strip-components=1', '-C', installed]);
+  const archives = (await fs.readdir(dir)).filter(name => name.endsWith('.tgz'));
+  assert.equal(archives.length, 1);
+  execFileSync('tar', ['-xzf', path.join(dir, archives[0]), '--strip-components=1', '-C', installed]);
   const manifest = JSON.parse(await fs.readFile(path.join(installed, 'package.json'), 'utf8'));
   assert.equal(manifest.name, '@cosmesh/dsh-connector');
-  assert.equal(manifest.version, '0.1.1');
+  assert.equal(manifest.version, JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8')).version);
   assert.equal(manifest.private, true);
   const result = execFileSync(process.execPath, ['--input-type=module', '-e', `import {apply} from '@cosmesh/dsh-connector'; import fs from 'node:fs'; import {fileURLToPath} from 'node:url'; for (const p of ['@cosmesh/dsh-connector/locale/en.json','@cosmesh/dsh-connector/locale/zh.json']) { const j=JSON.parse(fs.readFileSync(fileURLToPath(import.meta.resolve(p)))); if(!j.meta.title||!j.meta.description) throw Error('locale'); } const svg=fs.readFileSync(fileURLToPath(import.meta.resolve('@cosmesh/dsh-connector/icon')),'utf8'); if(!svg.includes('<svg')) throw Error('icon'); if(typeof apply!=='function') throw Error('root'); console.log('self-contained exports OK');`], { cwd: dir, encoding: 'utf8' });
   assert.match(result, /self-contained exports OK/);
