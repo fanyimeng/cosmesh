@@ -111,9 +111,12 @@ class ThreadExecution(ThreadLocations, Personal):
             accepted = sha
         # One atomic sidecar write. No document/history/author mapping is applied.
         save_json(self.directory / (tid + '.json'), value)
+        from .thread_execution_projection import owner_projection
+        metadata = owner_projection(value['bindings'], current_device=self.state['device'])
         return dict(thread=tid, sharing='public', audience='owner', personal_sync='execution',
                     published=False, public_content='fetched', source=source,
                     accepted_snapshot=accepted, uploaded=not pull, pulled=bool(head),
+                    execution_metadata=metadata,
                     restored_records=0, assets_fetched=0, assets=[], transfers=None,
                     locations_synced=len(bindings))
 

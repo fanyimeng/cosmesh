@@ -707,11 +707,14 @@ class Workbench:
         incoming = self.backlinks(value)
         related = {x['record']['id']: x['record'] for x in incoming['backlinks']
                    if x['target']['id'] == focus['doc']['meta']['id']}
+        from .thread_execution_reader import owner_execution
+        execution_metadata = owner_execution(self, item['doc']['meta']['id'])
         return {'thread': self.present(item), 'records': [self.present(x) for x in records],
                 'focus_record': self.present(focus) if focus is not item else None,
                 'requests': requests, 'citations': citations, 'related': list(related.values()),
                 'backlinks': incoming['backlinks'], 'backlink_coverage': incoming['coverage'],
                 'local_execution': [x for x in self.client['bindings'] if x['thread'] == item['doc']['meta']['id']],
+                'execution_metadata': execution_metadata,
                 'sources': self.status()['spaces'], 'resume': 'Use an accessible host session when supported; otherwise start a new session from this context.'}
 
     def _ref_accepted(self, ref):

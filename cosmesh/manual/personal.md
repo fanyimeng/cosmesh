@@ -1,6 +1,6 @@
 # 同一 Thread 跨设备接续
 
-个人同步保持原 Thread ID，由同一用户在不同设备、Agent、项目和目录继续。它独立于私有／指定可见／全员可见。本人可恢复完整内容，其他查看者默认在线按需读。
+个人同步保持原 Thread ID，由同一用户在不同设备、Agent、项目和目录继续。它独立于私有／指定可见／全员可见。本人可恢复完整内容与 owner 执行元数据；其他查看者默认在线按需读，并按当前 Thread 权限取得 device／Agent／Project shared 摘要，不取得绝对 workdir 或 Session。
 
 ```sh
 cosmesh thread personal THREAD_ID --json
@@ -11,7 +11,7 @@ cosmesh thread fetch THREAD_ID --workdir DIRECTORY --agent AGENT --files --json
 cosmesh thread locations THREAD_ID --json
 ```
 
-真实原生项目可加 --project-id/--project-name；目录与会话按实际位置登记。目录登记不授权递归扫描，文件仅明确选择。正文恢复、文件恢复、入口登记与实际执行分别报告。同设备共享原位引用，不应用网络传输配额。
+真实原生项目可加 --project-id/--project-name；目录与会话按实际位置登记。目录登记不授权递归扫描，文件仅明确选择。正文恢复、文件恢复、入口登记与实际执行分别报告。bind、fetch、sync 和 locations 回执中的 execution_metadata 使用同一 revision；registered_only 不表示宿主已创建或环境可执行。同设备共享原位引用，不应用网络传输配额。
 
 默认单文件5 GB、每批10 GB/10000份、服务端本人总容量30 GB（含保留对象与历史）。GB为10⁹字节。每日传输1 TiB、本地缓存100 GiB独立设置。personal policy 查看或设置本地额度，与 Hub 取较小值。旧未改变默认值按新额度解释，自定义不同值保留，旧配置文件可回退。科学数据、压缩包及未知后缀可传输，无需 --science；保留该标志作兼容。凭证、特殊路径、目录和非普通文件继续过滤；超限在哈希前跳过。
 

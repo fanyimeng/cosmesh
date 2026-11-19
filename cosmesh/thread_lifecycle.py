@@ -142,6 +142,10 @@ def continuation(wb, value):
         for binding in wb.client['bindings']:
             if binding['thread'] == ref['id'] and binding not in packet['local_execution']:
                 packet['local_execution'].append(binding)
+    if trail:
+        from .thread_execution_reader import owner_execution
+        packet['continued_execution'] = [
+            {'thread': ref['id'], 'execution_metadata': owner_execution(wb, ref['id'])} for ref in trail]
     return packet
 
 
@@ -174,5 +178,38 @@ def locate(wb, workdir=None, session_id=None, host=None, agent=None, project_id=
         result['bindings'].append(binding)
         for ref in trail:
             if ref not in result['continued_from']:result['continued_from'].append(ref)
+    # Add canonical matches from accepted remote sidecars without discarding the
+    # legacy raw bindings returned to existing callers.
+    from .thread_execution_model import normalize_workdir
+    from .thread_execution_reader import owner_execution
+    normalized = normalize_workdir(path) if path else None
+    for item in list(wb.catalog.values()):
+        if item['doc']['meta']['kind'] != 'thread':continue
+        metadata = owner_execution(wb, item['doc']['meta']['id'])
+        source_item = item
+        for context in metadata['contexts']:
+            if context['device']['host'] != host:continue
+            if agent and agent_name(context['agent']) != agent_name(agent):continue
+            project = context.get('project') or {}
+            by_project = bool((project_id and project.get('id') == project_id) or
+                              (not project_id and project_name and project.get('name') == project_name))
+            by_session = bool(session_id and any(row['id'] == session_id for row in context['sessions']))
+            by_directory = bool(normalized and context.get('workdir') and normalize_workdir(context['workdir']) == normalized)
+            if not (by_project or by_session or by_directory):continue
+            item = wb.find(source_item['doc']['meta']['id'], 'thread')
+            trail, seen = [], set()
+            while state(wb, item)['merged_into']:
+                if item['doc']['meta']['id'] in seen:raise Error('REFERENCE_INVALID', 'Merge destination cycle.')
+                seen.add(item['doc']['meta']['id']);trail.append(wb.ref(item))
+                item = wb.find(state(wb, item)['merged_into']['id'], 'thread')
+            shown = wb.present(item)
+            if shown['lifecycle'] in {'trash', 'withdrawn'}:continue
+            result = found.setdefault(shown['id'], {'thread': shown, 'bindings': [], 'continued_from': [],
+                        'session_match': False, 'project_match': False})
+            result['project_match'] |= by_project; result['session_match'] |= by_session
+            result.setdefault('execution_contexts', []).append(context)
+            result['execution_metadata'] = owner_execution(wb, shown['id'])
+            for ref in trail:
+                if ref not in result['continued_from']:result['continued_from'].append(ref)
     candidates = sorted(found.values(), key=lambda x:(not x['project_match'],not x['session_match'], x['thread']['lifecycle']!='active', x['thread']['id']))
-    return {'private': True, 'candidates': candidates, 'basis': 'local_project_session_and_directory_bindings'}
+    return {'private': True, 'candidates': candidates, 'basis': 'canonical_project_session_and_directory_bindings'}

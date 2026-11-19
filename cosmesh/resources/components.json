@@ -6,8 +6,8 @@
       "title": "CosMesh DSH Connector",
       "source": "dsh-connector",
       "kind": "dsh-bundle",
-      "status": "released",
-      "version": "0.1.1",
+      "status": "candidate",
+      "version": "0.1.2",
       "installation": "dsh-plugin-manager",
       "requires": {
         "cosmesh": ">=0.4.7",
@@ -27,6 +27,13 @@
         },
         "0.1.1": {
           "archive_sha256": "3a46b1222a33a69906621da3df17d87a321ecff61e64b0015c1cbd62895def81",
+          "requires": {
+            "cosmesh": ">=0.4.7",
+            "dsh": "0.2.2-rc.3"
+          }
+        },
+        "0.1.2": {
+          "archive_sha256": "4726a6d26c96289e25dff26e77226dc501439729ca15867fc4b6de89a9cb47fd",
           "requires": {
             "cosmesh": ">=0.4.7",
             "dsh": "0.2.2-rc.3"

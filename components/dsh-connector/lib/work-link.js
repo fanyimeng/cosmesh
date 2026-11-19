@@ -104,7 +104,8 @@ async function run(args, api, signal) {
     const step = async (name, operation) => {
       signal.throwIfAborted();
       if (state.steps[name]) return;
-      await operation();
+      const receipt = await operation();
+      if (receipt?.execution_metadata) state.executionMetadata = receipt.execution_metadata;
       state.steps[name] = true;
       await save();
     };
@@ -153,12 +154,16 @@ async function run(args, api, signal) {
       }
       await step('initialization_record', () => api.recordInitialization(input.thread_id, state, key, signal));
     }
-    return { ok: true, status: initialize ? 'initialized_waiting' : 'created_only', operationKey: input.operation_key, threadId: input.thread_id, workspaceId: state.workspaceId,
+    return { ok: true, status: state.steps.initialization ? 'initialized_waiting' : 'created_only', receiptVersion: 2,
+      executionRevision: state.executionMetadata?.execution_revision ?? null, executionMetadata: state.executionMetadata ?? null,
+      operationKey: input.operation_key, threadId: input.thread_id, workspaceId: state.workspaceId,
       projectTitle: state.projectTitle, sessionId: state.sessionId, workdir: root, journal, handoffPath,
       initialization: state.initialization?.outcome ? boundedReceipt(state.initialization.outcome) : null, steps: state.steps, researchStarted: false, published: false };
   } catch (e) {
     if (!state) throw e;
-    return { ok: false, status: 'partial', operationKey: input.operation_key, error: String(e.message ?? e).slice(0, 1500), threadId: input.thread_id,
+    return { ok: false, status: 'partial', receiptVersion: 2,
+      executionRevision: state.executionMetadata?.execution_revision ?? null, executionMetadata: state.executionMetadata ?? null,
+      operationKey: input.operation_key, error: String(e.message ?? e).slice(0, 1500), threadId: input.thread_id,
       workspaceId: state.workspaceId, sessionId: state.steps?.session ? state.sessionId : null,
       reservedSessionId: state.sessionId, steps: state.steps, journal, initialization: state.initialization?.outcome ? boundedReceipt(state.initialization.outcome) : null, researchStarted: false, published: false,
       next: 'Retry the same operation_key and original arguments; do not create a replacement.' };

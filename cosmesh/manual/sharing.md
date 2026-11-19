@@ -12,6 +12,8 @@ cosmesh thread browse THREAD_ID --files --json
 
 --to 可重复，名单为空归为私有。access 不带 visibility 查询当前状态，--expect-acl 可作并发版本检查。发布完整选定 Thread 的记录与可用历史，文件需明确选择；旧只发简报的授权不自动扩展。
 
+同一可见范围也适用于执行摘要：查看者可读 device／host、Agent、Project 类型／ID／名称、登记／移除／核验状态和观测时间。绝对 workdir、Session ID／标题、恢复 URL、journal、handoff 与操作回执不进入 shared。browse 的列表、详情和固定快照使用同一 execution_revision，--changes 只返回脱敏执行摘要变化；撤权后当前与历史在线读取都重新拒绝。
+
 personal asset add THREAD_ID FILE 登记文件，thread access ... --files 或 thread sync ID --files 传输。科研数据、压缩包、二进制、未知后缀可存储，不自动解包或执行；凭证及特殊路径保留过滤。对外单文件2 GB、每批5 GB、单Thread总容量15 GB（含历史），GB为10⁹字节。相关 Library 内容计入来源容量。
 
 查看者默认在线阅读，--record/--version 看固定历史，--snapshot 指定快照；--asset ID --output NEW_PATH 明确下载。逐请求与分块检查当前权限，已有下载件和本人笔记保持。

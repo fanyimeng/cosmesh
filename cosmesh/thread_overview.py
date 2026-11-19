@@ -278,6 +278,8 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
             if tools: row['generation_tools'] = sorted(tools)
             if scope != 'mesh':
                 from .agent_projects import active
+                from .thread_execution_reader import owner_execution
+                row['execution_metadata'] = owner_execution(wb, shown['id'])
                 row['projects'] = active(wb,shown['id'])
                 entries = [(*execution(b), index) for index, b in enumerate(bindings.get(shown['id'], []))]
                 entries.sort(key=lambda entry: (entry[1], entry[2]), reverse=True)
@@ -297,6 +299,12 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
                         row['execution']['project']['verified_absence'] = True
                     if preferred.get('project_candidates'):
                         row['execution']['project_candidates'] = preferred['project_candidates']
+            else:
+                from .thread_execution_reader import shared_execution, shared_execution_cache
+                metadata = shared_execution(wb, shown['id'])
+                if metadata:
+                    row['execution_metadata'] = metadata
+                    row['execution_cache'] = shared_execution_cache(wb, shown['id'])
             rows.append(row)
         result = {'format': 'thread.overview.compact.v1', 'threads': rows, 'total': len(selected),
                   'truncated': len(selected) > limit, 'scope': scope, 'private': scope != 'mesh',
@@ -317,6 +325,8 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
     if scope != 'mesh':
         for row in rows:
             from .agent_projects import active
+            from .thread_execution_reader import owner_execution
+            row['execution_metadata'] = owner_execution(wb, row['id'])
             row['projects'] = active(wb,row['id'])
             entries = [(*execution(b), index) for index, b in enumerate(bindings.get(row['id'], []))]
             entries.sort(key=lambda entry: (entry[1], entry[2]), reverse=True)
@@ -328,6 +338,13 @@ def overview(wb, value=None, mine=False, query=None, lifecycle='active', scope='
             if details:
                 row['execution']['bindings'] = [entry[0] for entry in entries[:100]]
                 row['execution']['truncated'] = len(entries) > 100
+    else:
+        from .thread_execution_reader import shared_execution, shared_execution_cache
+        for row in rows:
+            metadata = shared_execution(wb, row['id'])
+            if metadata:
+                row['execution_metadata'] = metadata
+                row['execution_cache'] = shared_execution_cache(wb, row['id'])
     result = {'threads': rows, 'total': total, 'truncated': total > limit, 'scope': scope,
               'private': scope != 'mesh', 'checked_at': checked_at}
     if scope != 'mesh':

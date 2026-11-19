@@ -18,6 +18,8 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 - 默认快速模式：直接读取分级状态页与总览，按需展开原文。
 - 用中英文短名查工作，改名后旧名仍可检索。
 - 将 Thread 关联 Codex、DSH、OpenCode 的项目／工作区，跨会话继续。
+- 设备、Agent、Project 成为一手执行元数据：Project 摘要随 Thread 权限可见，绝对目录和 Session 仅本人可见。
+- 通过可解释证据和明确确认为旧 Thread 补充关联，重复确认保持幂等。
 - 分裂、合并工作，保留原作者、记录和来源。
 - 发出请求、交付结果，沿引用核验依据。
 - 按选定范围提供完整 Thread 记录与历史，文件明确选择后传输，固定版本按需打开。
@@ -27,7 +29,7 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 本地试用
 
-当前版本 **0.4.9**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前正式版本 **0.4.9**；下一候选 **0.5.0**（尚未发布）。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 已有服务器渠道安装的用户可对 Agent 说“升级 CosMesh”。GitHub 提供源码和版本标签；可用 `tools/build_release.py` 构建匹配本机的固定包，或使用维护者分发的包。详见[安装与升级](docs/quickstart.md#installation-and-rollback--安装与回退)。
 

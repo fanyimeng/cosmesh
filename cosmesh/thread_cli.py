@@ -43,6 +43,9 @@ def add_commands(commands, command, body):
     p.add_argument('--project-name');p.add_argument('--project-id');p.add_argument('--host');p.add_argument('--workdir')
     p.add_argument('--kind',choices=('project','workspace','directory'),default='project')
     p.add_argument('--host-file');p.add_argument('--remove',action='store_true')
+    p = command(group, 'associate', 'thread.associate'); p.add_argument('id', nargs='?')
+    p.add_argument('--missing', action='store_true'); p.add_argument('--host-file'); p.add_argument('--journal')
+    p.add_argument('--confirm', metavar='CANDIDATE_ID'); p.add_argument('--expect', metavar='EXECUTION_REVISION')
     p = command(group, 'list', 'thread.list'); p.add_argument('--query'); p.add_argument('--mine', action='store_true');p.add_argument('--all',action='store_true')
     p.add_argument('--personal', action='store_true'); p.add_argument('--remote', action='store_true')
     p.add_argument('--ssh'); p.add_argument('--service')
@@ -178,6 +181,8 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Offline Thread operations cannot contact the Hub.')
     if dry and (publish or fresh or verb in {'discover', 'sync'}):
         raise Error('INPUT_INVALID', 'Dry-run previews local changes and cannot synchronize.')
+    if dry and verb == 'associate':
+        raise Error('INPUT_INVALID', 'Association previews are read-only without --dry-run; confirmation is an explicit write.')
     if fresh and verb not in {'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'outbox', 'mail', 'status', 'maintenance'}:
         raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
     if verb == 'overview' and ((args.scope == 'mesh' and args.host_file) or (args.scope == 'base' and fresh)):
@@ -273,7 +278,7 @@ def execute(args):
                     for space in status['spaces'] if space['repo'] in repos]
             if verb == 'inbox' and args.ready:
                 args._thread_sync_state = {key: args._thread_sync_state[key] for key in ('state','identity_verified','last_sync')}
-            if not dry and not publish and verb not in {'status','sync','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'}:
+            if not dry and not publish and verb not in {'status','sync','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'} and not (verb == 'associate' and not args.confirm):
                 from .status_pages import schedule
                 schedule(wb)
             if getattr(args,'ready',False) and verb not in {'overview','inbox','update'} and result.get('format') != 'thread.send.v1':
@@ -323,6 +328,26 @@ def execute(args):
             if args.continue_id:
                 from .thread_overview import with_continuation
                 result = with_continuation(wb, result, args.continue_id, args.mine)
+        elif verb == 'associate':
+            import json
+            if args.missing and (args.id or args.host_file or args.journal or args.confirm or args.expect):
+                raise Error('INPUT_INVALID', 'Use --missing alone, or select one Thread for an association preview.')
+            if not args.missing and not args.id:
+                raise Error('INPUT_INVALID', 'Select a Thread or use --missing.')
+            if args.confirm and (args.missing or not args.host_file or not args.expect):
+                raise Error('INPUT_INVALID', 'Confirmation needs the original --host-file and its --expect execution revision.')
+            if args.expect and not args.confirm:
+                raise Error('INPUT_INVALID', '--expect applies only to an explicit association confirmation.')
+            from .thread_execution_associate import confirm, missing, preview, read_journal
+            if args.missing:
+                result = missing(wb)
+            else:
+                host = json.loads(read_input(args.host_file, MAX_DOCUMENT)) if args.host_file else None
+                journal = read_journal(args.journal) if args.journal else None
+                if args.confirm:
+                    result = confirm(wb, args.id, args.confirm, args.expect, host, key, journal)
+                else:
+                    result = preview(wb, args.id, host, journal)
         elif verb == 'list':
             result = []
             for item in wb.catalog.values():
@@ -335,6 +360,15 @@ def execute(args):
                 shown=wb.present(item)
                 placement = args.lifecycle or ('all' if args.all else 'active')
                 if placement != 'all' and shown['lifecycle'] != placement:continue
+                if args.scope != 'mesh':
+                    from .thread_execution_reader import owner_execution
+                    shown['execution_metadata'] = owner_execution(wb, doc['meta']['id'])
+                else:
+                    from .thread_execution_reader import shared_execution, shared_execution_cache
+                    metadata = shared_execution(wb, doc['meta']['id'])
+                    if metadata:
+                        shown['execution_metadata'] = metadata
+                        shown['execution_cache'] = shared_execution_cache(wb, doc['meta']['id'])
                 result.append(shown)
             result.sort(key=lambda x:(x['created_at'], x['id']), reverse=True)
         elif verb == 'show':
@@ -384,6 +418,9 @@ def execute(args):
             old = wb.find(args.id, 'entry')
             result = wb.append(old['doc']['meta']['thread'], body, 'correction', supersedes=wb.ref(old), key=key, dry_run=dry, title=args.title)
         else:raise Error('COMMAND_RETIRED','Use the current Thread commands; retained historical records remain readable.')
+        if verb in {'bind', 'bind-project'} and not dry:
+            from .thread_execution_reader import owner_execution
+            result['execution_metadata'] = owner_execution(wb, args.id)
         if publish:
             wb.load()
             result = {'result': result, 'publication': wb.synchronize()}

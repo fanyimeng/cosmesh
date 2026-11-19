@@ -2,7 +2,7 @@
 
 可选、独立安装的 Host bundle：`@cosmesh/dsh-connector`，版本 **0.1.1**。此组件随 CosMesh 源码独立发布，**未在 npm 发布**；与 CosMesh CLI 的版本独立。
 
-**0.1.1 更新：私人执行信息只留在绑定与本机日志；修复初始化取消后的残留工具保护。升级保留原项目、会话、资料和回退包。**
+**0.1.2 更新：新增统一 execution_revision 与 owner 执行元数据回执，保持旧参数、旧回执、journal 和初始化语义；修复已初始化操作以 initialize:false 重试时状态回退的问题。绝对目录与 Session 仍只在本机回执和日志中，跨 Thread 查看者仅获得 device／Agent／Project shared 摘要。升级保留原项目、会话、资料和回退包。**
 
 ## 能力与边界
 
@@ -11,6 +11,8 @@
 默认 `initialize:true` 发起**一次真实模型请求**：确认接续后等待。仅该 Session 的初始化轮全部工具由 Host guard 拒绝，不自动开始研究，不创建子 Agent/目标/定时任务。不发布、不同步 Thread 或上传项目文件；但是 **handoff 会作为初始化 prompt 发给当前配置的模型服务**，因此不应放入凭据或不允许提供给模型的资料。`initialize:false` 只建空白 Session，不调用模型；DSH 未选中空白 Session 时可能隐藏它。
 
 成功回执 `initialized_waiting` 仅说明看到匹配输入、助手非空显示文本（只取 `data.message.content` 的 text block）和 `turn/end.reason.kind=completed`，不验证回复语义或 GUI 视觉；`accepted` 绝不等于 `completed`。回执和本组件 journal 仅保留布尔状态、有限序号及最多 512 字符的确认文本，不返回/存储完整模型 stream、reasoning、provider 元数据或 replay。DSH 自己的原生 Session 日志仍按宿主规则保留模型事件。
+
+0.1.2 在全部旧字段之外新增 `receiptVersion: 2`、`executionRevision` 和 `executionMetadata`。后者是 CLI 返回的 owner 执行元数据，含本机工作目录与 Session，只保存到本机 journal 和本工具回执；其他 Thread 查看者使用 shared 投影，不获得这些字段。旧 CLI 未返回 execution_metadata 时两个新增值均为 null，不伪造 v2。partial 同样保留已产生的 revision，不能解释为无副作用。
 
 ## 安装与配置
 

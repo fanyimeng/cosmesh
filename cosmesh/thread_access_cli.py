@@ -166,6 +166,15 @@ def execute(args, root):
                         result={'dismissed':True,'created':False,'owner_id':people[0]['owner_id']}
                     else:result=attach(wb,online.info,people[0],args.use)
                 else:result={'people':people,'server_current':True,'automatic_creation':False}
+        shared_rows = []
+        if isinstance(result, dict):
+            if result.get('thread') and result.get('content_revision'):
+                shared_rows.append(result)
+            for key in ('threads', 'sources'):
+                shared_rows.extend(row for row in result.get(key, []) if isinstance(row, dict) and row.get('content_revision'))
+        if shared_rows:
+            from .thread_execution_reader import cache_shared
+            cache_shared(wb, online.info['hub_id'], shared_rows)
         return result,wb.base.head
 
 

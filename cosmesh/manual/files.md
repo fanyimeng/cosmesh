@@ -4,7 +4,7 @@
 
 thread_messages.py 管理单一所有者消息的固定引用、幂等投递、显式查看状态与历史迁移；thread_messages_cli.py 负责本人记录和私人待发回执。thread_tracking.py 将来信引用收录到本人按人 Thread，身份与 Thread ID 跨设备保持。
 
-thread_search.py 按记录版本维护可重建全文索引，先核验当前权限再检索，并提供固定版本差异；thread_updates.py 保存普通项目进展，不自动通知。旧 thread_mail 仅支持旧格式与历史迁移依赖；旧 thread_sending 实现已删除，统一 Hub 不开放旧投递路径。
+thread_search.py 按记录版本维护可重建全文索引，先核验当前权限再检索，并提供固定版本差异；thread_updates.py 保存普通项目进展，不自动通知。旧 thread_mail.py 仅支持旧格式与历史迁移依赖；旧 thread_sending 实现已删除，统一 Hub 不开放旧投递路径。
 
 ## 交互摘要、对话与快速成品
 
@@ -22,7 +22,9 @@ status_pages.py 在当前机器私人缓存中维护 Markdown 成品与 SQLite �
 
 ## Thread 总览
 
-preferences.py 保存CosMesh 与旧兼容 CLI 共用的私人快速模式偏好；agent_projects.py 管理与 Agent 原生项目／工作区的私人独立关联；thread_names.py 用普通版本化记录保存中英文短名、简介与历史别名，显示时区分命名和语义归纳。
+preferences.py 保存CosMesh 与旧兼容 CLI 共用的私人快速模式偏好；agent_projects.py 保留旧 v1 项目绑定写入适配；thread_names.py 用普通版本化记录保存中英文短名、简介与历史别名，显示时区分命名和语义归纳。
+
+thread_execution_model.py 统一执行关联校验、身份折叠、去重和 execution_revision；thread_execution_projection.py 生成 shared／owner 白名单投影；thread_execution_reader.py 离线合并当前登记与个人侧车并管理 shared 缓存。thread_execution_associate.py 提供只读候选和确认式补关联，复用操作回执幂等，不创建普通工作记录。overview、page、list、browse、locations 与 locate 消费同一执行 DTO。thread_access.py 在服务端当前 ACL 边界发布和读取 shared；thread_access_cli.py 仅缓存通过白名单校验的 shared 摘要并保留缓存来源。
 
 thread_overview.py 从现有 Thread、进展记录和私人绑定生成只读总览。可选的个人 Agent 宿主元数据只在本次调用中核验会话与实际项目归属，目录检查按主机/路径去重；不联网、不写绑定或源历史。thread_cli.py 路由 overview，cli.py 为 --scope public 去除私人同步定位信息。统一 Skill 负责按宿主能力取元数据、解释证据并简短展示。
 
@@ -39,6 +41,10 @@ community.py 是 Hub 所有者运行的确定性服务，使用独立 SQLite 与
 knowledge.py 管理本地元数据缓存、原文件缓存、离线待提交队列、格式提取、按需正文读取与实名解析；community_cli.py 提供 library/user 命令，并复用同一工作台的连接。resources/community_rpc.py 是标准库 SSH 适配器，在既有账号下校验网关和内核身份，传输有界文件分块，无新增账号、密钥或后台模型。
 
 schema 1 旧文档、schema 2 Thread、schema 3 知识资料分别验证；library 的原始文件独立于 Git 源空间。Thread 的 generation/author_id 和版本化操作回执保留贡献来源，服务器核验稳定用户 ID。
+
+## 可选宿主组件
+
+components.py 管理组件目录、安装、升级和回滚状态；component_artifacts.py 校验固定包、摘要、解包边界和原子切换；component_dsh.py 负责 DSH 版本与 profile 兼容检查。resources/components.json 固定已发布组件版本和归档摘要。DSH Connector 在 components/dsh-connector/ 独立开发，lib/cosmesh.js 只通过参数数组调用 CLI，lib/work-link.js 保持 journal、幂等和有限回执，lib/dsh.js 负责宿主原生对象与初始化证据。
 
 ## 软件、发布、数据三种目录
 

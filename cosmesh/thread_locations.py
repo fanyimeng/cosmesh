@@ -26,8 +26,11 @@ class ThreadLocations:
         # A location read never builds or hashes a document/history snapshot.
         value['bindings'] = self.binding_rows(tid, value['bindings'])
         value['assets'] = self.selected_assets(tid)
+        from .thread_execution_projection import owner_projection
+        metadata = owner_projection(value['bindings'], current_device=self.state['device'])
         return {'thread': tid, 'private': True, 'locations': [dict(id=k, **row,
                 current_device=row['device'] == self.state['device']) for k, row in sorted(value['bindings'].items())],
+                'execution_metadata': metadata,
                 'assets': self.asset_status(value)}
 
     def restore(self, tid, workdir=None, agent=None, project_id=None, project_name=None, session_id=None, files=False):
@@ -61,4 +64,8 @@ class ThreadLocations:
         result['restoration'] = {'records': 'restored', 'files': result['files']['state'],
                                  'execution': 'registered_only' if workdir else 'not_registered'}
         result['assets'] = self.asset_status(self.view(tid))
+        value = self.view(tid)
+        value['bindings'] = self.binding_rows(tid, value['bindings'])
+        from .thread_execution_projection import owner_projection
+        result['execution_metadata'] = owner_projection(value['bindings'], current_device=self.state['device'])
         return result

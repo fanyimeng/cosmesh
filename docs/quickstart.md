@@ -12,7 +12,7 @@ cosmesh thread update THREAD_ID --body 'New progress.' --json
 cosmesh thread bind-project THREAD_ID --agent codex --kind directory --workdir "$PWD" --json
 ```
 
-Reuse known Thread IDs. A Thread has one owner; device, agent, project and directory associations are private. Ordinary local work is available offline. The default data root stays `~/.local/share/cosmesh/work` for compatibility.
+Reuse known Thread IDs. A Thread has one owner. Device, agent and Project summaries follow the Thread's visibility; absolute workdirs, Sessions and recovery details remain owner-only. Ordinary local work is available offline. The default data root stays `~/.local/share/cosmesh/work` for compatibility.
 
 ## Same Thread on another device / 跨设备接续
 

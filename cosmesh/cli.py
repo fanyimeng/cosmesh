@@ -361,6 +361,8 @@ def capabilities(product):
                          "interaction_summaries": True, "thread_chat": True, "thread_chat_tui": False, "thread_messages_protocol": "thread.messages.v1", "thread_search": True, "thread_changes": True,
                          "prepared_contact_documents": "legacy_only", "content_update_preparation": True, "bounded_thread_source_reads": True,
                          "fast_mode": True, "agent_project_bindings": True,
+                          "execution_metadata": "thread.execution.v2", "shared_execution_projection": "device_agent_project",
+                          "thread_associate": True, "execution_revisioned_receipts": True,
                          "thread_share_materials": "retired", "thread_access_files": True, "fixed_knowledge_file_links": True,
                          "private_session_bindings": True, "maintenance_requests": "send_from_own_thread",
                          "markdown_yaml": True, "local_git_history": True, "context": True,

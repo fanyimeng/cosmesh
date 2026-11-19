@@ -8,6 +8,10 @@ thread create --title TITLE --body TEXT 新建本人工作。note/result/summary
 
 bind-project 关联实际宿主项目，缺原生项目使用 --kind directory；bind 关联真实目录与会话。不造项目／会话 ID，不读取聊天数据库。thread personal/sync/fetch/locations 管理本人跨设备接续，原 ID 和各端登记保留。
 
+设备、Agent、Project 是 Thread 的一手执行元数据。能读取 Thread 的用户即可读取其 shared 摘要（设备、Agent、项目类型／ID／名称、登记与观测状态）；绝对 workdir、Session ID／标题、恢复 URL 和 journal 仍仅本人可见。overview、page、list、browse 与 locations 使用同一 execution_revision；原始 locations 仅本人可读。
+
+没有关联的旧 Thread 使用 thread associate --missing 查看；thread associate THREAD --host-file OBSERVED.json 只读生成候选，只有唯一有效证据才允许 --confirm CANDIDATE --expect REVISION。可另加明确选择的 --journal FILE，但仍须宿主重新核验。标题、generation.tool、目录相似或同名不单独构成关联；预览不写入，确认使用稳定幂等键，歧义先手工厘清。
+
 thread access 管理查看权限；thread browse 按需在线读取他人的原记录、历史和文件。查看者的笔记与成果写入本人 Thread，保留来源身份。thread track 按人建立本人私有追踪入口，优先复用，排除该人的全员可见工作。
 
 split/merge/delete/restore 继续按明确授权保留来源、旧 ID 和历史。旧公共 Git 缓存保留作离线历史；迁移后的所有者通过 fetch 恢复本人内容，再维护与同步。权限和来源资料见 sharing、personal、knowledge；迁移回退见 operations。

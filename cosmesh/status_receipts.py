@@ -41,8 +41,27 @@ def progress_text(card):
 
 
 def project_text(card, private):
-    if not private: return '私人关联不公开'
     labels = {'codex':'Codex','dsh':'DSH','opencode':'OpenCode'}
+    metadata = card.get('execution_metadata')
+    if metadata:
+        contexts = metadata.get('contexts', [])
+        if not contexts: return '未关联项目／工作区（未登记执行位置）'
+        values = []
+        for context in contexts[:3]:
+            agent = labels.get(context['agent'], context['agent'])
+            host = context['device'].get('host') or '设备未命名'
+            prefix = ('本机 · ' if context.get('current_device') else '') + host + ' · ' + agent
+            project = context.get('project')
+            if project is None:
+                values.append(prefix + '：未关联项目／工作区')
+                continue
+            kind = {'project':'项目','workspace':'工作区','directory':'目录工作区'}.get(project['kind'], project['kind'])
+            state = '宿主元数据匹配' if context['status']=='verified' else '已登记'
+            values.append(prefix + ' · ' + (project.get('name') or project.get('id') or '未命名') + '（'+kind+'，'+state+'）')
+        count = metadata.get('summary', {}).get('context_count', len(contexts))
+        if count > len(values): values.append('另有'+str(count-len(values))+'个关联，按需展开')
+        return '\n'.join(values)
+    if not private: return '执行摘要未缓存；可在线查看 Thread'
     projects = card.get('projects',[])
     if not projects:
         agent = (card.get('execution') or {}).get('agent')

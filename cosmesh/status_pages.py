@@ -21,7 +21,7 @@ from .store import Store, atomic, safe_path
 from .threads import Workbench, now
 from .thread_protocol import REPO, reference_edges
 
-FORMAT = 11
+FORMAT = 12
 LEVELS = ('brief', 'status', 'index')
 
 
@@ -117,9 +117,12 @@ def stamp(wb):
     # Directory/knowledge changes matter without a Thread HEAD change.
     kb = (knowledge.stat().st_mtime_ns, knowledge.stat().st_size) if knowledge.is_file() else None
     public = {'sources': {r: v for r, v in sources.items() if r != 'local'}, 'knowledge': kb,
-              'actor': client.get('actor'), 'spaces': client['spaces'], 'last_sync': client.get('last_sync')}
-    return {'all': digest([FORMAT, sources, client, kb]),
-            'base': digest([FORMAT, sources, config, client.get('bindings'), client.get('project_bindings'), client.get('personal_thread_authors'), kb]),
+              'actor': client.get('actor'), 'spaces': client['spaces'], 'last_sync': client.get('last_sync'),
+              'shared_execution': client.get('shared_execution', {})}
+    from .thread_execution_reader import execution_stamp
+    execution = execution_stamp(wb)
+    return {'all': digest([FORMAT, sources, client, execution, kb]),
+            'base': digest([FORMAT, sources, config, client.get('bindings'), client.get('project_bindings'), client.get('personal_thread_authors'), execution, kb]),
             'mesh': digest([FORMAT, public])}
 
 
@@ -264,10 +267,13 @@ def thread_data(wb, item, users):
               'backlinks': backlinks[:20], 'backlink_count': len(backlinks)}
     from .thread_checks import material_status
     status['materials'] = material_status(wb, item, active)
-    # Personal execution data is stored separately and never enters Mesh pages.
+    # Raw owner locations stay out of Mesh; the same model drives every private page.
     from .agent_projects import active
+    from .thread_execution_reader import owner_execution
+    shared = wb.client.get('shared_execution', {}).get(m['id'])
     execution = {'sessions':[b for b in wb.client['bindings'] if b['thread'] == m['id']],
-                 'projects':active(wb,m['id'])}
+                 'projects':active(wb,m['id']), 'metadata': owner_execution(wb, m['id']),
+                 'shared_metadata': shared['execution_metadata'] if shared else None}
     signature = digest([card, status, index, execution])
     return card, status, index, execution, signature
 
@@ -350,7 +356,13 @@ def rebuild(wb, root):
                             [(r['id'],tid,r['author'],next((ref['source']['id'] for ref in r['refs'] if ref['relation']=='request'),None),r['created_at']) for r in index])
             for scope in ('all', 'base', 'mesh'):
                 if (scope == 'mesh' and item['repo'] == 'local') or (scope == 'base' and item['repo'] != 'local'): continue
-                shown = execution_card(card, execution if scope != 'mesh' else [])
+                if scope != 'mesh':
+                    view = execution
+                elif execution.get('shared_metadata'):
+                    view = {'metadata': execution['shared_metadata'], 'projects': []}
+                else:
+                    view = []
+                shown = execution_card(card, view)
                 for level in LEVELS:
                     save_page(con, root, scope + '/' + tid + '/' + level,
                               md_thread(shown, status if level == 'status' else None,
@@ -493,13 +505,17 @@ def select_rows(con, scope, user, all_states, query, limit, offset, count=False)
 
 
 def personal_card(row, scope):
-    return execution_card(json.loads(row['card']), json.loads(row['execution']) if scope != 'mesh' else [])
+    execution = json.loads(row['execution'])
+    if scope == 'mesh':
+        execution = {'metadata': execution['shared_metadata'], 'projects': []} if execution.get('shared_metadata') else []
+    return execution_card(json.loads(row['card']), execution)
 
 
 def execution_card(card, bindings):
     card = dict(card)
     if isinstance(bindings,dict):
         card['projects'] = bindings['projects'][:3];card['project_count'] = len(bindings['projects'])
+        card['execution_metadata'] = bindings['metadata']
         bindings = bindings['sessions']
     if bindings:
         b = bindings[-1]

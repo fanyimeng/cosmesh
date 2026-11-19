@@ -165,8 +165,11 @@ class ThreadPersonal(ThreadLocations, Personal):
             for ref in references(decode(text)['meta']):
                 if ref['repo'] == 'local' and ref['id'] + '@' + ref['version'] not in merged['history'] and ref not in missing:
                     missing.append(ref)
+        from .thread_execution_projection import owner_projection
+        metadata = owner_projection(merged['bindings'], current_device=self.state['device'])
         return dict(thread=tid, sharing='personal', audience='owner', published=False,
                     accepted_snapshot=accepted, uploaded=not pull, pulled=bool(head),
+                    execution_metadata=metadata,
                     restored_records=len(merged['documents']), missing_private_references=missing,
                     assets_fetched=0, assets=self.asset_status(merged), transfers=transfers)
 

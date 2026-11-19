@@ -197,6 +197,9 @@ test('normal creation persists IDs, bindings, private handoff and result without
   const result = await createBridge(fake.api)(args, freshSignal());
   assert.equal(result.ok, true);
   assert.equal(result.status, 'created_only');
+  assert.equal(result.receiptVersion, 2);
+  assert.equal(result.executionRevision, null);
+  assert.equal(result.executionMetadata, null);
   assert.equal(result.threadId, THREAD);
   assert.equal(result.workdir, await fs.realpath(workdir));
   assert.equal(result.workspaceId, 'workspace-1');
@@ -224,6 +227,29 @@ test('normal creation persists IDs, bindings, private handoff and result without
   assertSingleObjects(fake);
   assertNoPrompt(fake, result);
   await assertNoLocks(workdir);
+});
+
+test('execution receipts persist across retries and initialized status does not regress', async t => {
+  const { args } = await fixture(t); const fake = fakeAdapter();
+  const metadata = { format: 'thread.execution.v2', audience: 'owner', execution_revision: 'execution-revision-1',
+    summary: { device_count: 1, agent_count: 1, project_count: 1, context_count: 1, removed_count: 0, session_count: 1 },
+    contexts: [], removed_count: 0, truncated: false };
+  const project = fake.api.bindProject;
+  fake.api.bindProject = async (...args) => { await project(...args); return { execution_metadata: metadata }; };
+  const session = fake.api.bindSession;
+  fake.api.bindSession = async (...args) => { await session(...args); return { execution_metadata: metadata }; };
+  const bridge = createBridge(fake.api);
+  const first = await bridge(args, freshSignal());
+  assert.equal(first.receiptVersion, 2); assert.equal(first.executionRevision, 'execution-revision-1');
+  assert.deepEqual(first.executionMetadata, metadata);
+  const journal = JSON.parse(await fs.readFile(first.journal, 'utf8'));
+  assert.deepEqual(journal.executionMetadata, metadata);
+  const initialized = await bridge({ ...args, initialize: true }, freshSignal());
+  assert.equal(initialized.status, 'initialized_waiting'); assert.deepEqual(initialized.executionMetadata, metadata);
+  const retryWithoutInitialization = await bridge(args, freshSignal());
+  assert.equal(retryWithoutInitialization.status, 'initialized_waiting');
+  assert.deepEqual(retryWithoutInitialization.executionMetadata, metadata);
+  assertSingleObjects(fake); assert.equal(fake.counts.prompts, 1);
 });
 
 test('same-key retry, including a new bridge instance, reuses objects and does not rewrite handoff', async t => {

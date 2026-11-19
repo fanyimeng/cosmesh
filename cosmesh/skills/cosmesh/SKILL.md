@@ -5,23 +5,29 @@ description: 管理本人 Thread、跨设备接续、按人追踪与按权限在
 
 ## 一个 Thread，一位所有者
 
-Thread 有私有／指定可见／全员可见三种范围，个人同步独立设置。本人多设备、多 Agent 沿用原 ID，项目、目录和会话分别登记。其他用户获得查看权限，自己的工作和反馈记录到本人 Thread。复用已有合适 Thread；新建、绑定、改权限和发布按用户授权执行，首次收取有效新消息会自动建立无重名的私人按人 Thread；其余工作按明确授权执行。
+Thread 有私有／指定可见／全员可见三种范围，个人同步独立设置。本人多设备、多 Agent 沿用原 ID，项目、目录和会话分别登记。设备、Agent、Project 是一手执行元数据：其摘要与 Thread 可见性一致，绝对 workdir、Session、恢复 URL 和 journal 仅本人可见。其他用户获得查看权限，自己的工作和反馈记录到本人 Thread。复用已有合适 Thread；新建、绑定、改权限和发布按用户授权执行，首次收取有效新消息会自动建立无重名的私人按人 Thread；其余工作按明确授权执行。
 
 明确工作目标后直接使用已知 ID；缺少才一次 thread locate。本人本地总览 thread page --ready --json；记录进展 thread update ID --file FILE --interaction-summary TEXT --ready --json。已授权同步的新访问 Thread，再 thread sync ID。edit 使用 --expect，重试沿用原输入／操作键。只读取任务必需材料，不扫描聊天数据库或整个目录，不重复查成功回执。
 
 ## 个人同步与恢复
 
-thread personal ID 主动保存选定 Thread，完整记录、可用历史和本人关联仅本人可取。thread list --personal --remote 查看远端；thread fetch ID --workdir DIRECTORY --agent AGENT 恢复原 ID 并登记目的地。真实原生项目可加 --project-id/--project-name，目录工作区使用实际目录。后续 thread sync ID，--pull 只拉取；thread locations ID 展开关联。设备／目录登记与实际执行分别报告。
+thread personal ID 主动保存选定 Thread，完整记录、可用历史和完整 owner 执行元数据仅本人可取。thread list --personal --remote 查看远端；thread fetch ID --workdir DIRECTORY --agent AGENT 恢复原 ID 并登记目的地。真实原生项目可加 --project-id/--project-name，目录工作区使用实际目录。后续 thread sync ID，--pull 只拉取；thread locations ID 展开完整关联与 execution_metadata。设备／目录登记与实际执行分别报告，registered_only 不表示宿主已创建或可运行。
 
 明确选择文件用 personal asset add ID FILE [--as RELATIVE_PATH]，thread sync ID --files 上传选定文件，fetch 加 --files 恢复。已有不同内容保留并报告冲突；冲突时可选新本地数据根 --root，原数据与缓存保留。不要自动覆盖或删除旧副本。
+
+## 执行元数据与补关联
+
+overview、page、list、browse 和 locations 的 execution_metadata 使用同一 execution_revision。shared 只含 device/host、Agent、Project 类型／ID／名称及登记／观测状态；owner 才含 workdir、Session、current_device 和恢复细节。verified 仅表示附来源和时间的宿主元数据匹配。
+
+旧 Thread 没有关联时用 thread associate --missing 查看，再以 thread associate ID --host-file FILE 只读预览；可另加明确选择的 --journal FILE，但仍须宿主观测核验。只有唯一有效候选才可 --confirm CANDIDATE --expect REVISION，重试沿用原 host-file、候选和幂等键。标题、generation.tool、目录相似或同名不单独构成关联；歧义先厘清，不在 sync/fetch/browse 中自动补写。
 
 ## 可见范围与在线查看
 
 thread access ID 查询当前权限。指定查看者用 thread access ID --visibility restricted --to USER，可重复 --to；全员用 public，仅本人用 private。迁移后若 sync 返回 review_required，先展示保留的私人历史／文件范围，沿用户明确授权使用 thread access 发布；原公共版本保持。首次发布选定 Thread 完整记录与历史，文件需明确登记及 --files；说明范围，不沿用旧“仅简报”的授权扩大发布。修改名单使用 --expect-acl REVISION。成功授权不等于已发送通知。
 
-thread browse [ID] 在线读；--direct 列指定给本人的来源，--owner USER 按人；--records 列记录，--record ID/--version VERSION 看历史，--snapshot SHA 固定快照，--files 列文件。明确下载才 --asset ID --output NEW_PATH，按 next_offset 分页。默认不全量恢复别人的 Thread，不自动执行文件。
+thread browse [ID] 在线读；--direct 列指定给本人的来源，--owner USER 按人；--records 列记录，--record ID/--version VERSION 看历史，--snapshot SHA 固定快照，--files 列文件。列表与详情按当前 ACL 返回 shared execution_metadata，变化只含脱敏摘要。明确下载才 --asset ID --output NEW_PATH，按 next_offset 分页。默认不全量恢复别人的 Thread，不自动执行文件。
 
-thread track 提供按人追踪建议，只包含对方指定给本人的 Thread，排除全员可见。优先复用本人同名 Thread，授权后 --use ID；确需新建 --create，默认名字为对方实名。连接按 Hub 和稳定用户 ID，改名不重复创建。可 --dismiss 忽略建议。show/context/continue 或 track --show ID 在线刷新来源；撤权后来源移除，本人笔记保留。离线仅展示已保存本人资料，不声称旧权限仍有效。
+thread track 提供按人追踪建议，只包含对方指定给本人的 Thread，排除全员可见。优先复用本人同名 Thread，授权后 --use ID；确需新建 --create，默认名字为对方实名。连接按 Hub 和稳定用户 ID，改名不重复创建。可 --dismiss 忽略建议。show/context/continue 或 track --show ID 在线刷新来源；撤权后来源移除，本人笔记保留。离线仅展示已保存本人资料及明确标记的 shared 缓存，不声称旧权限仍有效。
 
 ## 消息与增量检索
 

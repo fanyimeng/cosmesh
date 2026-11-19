@@ -24,6 +24,11 @@ class ThreadFixture(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(dir='/private/tmp' if Path('/private/tmp').is_dir() else None)
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        # Deterministic teardown: background page preparation may otherwise keep
+        # writing into the disposable workbench after the command returns.
+        # Tests that exercise background preparation set COSMESH_PAGE_BACKGROUND=1.
+        environment = patch.dict(os.environ, {'COSMESH_PAGE_BACKGROUND': '0'})
+        environment.start(); self.addCleanup(environment.stop)
         self.hub = Hub(self.root / 'hub'); self.hub.initialize()
         self.entry = self.root / 'prefix/bin/cosmesh'; self.entry.parent.mkdir(parents=True)
         source = str(Path(__file__).resolve().parents[1])

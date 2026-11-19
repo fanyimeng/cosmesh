@@ -16,6 +16,8 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 ## What you can do
 
 - Continue existing Threads across agent sessions and working directories.
+- Track devices, agents and Projects as first-class Thread execution metadata; share the Project summary under the same ACL while keeping absolute paths and Sessions owner-only.
+- Backfill missing associations through evidence-based, explicitly confirmed candidates.
 - Split or merge work while keeping its authorship and sources.
 - Send requests, deliver results, and follow references back to their evidence.
 - Search Threads, records, knowledge, and legacy workspaces through one interface.
@@ -24,7 +26,7 @@ Your own agent provides the conversation. CosMesh provides Markdown records, Git
 
 ## Try it locally
 
-Current release: **0.4.9**. Requires Python 3.9+ and Git; targets macOS and Linux.
+Current release: **0.4.9**. Next candidate: **0.5.0** (not yet released). Requires Python 3.9+ and Git; targets macOS and Linux.
 
 Use your configured Hub channel to update an existing installation. GitHub publishes source and version tags; build a matching fixed package locally with `tools/build_release.py`, or use a maintainer-provided package. See [installation and upgrades](docs/quickstart.md#installation-and-rollback--安装与回退).
 

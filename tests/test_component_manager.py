@@ -75,6 +75,13 @@ class ComponentManagerTests(unittest.TestCase):
             self.archives[v] = path
         p = patch.object(artifacts, 'catalog', return_value=[self.item]); p.start(); self.addCleanup(p.stop)
 
+    def future_version(self):
+        # Derive a version that is genuinely newer than the packaged catalog so
+        # catalog additions by this release never turn a synthetic pin into a conflict.
+        versions = [tuple(map(int, version.split('.'))) for version in self.item['releases']]
+        major, minor, patch = max(versions)
+        return '%d.%d.%d' % (major, minor, patch + 1)
+
     def profile(self, name):
         p = self.home / 'profiles' / name
         p.mkdir(parents=True)
@@ -213,16 +220,17 @@ class ComponentManagerTests(unittest.TestCase):
 
     def test_remote_catalog_updates_component_without_upgrading_cli(self):
         # The existing SSH software source is the trust boundary, separate from the Hub.
+        future=self.future_version()
         remote=copy.deepcopy(self.item)
-        remote['version']='0.1.2'
+        remote['version']=future
         raw=io.BytesIO()
         with zipfile.ZipFile(self.archives['0.1.1']) as old, zipfile.ZipFile(raw,'w') as new:
             for name in old.namelist():
                 data=old.read(name)
                 if name=='bundle/package.json':
-                    package=json.loads(data);package['version']='0.1.2';data=json.dumps(package).encode()
+                    package=json.loads(data);package['version']=future;data=json.dumps(package).encode()
                 new.writestr(name,data)
-        remote['releases']['0.1.2']={'archive_sha256':artifacts.digest(raw.getvalue()),'requires':self.item['requires']}
+        remote['releases'][future]={'archive_sha256':artifacts.digest(raw.getvalue()),'requires':self.item['requires']}
         document={'schema':'cosmesh.components.v1','components':[remote]}
         def fetch(cfg,name):
             self.assertEqual(cfg,{'source':'synthetic-release-source'})
@@ -243,8 +251,9 @@ class ComponentManagerTests(unittest.TestCase):
 
     def test_new_incompatible_recommendation_does_not_block_rollback_of_installed_version(self):
         self.run_op('install','0.1.1')
-        future=copy.deepcopy(self.item);future['version']='0.1.2'
-        future['releases']['0.1.2']={'archive_sha256':'a'*64,'requires':{'cosmesh':'>=0.4.8','dsh':'9.9.9'}}
+        future_version=self.future_version()
+        future=copy.deepcopy(self.item);future['version']=future_version
+        future['releases'][future_version]={'archive_sha256':'a'*64,'requires':{'cosmesh':'>=0.4.8','dsh':'9.9.9'}}
         (self.store/'catalog.json').write_text(json.dumps({'schema':'cosmesh.components.v1','components':[future]}))
         self.assertIsNone(self.run_op('rollback')['installed'])
 

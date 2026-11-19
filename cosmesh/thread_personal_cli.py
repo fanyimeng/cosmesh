@@ -23,7 +23,9 @@ def execute(args, root):
         wb.load()
         if verb == 'locations' and not wb.base.path('.cosmesh/personal-v1/state.json').exists():
             item = wb.find(args.id, 'thread'); tid = item['doc']['meta']['id']
+            from .thread_execution_reader import owner_execution
             return {'thread': tid, 'private': True, 'sharing': 'local' if item['repo'] == 'local' else 'public', 'personal_sync': 'off',
+                    'execution_metadata': owner_execution(wb, tid),
                     'bindings': [r for r in wb.client['bindings'] if r['thread'] == tid],
                     'project_bindings': [r for r in wb.client.get('project_bindings', []) if r['thread'] == tid]}, wb.base.head
         initialize(wb)
@@ -39,6 +41,9 @@ def execute(args, root):
                     rows[row['thread']] = dict(row, sharing='public', personal_sync='execution')
             result['threads'] = [rows[k] for k in sorted(rows)]
             if args.query: result['threads'] = [r for r in result['threads'] if args.query.casefold() in r['title'].casefold()]
+            from .thread_execution_reader import owner_execution
+            for row in result['threads']:
+                row['execution_metadata'] = owner_execution(wb, row['thread'])
         elif verb == 'fetch':
             known = wb.catalog.get(args.id)
             info = personal.capability()

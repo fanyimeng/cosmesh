@@ -61,15 +61,37 @@ class Access:
             raise Error('USER_DISABLED', 'A selected account is disabled.')
         return sorted({r['id'] for r in rows if r['id'] != self.person['id']})
 
+    def execution(self, row, value=None):
+        """Return only the shared projection; raw paths and Sessions stay private."""
+        cached = row.get('execution_shared')
+        if value is None and cached and row.get('execution_cache_version') == 1:
+            return cached
+        if value is None:
+            value, _ = self.manifest(row)
+        from .thread_execution_projection import shared_projection
+        metadata = shared_projection(value.get('bindings', {}))
+        row['execution_shared'] = metadata
+        row['execution_revision'] = metadata['execution_revision']
+        row['execution_cache_version'] = 1
+        return metadata
+
+    def ensure_execution(self, row):
+        before = row.get('execution_cache_version') == 1 and 'execution_shared' in row
+        self.execution(row)
+        return not before
+
     def brief(self, tid, row):
         # Labels are current; identity is the stable person ID, never the label.
         with self.community.db() as db:
             person = self.community.resolve_user(db, row['owner_id'])
-        return dict(thread=tid, owner_id=row['owner_id'], owner_account=row['owner_account'],
-                    owner_name=person['name'] or person['account'], title=row['title'][:300], title_complete=len(row['title'])<=300,
-                    visibility=row['visibility'], acl_revision=row['acl_revision'],
-                    content_revision=row['sha'], writable=row['owner_id']==self.person['id'],
-                    usage=row['usage'], migrated=bool(row.get('migrated')))
+        result = dict(thread=tid, owner_id=row['owner_id'], owner_account=row['owner_account'],
+                      owner_name=person['name'] or person['account'], title=row['title'][:300], title_complete=len(row['title'])<=300,
+                      visibility=row['visibility'], acl_revision=row['acl_revision'],
+                      content_revision=row['sha'], writable=row['owner_id']==self.person['id'],
+                      usage=row['usage'], migrated=bool(row.get('migrated')))
+        if 'execution_shared' in row:
+            result['execution_metadata'] = row['execution_shared']
+        return result
 
     def manifest(self, row, sha=None):
         return read_manifest(self.hub,row,sha)
@@ -96,12 +118,14 @@ class Access:
         sha = check_id(p['sha'], HASH)
         expect = integer(p['expect'], 2**63-1)
         if old and (old['sha'], old['visibility'], old['readers']) == (sha, mode, readers):
+            if self.ensure_execution(old): save_json(self.root / 'catalog.json', data)
             return dict(self.brief(tid, old), accepted=True, replayed=True)
         if expect != (old['acl_revision'] if old else 0):
             raise Error('STATE_CONFLICT', 'Thread access changed; review the current access before retrying.')
         if mode == 'private':
             if not old:
                 raise Error('NOT_FOUND', 'This Thread is already private; use personal sync for owner-only content.')
+            self.ensure_execution(old)
             old.update(visibility='private', readers=[], acl_revision=expect+1)
             save_json(self.root / 'catalog.json', data)
             return dict(self.brief(tid, old), accepted=True, replayed=False)
@@ -116,7 +140,7 @@ class Access:
         if old:
             before, _ = self.manifest(old)
             protect_history(before, value)
-        # Private execution coordinates and operation receipts are never exposed by read APIs.
+        # Raw coordinates and receipts stay private; only the whitelist projection is public.
         objects = {sha: len(packed(value).encode()), **{k:v for k,v in (old['objects'] if old else {}).items() if k.startswith('message:')}}
         for asset in value['assets'].values():
             if asset['blob']:
@@ -135,9 +159,11 @@ class Access:
         if mode != 'private' and (usage['current'] > LIMITS['current'] or usage['retained'] > LIMITS['retained']):
             raise Error('STORAGE_QUOTA', 'Thread current or retained capacity exceeds the public limit; accepted content is retained.')
         doc = decode(value['documents']['documents/'+tid+'.md'])
+        execution = self.execution({}, value)
         row = dict(owner_id=self.person['id'], owner_account=self.account, visibility=mode, readers=readers,
                    acl_revision=expect+1, sha=sha, title=doc['meta']['title'], usage=usage, objects=retained,
-                   direct_current=sum(objects.values()), history=list(dict.fromkeys([*(old['history'] if old else []), sha])))
+                   direct_current=sum(objects.values()), history=list(dict.fromkeys([*(old['history'] if old else []), sha])),
+                   execution_shared=execution, execution_revision=execution['execution_revision'], execution_cache_version=1)
         if old and old.get('migrated'):
             row['migrated']=old['migrated']
             row['migration_review']=old.get('migration_review',False) and sha==old['sha']
@@ -163,7 +189,7 @@ class Access:
             raise Error('INPUT_INVALID', 'Invalid Thread access request; caller identity is server-derived.')
         with self.state() as data:
             if method == 'thread_access_info':
-                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None}
+                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'execution_protocol': 'thread.execution.v2'}
             if method == 'thread_access_set': return self.publish(data, p)
             if method == 'thread_access_list':
                 if type(p['direct']) is not bool: raise Error('INPUT_INVALID', 'direct must be boolean.')
@@ -174,7 +200,10 @@ class Access:
                 rows = [(tid,row) for tid,row in sorted(data['threads'].items()) if self.readable(row)
                         and (not owner or row['owner_id']==owner)
                         and (not p['direct'] or (row['owner_id']!=self.person['id'] and row['visibility']=='restricted' and self.person['id'] in row['readers']))]
-                return {'threads':[self.brief(tid,row) for tid,row in rows[offset:offset+limit]],
+                selected = rows[offset:offset+limit]
+                changed = [self.ensure_execution(row) for _, row in selected]
+                if any(changed): save_json(self.root / 'catalog.json', data)
+                return {'threads':[self.brief(tid,row) for tid,row in selected],
                         'next_offset':offset+limit if offset+limit<len(rows) else None, 'hub_id':data['hub_id'], 'server_current':True}
             if method=='thread_access_search':
                 from .thread_search import Index
@@ -192,6 +221,7 @@ class Access:
                     return result
             row = self.lookup(data, p['thread'])
             if method == 'thread_access_status':
+                if self.ensure_execution(row): save_json(self.root / 'catalog.json', data)
                 result=self.brief(p['thread'],row)
                 if row['owner_id']==self.person['id']:
                     result['readers']=row['readers'];result['migration_review']=row.get('migration_review',False)
@@ -216,6 +246,7 @@ class Access:
                 return dict(thread=p['thread'], owner_id=row['owner_id'], record=rid, title=doc['meta']['title'],
                             author=doc['meta']['author'], version=content_version(doc), content_revision=p['revision'] or row['sha'],
                             body=body[offset:offset+chars], next_offset=offset+chars if offset+chars<len(body) else None,
+                            execution_metadata=self.execution({}, value),
                             read_only=True, acl_revision=row['acl_revision'],
                             records=[{'id':decode(t)['meta']['id'],'title':decode(t)['meta']['title']} for t in list(value['documents'].values())[:100]] if rid==p['thread'] and offset==0 else [])
             if method == 'thread_access_files':
