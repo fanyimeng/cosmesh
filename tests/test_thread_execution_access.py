@@ -92,6 +92,26 @@ class ExecutionAccessTests(ThreadFixture):
         self.grant(tid, 'private')
         with self.assertRaises(Error): self.command('bob', 'browse', tid)
 
+    def test_old_hub_without_execution_metadata_is_tolerated(self):
+        tid = self.work(); self.bind(tid); self.grant(tid)
+        from cosmesh.thread_access_cli import Online as OnlineClient
+        real = OnlineClient.call
+        def legacy(client, method, **payload):
+            result = real(client, method, **payload)
+            for row in result.get('threads', []): row.pop('execution_metadata', None)
+            result.pop('execution_metadata', None)
+            return result
+        with patch.object(OnlineClient, 'call', legacy):
+            listed = self.command('bob', 'browse')
+            row = next(item for item in listed['threads'] if item['thread'] == tid)
+            self.assertNotIn('execution_metadata', row)
+            detail = self.command('bob', 'browse', tid)
+            self.assertNotIn('execution_metadata', detail)
+        with self.use('bob') as wb:
+            self.assertIsNone(shared_execution(wb, tid))
+        current = self.command('bob', 'browse')
+        self.assertIn('execution_metadata', next(item for item in current['threads'] if item['thread'] == tid))
+
     def test_fixed_snapshot_empty_directory_and_execution_revision(self):
         empty = self.work('Empty execution')
         self.grant(empty)
