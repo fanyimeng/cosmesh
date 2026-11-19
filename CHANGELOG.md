@@ -2,7 +2,7 @@
 
 ## 0.5.0
 
-Unreleased candidate. Production remains 0.4.9; DSH Connector candidate is independently versioned at 0.1.2.
+Released 2026-11-20. Optional DSH Connector 0.1.2 is available separately.
 
 - Make device, Agent and Project first-class Thread execution metadata with deterministic execution revisions and shared/owner whitelist projections.
 - Pin explicitly approved Agent/Project display labels to shared snapshots. Existing snapshots and shared revisions survive private-only updates unchanged.

@@ -29,7 +29,7 @@ CosMesh 让人与自己的 Agent 在不同会话中接续工作。**Thread（工
 
 ## 本地试用
 
-当前正式版本 **0.4.9**；下一候选 **0.5.0**（尚未发布）。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
+当前正式版本 **0.5.0**。需要 Python 3.9+ 和 Git，面向 macOS / Linux。
 
 已有服务器渠道安装的用户可对 Agent 说“升级 CosMesh”。GitHub 提供源码和版本标签；可用 `tools/build_release.py` 构建匹配本机的固定包，或使用维护者分发的包。详见[安装与升级](docs/quickstart.md#installation-and-rollback--安装与回退)。
 
@@ -71,7 +71,7 @@ GitHub 与服务器渠道提供独立版本化安装包，见[快速上手](docs
 
 ## 可选宿主组件
 
-[DSH Connector](<components/README.md>) 是独立版本的可选 Host 组件，提供原生项目创建／复用、新会话创建、默认初始化确认后等待。当前 **0.1.1 随源码独立发布**，未发布到 npm，与 Python 安装包分开发行。安装 CLI 或标准 Skill 不会自动安装／启用连接器；核验兼容后，明确通过 DSH 插件管理器安装。普通 CLI／Hub 使用不依赖 DSH。
+[DSH Connector](<components/README.md>) 是独立版本的可选 Host 组件，提供原生项目创建／复用、新会话创建、默认初始化确认后等待。当前 **0.1.2 随源码独立发布**，未发布到 npm，与 Python 安装包分开发行。安装 CLI 或标准 Skill 不会自动安装／启用连接器；核验兼容后，明确通过 DSH 插件管理器安装。普通 CLI／Hub 使用不依赖 DSH。
 
 0.4.8 提供统一 `component list/status/install/update/rollback` 入口；独立兼容清单和固定包支持按需更新，旧版及资料保留。详见[组件管理](cosmesh/manual/components.md)。
 
