@@ -140,7 +140,9 @@ class ThreadPersonal(ThreadLocations, Personal):
             local = dict(format=FORMAT, thread=tid, **{k: merge_maps(intent['local'][k], local[k], remote[k]) for k in MAPS})
             previous = head
         if previous and not head: raise Error('HISTORY_PROTECTED', 'The previously accepted Thread is missing from the relay.')
-        base = self.load_manifest(previous, tid) if previous else empty(tid)
+        base = remote if previous and previous == head else empty(tid)
+        if previous and previous != head:
+            base = self.load_manifest(previous, tid)
         merged = dict(format=FORMAT, thread=tid, **{k: merge_maps(base[k], local[k], remote[k])
                       if remote else local[k] for k in MAPS})
         validate_manifest(merged, self.wb.base)
@@ -154,12 +156,16 @@ class ThreadPersonal(ThreadLocations, Personal):
                 ids = [k for k in ids if k in allowed]
             ids = [k for k in ids if not merged['assets'][k].get('removed')]
             advanced = [k for k in ids if merged['assets'][k]['blob'] != self.state['assets'][k]['blob']]
-            transfers = self.push([k for k in ids if k not in advanced])
+            confirmed = {row['blob']: row['size'] for row in (remote or {}).get('assets', {}).values() if row['blob']}
+            transfers = self.push([k for k in ids if k not in advanced], confirmed=confirmed)
             transfers['files'].extend(dict(id=k,name=self.state['assets'][k]['name'],state='skipped',
                 reason='LOCAL_FILE_DIVERGED',bytes=self.state['assets'][k]['size']) for k in advanced)
             for entry in transfers['files']:
                 if entry['state']=='server_available':
-                    aid=entry['id']; merged['assets'][aid].update(self.state['assets'][aid])
+                    aid = entry['id']
+                    for key, value in self.state['assets'][aid].items():
+                        if local['assets'][aid].get(key) != value:
+                            merged['assets'][aid][key] = value
         raw = packed(merged).encode()
         if len(raw) > MAX_METADATA: raise Error('INPUT_TOO_LARGE', 'Thread manifest exceeds its limit; local sources are retained.')
         accepted = head

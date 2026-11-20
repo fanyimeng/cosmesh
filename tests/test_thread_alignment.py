@@ -23,6 +23,81 @@ class FileContinuationTests(unittest.TestCase):
     file = fixture.ThreadPersonalTests.file
     use = fixture.ThreadPersonalTests.use
 
+    def test_verified_files_skip_content_and_staging_but_detect_replacements(self):
+        from cosmesh.thread_personal_cli import brief_receipt
+
+        path = self.file('sample.bin', b'original')
+        with self.use(self.a) as p:
+            aid = p.add(self.t, path)['id']
+            first = p.synchronize(self.t, files=True)
+            self.assertEqual(brief_receipt(first)['files']['updated'], 1)
+            blob = p.asset(aid)['blob']
+            from cosmesh.personal_relay import Relay
+            hub_file = Relay(self.hub, 'alice').blobs / blob
+            p.wb.append(self.t, 'Metadata-only change'); p.wb.load()
+            real_open, real_rpc = Path.open, p.rpc
+
+            def forbid_source_or_stage(opened, *args, **kwargs):
+                if opened in (path, hub_file) or opened.parent == p.staging:
+                    self.fail('Reused file was opened or staged')
+                return real_open(opened, *args, **kwargs)
+
+            def forbid_file_rpc(payload):
+                if payload.get('sha') == blob:
+                    self.fail('Current Thread manifest already confirms this file')
+                return real_rpc(payload)
+
+            with patch.object(Path, 'open', forbid_source_or_stage), patch.object(p,'rpc',side_effect=forbid_file_rpc):
+                again = p.synchronize(self.t, files=True)
+            self.assertEqual(brief_receipt(again), {'thread':self.t, 'status':'synced', 'complete':True,
+                             'files':{'updated':0,'unchanged':1,'skipped':0}})
+            # Same size and preserved mtime, different inode and bytes.
+            import os
+            st = path.stat()
+            replacement = self.file('replacement.bin', b'modified')
+            os.utime(replacement, ns=(st.st_atime_ns, st.st_mtime_ns))
+            replacement.replace(path)
+            result = p.synchronize(self.t, files=True)
+            self.assertEqual(brief_receipt(result)['files']['updated'], 1)
+            self.assertNotEqual(p.asset(aid)['blob'], blob)
+
+            # A rolled-back client can discard the optional local proof.
+            p.state['asset_copies'][aid].pop('fingerprint')
+            p.save()
+            with patch.object(p, 'upload', wraps=p.upload) as upload:
+                self.assertEqual(brief_receipt(p.synchronize(self.t, files=True))['files']['unchanged'], 1)
+                self.assertTrue(any(call.args[0].parent == p.staging for call in upload.call_args_list))
+            self.assertEqual(brief_receipt(p.synchronize(self.t, files=True))['files']['unchanged'], 1)
+
+        with self.use(self.b) as p:
+            target = self.root / 'restored'
+            result = p.restore(self.t, str(target), 'test', files=True)
+            self.assertTrue(brief_receipt(result)['complete'])
+            self.assertEqual(brief_receipt(p.synchronize(self.t, files=True))['files']['unchanged'], 1)
+            (target / 'sample.bin').write_bytes(b'local changed')
+            result = p.restore(self.t, str(target), 'test', files=True)
+            self.assertEqual(brief_receipt(result)['status'], 'partial')
+            self.assertEqual(brief_receipt(result)['issues'][0]['reason'], 'existing_destination')
+            self.assertEqual((target / 'sample.bin').read_bytes(), b'local changed')
+
+    def test_file_changed_while_reusing_receipt_does_not_commit(self):
+        path = self.file()
+        with self.use(self.a) as p:
+            aid = p.add(self.t, path)['id']
+            base = p.synchronize(self.t, files=True)['accepted_snapshot']
+            plan = p.plan
+            def race(*args, **kwargs):
+                rows = plan(*args, **kwargs)
+                self.assertTrue(rows['files'][0]['unchanged'])
+                path.write_bytes(b'new local work')
+                return rows
+            with patch.object(p, 'plan', side_effect=race), self.assertRaises(Error) as exc:
+                p.synchronize(self.t, files=True)
+            self.assertEqual(exc.exception.code, 'STATE_CONFLICT')
+            self.assertEqual(p.rpc({'method':'personal_thread_head','thread':self.t})['sha'], base)
+            p.synchronize(self.t, files=True)
+            self.assertEqual(p.asset(aid)['size'], len(b'new local work'))
+
     def test_restore_run_edit_and_sync_same_resource_without_overwriting_source(self):
         source = self.file('run.py', b'print(6 * 7)\n')
         with self.use(self.a) as p:

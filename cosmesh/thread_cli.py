@@ -20,9 +20,11 @@ def add_commands(commands, command, body):
     discover.add_argument('--ssh'); discover.add_argument('--service')
     p = command(group, 'sync', 'thread.sync'); p.add_argument('id', nargs='?'); p.add_argument('--pull', action='store_true')
     p.add_argument('--files', action='store_true')
+    p.add_argument('--brief', action='store_true', help='Return file counts and any problems')
     for verb in ('personal', 'fetch', 'locations'):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id')
         if verb != 'locations':
+            p.add_argument('--brief', action='store_true', help='Return file counts and any problems')
             p.add_argument('--ssh'); p.add_argument('--service')
         if verb == 'personal':
             p.add_argument('--files', action='store_true');p.add_argument('--off',action='store_true')

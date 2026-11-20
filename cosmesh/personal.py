@@ -118,7 +118,13 @@ class Personal:
         return {'id':aid,'state':'local_reference','path':str(path),'copied_bytes':0,'transfer_limits_applied':False,
                 'relative_path':self.state.get('asset_paths',{}).get(aid,path.name)}
 
-    def plan(self,ids=None,explicit=False):
+    def remember_copy(self, aid, path, blob, stamp):
+        self.state.setdefault('asset_copies', {})[aid] = {
+            'device': self.state['device'], 'path': str(path), 'blob': blob,
+            'verified_host': socket.gethostname(), 'fingerprint': stamp,
+        }
+
+    def plan(self,ids=None,explicit=False,confirmed=None):
         from .transfer_policy import effective
         limits=effective(self.state['policy'],self.state.get('policy_overrides',[])); rows=[];total=0;count=0
         selected=list(self.state['assets']) if ids is None else ids
@@ -126,9 +132,26 @@ class Personal:
             row=self.asset(aid);reason=None
             try:
                 path=self.source_path(aid)
-                result=inspect_file(path,limits['explicit_file' if explicit else 'auto_file'],row['science'])
+                copy = self.state.get('asset_copies', {}).get(aid, {})
+                stamp = None
+                if (confirmed is not None and row['blob'] and copy.get('blob') == row['blob']
+                        and copy.get('device') == self.state['device'] and copy.get('path') == path
+                        and copy.get('verified_host') == socket.gethostname()):
+                    stamp = copy.get('fingerprint')
+                result=inspect_file(path,limits['explicit_file' if explicit else 'auto_file'],row['science'],stamp)
             except (OSError,Error) as exc: result={'reason':getattr(exc,'code','file_unavailable'),'bytes':row['size']}
             reason=result.get('reason')
+            if result.get('unchanged') and result['bytes'] == row['size']:
+                # A current manifest confirms many objects in one authenticated read.
+                # Outside a Thread sync, ask the same owner relay about this object.
+                present = confirmed.get(row['blob']) == row['size']
+                if not present:
+                    reply = self.rpc({'method':'personal_begin','sha':row['blob'],'size':row['size']})
+                    present = reply.get('complete') is True and reply.get('offset') == row['size']
+                if present:
+                    rows.append(dict(id=aid, name=row['name'], state='server_available', unchanged=True,
+                                     sha=row['blob'], reason=None, bytes=row['size']))
+                    continue
             if not reason:
                 if count>=limits['batch_files'] or total+result['bytes']>limits['batch_bytes']: reason='batch_limit'
                 else: total+=result['bytes'];count+=1
@@ -165,13 +188,13 @@ class Personal:
                 offset=next_offset;source.seek(offset)
             if size and not result.get('complete'): raise Error('SOURCE_PENDING','Upload is not confirmed complete.')
 
-    def push(self,ids=None,explicit=False,persist=True):
+    def push(self,ids=None,explicit=False,persist=True,confirmed=None):
         # Server hard limits are combined locally without changing saved user preferences.
         local_policy=self.state['policy'];self.state['policy']=self.limits()
-        try: plan=self.plan(ids,explicit)
+        try: plan=self.plan(ids,explicit,confirmed or {})
         finally: self.state['policy']=local_policy
         for entry in plan['files']:
-            if entry['reason']: continue
+            if entry['reason'] or entry.get('unchanged'): continue
             row=self.asset(entry['id']);path=safe_path(self.source_path(entry['id']));before=path.stat()
             staged=self.staging/(entry['id']+'.part')
             h=hashlib.sha256();size=0
@@ -190,11 +213,19 @@ class Personal:
                 reason=content_reason(staged,row['name'],row['science'])
                 if reason:raise Error('TRANSFER_FILTERED','Frozen file rejected: '+reason)
                 sha=h.hexdigest();self.upload(staged,sha,size)
+                if row['blob'] == sha:
+                    entry['unchanged'] = True
                 row.update(blob=sha,size=size,device=self.state['device'],path=str(path),name=path.name)
-                self.state.setdefault('asset_copies',{})[entry['id']]={'device':self.state['device'],'path':str(path),'blob':sha}
+                self.remember_copy(entry['id'], path, sha, fingerprint(after))
                 entry.update(state='server_available',sha=sha)
             finally: staged.unlink(missing_ok=True)
-        if persist and any(entry['state']=='server_available' for entry in plan['files']):
+        # Other files may have taken time to upload since we inspected these sources.
+        for entry in plan['files']:
+            if entry.get('unchanged'):
+                proof = self.state['asset_copies'][entry['id']]
+                if fingerprint(safe_path(proof['path']).stat()) != proof['fingerprint']:
+                    raise Error('STATE_CONFLICT', 'Source changed during synchronization; retry after writing finishes.')
+        if persist and plan['files_eligible']:
             self.save()
         return plan
 

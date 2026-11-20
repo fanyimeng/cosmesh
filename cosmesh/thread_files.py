@@ -5,7 +5,7 @@ import shutil
 import tempfile
 
 from .errors import Error
-from .personal_protocol import sha_file
+from .personal_protocol import fingerprint, sha_file
 from .store import safe_path
 
 
@@ -68,11 +68,8 @@ def materialize(personal, value, destination):
         temporary = None
         try:
             target = safe_path(destination / name)
-            if target.exists():
-                if not target.is_file() or target.stat().st_size != asset['size'] or sha_file(target) != asset['blob']:
-                    row.update(state='conflict', reason='existing_destination'); continue
-                row.update(state='available', reason=None, path=str(target), unchanged=True)
-            else:
+            existed = target.exists()
+            if not existed:
                 source = personal.download(asset['blob'], asset['size'])
                 target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 safe_path(target)
@@ -81,10 +78,17 @@ def materialize(personal, value, destination):
                     shutil.copyfileobj(incoming, out, 256 * 1024); out.flush(); os.fsync(out.fileno())
                 if sha_file(temporary) != asset['blob']:
                     raise Error('CHECKSUM_MISMATCH', 'Materialized content differs from its fixed version.')
-                # Atomic no-replace publication: a concurrently created local file wins.
                 os.link(temporary, target)
-                row.update(state='available', reason=None, path=str(target), unchanged=False)
-            personal.state.setdefault('asset_copies', {})[aid] = dict(device=personal.state['device'], path=str(target), blob=asset['blob'])
+                os.unlink(temporary)
+                temporary = None
+            # Link/unlink changes ctime. Bind the checksum to the final inode after publication.
+            stamp = fingerprint(safe_path(target).stat())
+            if (not target.is_file() or stamp[2] != asset['size'] or sha_file(target) != asset['blob']
+                    or fingerprint(safe_path(target).stat()) != stamp):
+                row.update(state='conflict', reason='existing_destination')
+                continue
+            row.update(state='available', reason=None, path=str(target), unchanged=existed)
+            personal.remember_copy(aid, target, asset['blob'], stamp)
             personal.save()
         except (Error, OSError) as exc:
             row.update(state='failed', reason=getattr(exc, 'code', 'destination_unavailable'))

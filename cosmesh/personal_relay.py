@@ -220,13 +220,20 @@ class Relay:
         value=json.loads(raw)
         model=validate_manifest(value,Store(self.root/'validation'))
         if value['thread']!=p['thread']: raise Error('POLICY_DENIED','Selected Thread differs from the manifest.')
-        if head: protect_history(json.loads((self.blobs/head).read_bytes()),value)
-        for asset in value['assets'].values():
+        previous = json.loads((self.blobs/head).read_bytes()) if head else {}
+        if head: protect_history(previous, value)
+        approved = previous.get('assets', {})
+        for aid, asset in value['assets'].items():
             if asset['blob']:
                 found=db.execute('SELECT size,complete FROM blobs WHERE sha=?',(asset['blob'],)).fetchone()
                 if not found or not found['complete'] or found['size']!=asset['size']:
                     raise Error('SOURCE_PENDING','Selected file must be accepted in this owner space first.')
-                reason=content_reason(self.blobs/asset['blob'],asset['name'],asset['science'])
+                path = self.blobs / asset['blob']
+                if not path.is_file() or path.stat().st_size != asset['size']:
+                    raise Error('SOURCE_PENDING','The stored object is missing or its size has changed.')
+                if approved.get(aid) == asset:
+                    continue
+                reason=content_reason(path,asset['name'],asset['science'])
                 if reason: raise Error('TRANSFER_FILTERED','Selected file rejected: '+reason)
         from .work_directory import names_from_docs
         card = names_from_docs(p['thread'],model.docs)

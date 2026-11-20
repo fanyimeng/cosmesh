@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+Personal sync reuses verified, unchanged files. Plain sync and fetch receipts show file counts. Agents can request the same summary with `--brief --json`. Full JSON receipts and the 0.6.0 storage format remain compatible.
+
 ## 0.6.0
 
 Owner work directory, scoped project collection, selected-content delivery and recipient-private inbox filing.

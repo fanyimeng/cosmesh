@@ -84,7 +84,7 @@ def content_reason(path,name,science=False):
     with Path(path).open('rb') as stream:return file_reason(name,stream.read(65536),science)
 
 
-def inspect_file(path, limit, science=False):
+def inspect_file(path, limit, science=False, verified=None):
     """Cheap rejection before hashing or copying. Local references bypass this."""
     path = safe_path(path)
     parts = [p.casefold() for p in path.parts]
@@ -94,6 +94,8 @@ def inspect_file(path, limit, science=False):
     info = path.stat()
     if not stat.S_ISREG(info.st_mode): return {'reason':'directory_or_special_file'}
     if info.st_size > limit: return {'reason':'file_limit', 'bytes':info.st_size}
+    if verified is not None and fingerprint(info) == verified:
+        return {'reason': None, 'bytes': info.st_size, 'unchanged': True}
     reason = content_reason(path,path.name,science)
     return {'reason':reason,'bytes':info.st_size,'fingerprint':fingerprint(info)}
 

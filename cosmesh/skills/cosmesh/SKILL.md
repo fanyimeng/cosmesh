@@ -11,7 +11,7 @@ description: 查找与接续本人的 Thread、收集项目变化、向指定联
 
 ## 工作中
 
-本人选择同步用 `thread personal ID --files`。要持续收集新的项目文件，在对应设备上登记 `collect add ID DIR --personal`，多个目录使用不同的 `--as PREFIX`。`collect once` 对本机所有登记范围检查一次，`collect watch` 可持续运行。在任务停顿、换人或换设备时，用 `collect summary ID --event STABLE_ID --body TEXT` 留下决定、已完成事项和下一步。宿主维护交接文件时，登记时可加 `--context-file RELATIVE_PATH`。磁盘扫描只覆盖已登记的文件。同一阶段的多次保存合并处理。用 `thread personal ID --off` 暂停个人同步。
+本人选择同步用 `thread personal ID --files --brief --json`。接续时的 fetch、日常的 sync 也可加 `--brief --json`。收到 `ok: true` 且 `complete: true` 就继续工作；部分完成时处理 issues，完整机器回执可省略 `--brief` 取得。要持续收集新的项目文件，在对应设备上登记 `collect add ID DIR --personal`，多个目录使用不同的 `--as PREFIX`。`collect once` 对本机所有登记范围检查一次，`collect watch` 可持续运行。在任务停顿、换人或换设备时，用 `collect summary ID --event STABLE_ID --body TEXT` 留下决定、已完成事项和下一步。宿主维护交接文件时，登记时可加 `--context-file RELATIVE_PATH`。磁盘扫描只覆盖已登记的文件。同一阶段的多次保存合并处理。用 `thread personal ID --off` 暂停个人同步。
 
 ## 给人发、收和归档
 

@@ -836,6 +836,19 @@ def main(argv=None, product="cosmesh"):
     except (Error, OSError, ValueError):
         result['fast_mode'] = True
         result['warnings'].append('Interaction preference unavailable; using the default fast mode for this call.')
+    if (not machine and error is None and action in {'thread.personal', 'thread.sync', 'thread.fetch'}
+            and isinstance(data, dict) and 'thread' in data and ('accepted_snapshot' in data or 'complete' in data)):
+        from .thread_personal_cli import brief_receipt
+        receipt = data if 'complete' in data else brief_receipt(data)
+        label = {'synced': '已同步', 'pulled': '已拉取', 'restored': '已恢复', 'partial': '部分完成'}[receipt['status']]
+        parts = [label, receipt['thread']]
+        if 'files' in receipt:
+            counts = receipt['files']
+            parts.append('文件更新 {updated}，未变化 {unchanged}，跳过 {skipped}'.format(**counts))
+        print(' · '.join(parts))
+        for issue in receipt.get('issues', []):
+            print(issue['file'], issue['reason'])
+        return 0
     if error is None and args.action == 'invite.prompt' and not machine:
         print(data['prompt'], end='')
         return 0

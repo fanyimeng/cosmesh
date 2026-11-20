@@ -6,6 +6,31 @@ from .thread_execution import ThreadExecution
 from .threads import Workbench
 
 
+def brief_receipt(result):
+    restoring = result.get('restored', False)
+    files = result.get('files') if restoring else result.get('transfers')
+    status = 'synced' if result.get('uploaded') else 'pulled'
+    receipt = {'thread': result['thread'], 'status': 'restored' if restoring else status, 'complete': True}
+    missing = result.get('missing_private_references', [])
+    if missing:
+        receipt['external_references'] = len(missing)
+    if result.get('destination'):
+        receipt['destination'] = result['destination']
+    if files is None or (restoring and not files.get('requested')):
+        return receipt
+    rows = files['files']
+    good = 'available' if restoring else 'server_available'
+    issues = [r for r in rows if r['state'] != good]
+    unchanged = sum(bool(r.get('unchanged')) for r in rows if r['state'] == good)
+    receipt['files'] = {'updated': len(rows) - len(issues) - unchanged, 'unchanged': unchanged,
+                        'skipped': len(issues)}
+    if issues:
+        receipt.update(complete=False, status='partial',
+                       issues=[{'file': r.get('relative_path') or r.get('name'), 'reason': r['reason']}
+                               for r in issues[:5]])
+    return receipt
+
+
 def execute(args, root):
     verb = args.thread_command
     if getattr(args, 'dry_run', False) or getattr(args, 'require_fresh', False) or getattr(args, 'idempotency_key', None):
@@ -75,4 +100,6 @@ def execute(args, root):
         if verb in {'personal','fetch'}:
             from .collector import enable_sync
             enable_sync(wb,result['thread'],True)
+        if getattr(args, 'brief', False):
+            result = brief_receipt(result)
         return result, wb.base.head
