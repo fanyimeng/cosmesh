@@ -849,6 +849,11 @@ def main(argv=None, product="cosmesh"):
         for issue in receipt.get('issues', []):
             print(issue['file'], issue['reason'])
         return 0
+    if not machine and error is None and action == 'client.update' and data.get('update_notice'):
+        print(data['update_notice']['document'].rstrip())
+        if not (data.get('mesh') or {}).get('ok'):
+            print('Hub 连接待确认。联网后运行 cosmesh thread discover。')
+        return 0
     if error is None and args.action == 'invite.prompt' and not machine:
         print(data['prompt'], end='')
         return 0

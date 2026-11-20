@@ -3,6 +3,8 @@ name: cosmesh
 description: 查找与接续本人的 Thread、收集项目变化、向指定联系人投递资料并处理收件。
 ---
 
+用户要求升级时，执行 `cosmesh client update --json`，向用户展示回执中的 `update_notice.document`。同版检查无新提示时直接报告版本。
+
 ## 快速接续
 
 已知 Thread ID 或本机唯一名称，直接 `cosmesh thread continue ID --ready --json`。刚从另一设备回来、需要最新进展时，已开启个人同步的 Thread 加上 `--require-fresh`。这一次读取给出目标、交接摘要、最近进展和本机登记位置。能据此工作就开始。需要精确原文时按回执中的来源用 `thread read ID@VERSION --repo REPO`；需要其他设备或完整位置时用 `thread locations ID`。

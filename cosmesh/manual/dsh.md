@@ -20,7 +20,7 @@ DSH 与 Codex、OpenCode 共用同一套 CosMesh 程序、工作库与一份标�
 
 标准 Skill 让 Agent 使用 CosMesh CLI；原生项目／新会话自动创建由独立可选组件 `@cosmesh/dsh-connector` 提供。两者不互相替代。组件目前位于源码项目的 `components/dsh-connector/`，独立版本；源码已独立发布，未发布到 npm；使用 component install 显式安装，不随 CLI、pip 或 skills install 自动启用。
 
-适配边界为 DSH 0.2.2-rc.3、CosMesh CLI 0.4.7+。组件复用本人已经安装的 CLI；不自带Python环境，业务仍需CLI可用。默认入口为本人home下 `.local/opt/cosmesh/bin/cosmesh`，自定义安装须由插件配置提供绝对cliPath，不通过模型工具参数接受任意命令。
+连接器 0.1.3 支持 DSH 0.2.2-rc.3、rc.5，配合 CosMesh 0.6.2 或更新版本。组件复用本人已经安装的 CLI；不自带Python环境，业务仍需CLI可用。默认入口为本人home下 `.local/opt/cosmesh/bin/cosmesh`，自定义安装须由插件配置提供绝对cliPath，不通过模型工具参数接受任意命令。
 
 源码用户执行 `python3 tools/build_component.py dsh-connector` 生成固定候选，回执给出 install_directory。用户明确授权后，在 DSH Plugins → Add plugin 选择该目录，或由 DSH Agent 经官方 plugin_manager 安装。不要手工修改profile、聊天数据库或认证信息。插件在Host进程中运行，影响同profile所有会话；管理器application/warnings决定是否需重启，安装完成不等于界面和业务已验收。完整分层、安装、回退说明见源码 components/README.md。
 
@@ -56,4 +56,4 @@ CosMesh 客户端和 Hub 均需 0.6.2。两端先在同一个 W-ID 上绑定真�
 
 **DSH** 使用连接器 0.1.3。将 `[{"thread":"W-ID","session":"NATIVE_ID"}]` 保存到目标 profile 目录下的 `cosmesh-receivers.json`，设为本人所有、权限 0600。独立工作库可在对应条目添加 `"root":"/absolute/path/to/store"`。启动或重载 profile 后生效，回退到旧组件可保留这份文件。接收器随 profile 启停，继承该会话的权限。
 
-接收器默认每 15 秒查一次队列。有任务才访问模型。关闭设备后，任务在私人 Hub 等待；启动接收器后继续。若原生提交的回执丢失，接收器按任务 ID 核对原生历史。持续显示 `unconfirmed` 时，先核对目标会话；已确认最终结果后，可在原接收端执行 `thread task resolve ID --agent AGENT --session NATIVE_ID --task-id TASK --outcome completed|failed --body TEXT` 登记。此命令会写回结果并让下一项继续。需要再次委派时明确创建新任务。CLI 回退前停止接收器；恢复候选后按原配置继续。
+接收器默认每 15 秒查一次队列。有任务才访问模型。关闭设备后，任务在私人 Hub 等待；启动接收器后继续。若原生提交的回执丢失，接收器按任务 ID 核对原生历史。持续显示 `unconfirmed` 时，先核对目标会话；已确认最终结果后，可在原接收端执行 `thread task resolve ID --agent AGENT --session NATIVE_ID --task-id TASK --outcome completed|failed --body TEXT` 登记。此命令会写回结果并让下一项继续。需要再次委派时明确创建新任务。CLI 回退前停止接收器；恢复 0.6.2 后按原配置继续。

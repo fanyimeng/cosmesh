@@ -1,9 +1,9 @@
 # Changelog
 
-## 0.6.2 candidate
+## 0.6.2
 
 - Dispatch owner-only work to a registered DSH or Codex session on a named device. Offline and busy receivers retain their queue. Correlate native turns and sync their results to the original Thread.
-- DSH Connector 0.1.3 adds optional per-session receivers.
+- DSH Connector 0.1.3 adds optional per-session receivers. Upgrade notices include receiver setup and an addressed dispatch example.
 
 ## 0.6.1
 

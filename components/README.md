@@ -2,11 +2,11 @@
 
 CosMesh owns the stable Thread and its private execution-location records. A host connector performs native application operations through that host's supported APIs. Installing the ordinary Python CLI or Skill does **not** install a host connector, change a host profile, or start a model.
 
-CosMesh 保存工作身份与私人执行关联；连接器通过宿主接口操作原生项目和会话。组件是可选项，独立版本化。DSH Connector 0.1.2 随源码独立发布；未发布到 npm，不随 `client update` 自动启用。
+CosMesh 保存工作身份与私人执行关联；连接器通过宿主接口操作原生项目和会话。组件是可选项，独立版本化。DSH Connector 0.1.3 随源码独立发布；未发布到 npm，不随 `client update` 自动启用。
 
 | Component | Implementation | Compatibility | State |
 |---|---|---|---|
-| DSH Connector | [Installable bundle](<dsh-connector/README.md>) | CosMesh CLI 0.4.7+; DSH 0.2.2-rc.3 | Released 0.1.2; explicit installation |
+| DSH Connector | [Installable bundle](<dsh-connector/README.md>) | CosMesh CLI 0.6.2+; DSH 0.2.2-rc.3 or rc.5 | Released 0.1.3; explicit installation |
 
 ## Build and install / 构建与安装
 

@@ -125,6 +125,8 @@ def main():
     manager.atomic(prefix / 'client.json', manager.json_bytes(saved))
     print(json.dumps({'ok': True, 'data': result, 'execution': 'local', 'mesh': mesh,
                      'migrated_skill_backup': str(backup) if migrated else None}, ensure_ascii=False))
+    if result.get('update_notice'):
+        print(result['update_notice']['document'].rstrip())
     print('Local installation ready. Mesh discovery: ' + ('ready' if mesh.get('ok') else 'pending; retry ' + discovery_group + ' discover when connected.'))
 
 
