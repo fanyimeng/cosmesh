@@ -3,24 +3,17 @@ from pathlib import Path
 import os
 
 from .errors import Error
+from .sync import hub_receipt
 from .threads import Workbench, initialize, workspace_root
 
 
 def add_commands(commands, command, body):
     group = command(commands, 'thread').add_subparsers(dest='thread_command', required=True)
-    p=command(group,'access','thread.access');p.add_argument('id')
-    p.add_argument('--visibility',choices=('private','restricted','public'));p.add_argument('--to',action='append',default=[])
-    p.add_argument('--files',action='store_true');p.add_argument('--expect-acl',type=int)
-    p.add_argument('--share-projects', action='store_true', help='Approve the current Agent and Project display labels for readers')
-    p=command(group,'browse','thread.browse');p.add_argument('id',nargs='?')
-    p.add_argument('--owner');p.add_argument('--direct',action='store_true');p.add_argument('--files',action='store_true')
-    p.add_argument('--records',action='store_true')
-    p.add_argument('--snapshot');p.add_argument('--changes',metavar='SINCE_REVISION');p.add_argument('--record');p.add_argument('--version');p.add_argument('--asset');p.add_argument('--output')
-    p.add_argument('--offset',type=int,default=0);p.add_argument('--limit',type=int,default=20);p.add_argument('--chars',type=int,default=8000)
-    p=command(group,'search','thread.search');p.add_argument('query');p.add_argument('--messages',action='store_true')
-    p.add_argument('--thread');p.add_argument('--with',dest='contact');p.add_argument('--offset',type=int,default=0);p.add_argument('--limit',type=int,default=20)
-    p=command(group,'track','thread.track');p.add_argument('person',nargs='?');p.add_argument('--show')
-    choice=p.add_mutually_exclusive_group();choice.add_argument('--create',action='store_true');choice.add_argument('--use');choice.add_argument('--dismiss',action='store_true')
+    from .delivery_cli import add_commands as add_mailbox_commands
+    add_mailbox_commands(group, command, body)
+    p=command(group,'unshare','thread.unshare');p.add_argument('id',help='Withdraw a historical 0.x share you own')
+    find = command(group, 'find', 'thread.find')
+    find.add_argument('query', nargs='?', default='')
     init = command(group, 'init', 'thread.init')
     init.add_argument('--user'); init.add_argument('--timezone', default='Asia/Shanghai')
     discover = command(group, 'discover', 'thread.discover')
@@ -31,13 +24,13 @@ def add_commands(commands, command, body):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id')
         if verb != 'locations':
             p.add_argument('--ssh'); p.add_argument('--service')
-        if verb == 'personal': p.add_argument('--files', action='store_true')
+        if verb == 'personal':
+            p.add_argument('--files', action='store_true');p.add_argument('--off',action='store_true')
         if verb == 'fetch':
             p.add_argument('--files',action='store_true',help='Restore registered files into the explicit destination directory')
             p.add_argument('--workdir'); p.add_argument('--agent'); p.add_argument('--project-id')
             p.add_argument('--project-name'); p.add_argument('--session-id')
     command(group, 'status', 'thread.status')
-    command(group, 'maintenance', 'thread.maintenance')
     p = command(group, 'locate', 'thread.locate');p.add_argument('--workdir');p.add_argument('--session-id');p.add_argument('--host')
     p.add_argument('--agent');p.add_argument('--project-id');p.add_argument('--project-name')
     p = command(group,'bind-project','thread.bind-project');p.add_argument('id');p.add_argument('--agent',required=True)
@@ -74,31 +67,8 @@ def add_commands(commands, command, body):
     p = command(group, 'check', 'thread.check'); p.add_argument('id'); p.add_argument('--details',action='store_true')
     p.add_argument('--scope', choices=('all', 'private', 'public', 'base', 'mesh'), default='all')
     p.add_argument('--limit', type=int, default=5)
-    p = command(group, 'chat', 'thread.chat'); p.add_argument('id',nargs='?')
-    p.add_argument('--with',dest='contact');p.add_argument('--rounds',type=int,default=5)
-    p.add_argument('--before');p.add_argument('--date');p.add_argument('--include-progress',action='store_true')
-    p.add_argument('--scope', choices=('all','private','public','base','mesh'), default='all')
-    p.add_argument('--limit',type=int,default=30);p.add_argument('--offset',type=int,default=0)
-    view = p.add_mutually_exclusive_group()
-    view.add_argument('--tui',action='store_true');view.add_argument('--plain',action='store_true')
     p = command(group,'read','thread.read');p.add_argument('id');p.add_argument('--repo',required=True)
     p.add_argument('--offset',type=int,default=0);p.add_argument('--chars',type=int,default=8000)
-    p = command(group, 'inbox', 'thread.inbox'); p.add_argument('--sent', action='store_true'); p.add_argument('--all', action='store_true')
-    p.add_argument('--ready', action='store_true'); p.add_argument('--limit', type=int, default=10)
-    p.add_argument('--view', choices=('requests', 'messages'), default='messages')
-    p.add_argument('--unread', action='store_true'); p.add_argument('--before'); p.add_argument('--with', dest='contact'); p.add_argument('--thread')
-    p = command(group, 'outbox', 'thread.outbox')
-    p.add_argument('--ready', action='store_true'); p.add_argument('--limit', type=int, default=10)
-    p.add_argument('--before'); p.add_argument('--with', dest='contact'); p.add_argument('--thread')
-    mail = command(group, 'mail').add_subparsers(dest='mail_action', required=True)
-    p = command(mail, 'show', 'thread.mail'); p.add_argument('id'); p.add_argument('--sent', action='store_true');p.add_argument('--offset',type=int,default=0);p.add_argument('--chars',type=int,default=8000)
-    p = command(mail, 'mark', 'thread.mail'); p.add_argument('ids', nargs='+')
-    seen = p.add_mutually_exclusive_group(required=True)
-    seen.add_argument('--seen', dest='seen', action='store_true'); seen.add_argument('--unseen', dest='seen', action='store_false')
-    p=command(group,'send','thread.send');p.add_argument('id');body(p)
-    p.add_argument('--to',action='append',required=True);p.add_argument('--record');p.add_argument('--title')
-    p.add_argument('--reply-to');p.add_argument('--kind',choices=('message','request','result'),default='message')
-    p.add_argument('--local-only',action='store_true')
     p = command(group, 'update', 'thread.update'); p.add_argument('id'); body(p)
     p.add_argument('--kind', choices=('note','result'), default='note'); p.add_argument('--local-only', action='store_true')
     p.add_argument('--basis', help='Optional Thread record-set signature from a previous update receipt.')
@@ -107,6 +77,8 @@ def add_commands(commands, command, body):
     brief.add_argument('--interaction-summary'); brief.add_argument('--interaction-summary-file')
     for verb in ('show', 'context', 'continue', 'coordinate', 'backlinks'):
         p = command(group, verb, 'thread.' + verb); p.add_argument('id')
+        if verb=='continue':
+            p.add_argument('--ready',action='store_true',help='Read a bounded owner handoff with recent progress and registered local locations')
     p = command(group, 'create', 'thread.create'); p.add_argument('--title', required=True); body(p)
     p.add_argument('--ready', action='store_true')
     p.add_argument('--generation-file')
@@ -114,41 +86,27 @@ def add_commands(commands, command, body):
     p = command(group,'name','thread.name');p.add_argument('id')
     p.add_argument('--english');p.add_argument('--chinese');p.add_argument('--intro')
     p.add_argument('--alias',action='append',default=[]);p.add_argument('--expect');p.add_argument('--sync',action='store_true')
-    p = command(group, 'public-branch', 'thread.public-branch'); p.add_argument('id'); p.add_argument('--title', required=True); body(p)
-    p.add_argument('--sync', action='store_true'); p.add_argument('--ready', action='store_true')
     p = command(group, 'split', 'thread.split'); p.add_argument('id'); p.add_argument('--title', required=True); body(p)
     p.add_argument('--ref', action='append', default=[]);p.add_argument('--sync', action='store_true')
     p = command(group, 'merge', 'thread.merge'); p.add_argument('sources', nargs='+');p.add_argument('--into',required=True)
     body(p);p.add_argument('--sync',action='store_true')
     p = command(group, 'delete', 'thread.delete');p.add_argument('id');body(p);p.add_argument('--sync',action='store_true')
-    for verb in ('note', 'result', 'summary', 'request', 'reply', 'assign', 'decline', 'deliver', 'adopt', 'cancel', 'correct', 'link', 'state', 'archive','restore','share', 'edit', 'bind'):
-        p = command(group, verb, 'thread.' + verb); p.add_argument('id', **({'nargs':'?'} if verb == 'request' else {}))
+    for verb in ('note','result','summary','correct','link','state','archive','restore','edit','bind'):
+        p = command(group, verb, 'thread.' + verb); p.add_argument('id')
         if verb != 'bind':
             p.add_argument('--sync', action='store_true')
             p.add_argument('--ready', action='store_true')
-        if verb in ('note', 'result', 'summary', 'request', 'reply', 'assign', 'decline', 'deliver', 'adopt', 'cancel', 'correct', 'link', 'edit'):
+        if verb in ('note', 'result', 'summary', 'correct', 'link', 'edit'):
             body(p)
-        if verb in {'note','result','summary','request','reply','assign','decline','deliver','adopt','cancel','correct'}:
+        if verb in {'note','result','summary','correct'}:
             p.add_argument('--title', help='Complete short title, independent of the interaction summary')
-        if verb in {'request','reply','assign','decline','deliver','adopt','cancel','correct'}:
-            p.add_argument('--local-only', action='store_true', help='Save a draft; do not send')
-        if verb=='reply':p.add_argument('--thread');p.add_argument('--to',action='append',default=[])
-        if verb == 'request':
-            p.add_argument('--to', help='Explicit recipient account, stable ID or real name')
-            p.add_argument('--maintenance', action='store_true', help='Use the Hub maintenance Thread')
-        if verb in ('note', 'result', 'summary', 'request'):
+        if verb in ('note', 'result', 'summary'):
             p.add_argument('--ref', action='append', default=[], help='Cite ID or pinned ID@VERSION; repeat for multiple sources')
-        if verb in ('note','result','summary','edit','request','reply','assign','decline','deliver','adopt','cancel','correct','state','archive','restore'):
+        if verb in ('note','result','summary','edit','correct','state','archive','restore'):
             p.add_argument('--generation-file')
-        if verb in ('note','result','summary','request','reply','assign','decline','deliver','adopt','cancel','correct','state','archive','restore'):
+        if verb in ('note','result','summary','correct','state','archive','restore'):
             brief = p.add_mutually_exclusive_group()
             brief.add_argument('--interaction-summary');brief.add_argument('--interaction-summary-file')
-        if verb == 'assign':
-            p.add_argument('--work', action='append', required=True)
-        if verb == 'deliver':
-            p.add_argument('--result', action='append', required=True); p.add_argument('--partial', action='store_true')
-        if verb == 'adopt':
-            p.add_argument('--result', action='append', default=[])
         if verb == 'link':
             p.add_argument('--target', required=True)
         if verb == 'state':
@@ -158,12 +116,6 @@ def add_commands(commands, command, body):
         if verb == 'bind':
             p.add_argument('--agent', required=True); p.add_argument('--workdir', required=True)
             p.add_argument('--session-id'); p.add_argument('--host')
-        if verb=='share':
-            p.add_argument('--attach',action='append',default=[])
-            p.add_argument('--materials',help='Private format=1 selection of explicit files and Git code reference')
-            p.add_argument('--resource',action='append',default=[],help='Reuse a fixed cosmesh://library/ reference')
-            p.add_argument('--git');p.add_argument('--commit');p.add_argument('--code-path',action='append',default=[])
-            p.add_argument('--summary-only',action='store_true');p.add_argument('--generation-file')
 
 
 def execute(args):
@@ -174,6 +126,8 @@ def execute(args):
     root = workspace_root(getattr(args, 'root', None))
     dry, offline = getattr(args, 'dry_run', False), getattr(args, 'offline', False)
     fresh, publish = getattr(args, 'require_fresh', False), getattr(args, 'sync', False)
+    if publish and verb!='sync':
+        raise Error('COMMAND_RETIRED','Save the record locally, then use thread personal ID for owner synchronization.')
     if getattr(args,'local_only',False) and publish:
         raise Error('INPUT_INVALID', 'Choose --local-only or --sync.')
     if getattr(args, 'revision', None) or getattr(args, 'expect_revision', None):
@@ -184,38 +138,48 @@ def execute(args):
         raise Error('INPUT_INVALID', 'Dry-run previews local changes and cannot synchronize.')
     if dry and verb == 'associate':
         raise Error('INPUT_INVALID', 'Association previews are read-only without --dry-run; confirmation is an explicit write.')
-    if fresh and verb not in {'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'outbox', 'mail', 'status', 'maintenance'}:
-        raise Error('INPUT_INVALID', '--require-fresh applies to reads and only pulls shared content.')
+    if fresh and verb not in {'find', 'list', 'overview', 'page', 'check', 'chat', 'show', 'context', 'continue', 'coordinate', 'backlinks', 'inbox', 'outbox', 'mail', 'activity', 'search', 'status'}:
+        raise Error('INPUT_INVALID', '--require-fresh applies to reads and requires a verifiable source.')
     if verb == 'overview' and ((args.scope == 'mesh' and args.host_file) or (args.scope == 'base' and fresh)):
         raise Error('INPUT_INVALID', 'Public overview excludes host metadata; private overview stays local without --require-fresh.')
     if verb == 'overview' and args.continue_id and (not args.compact or args.scope == 'mesh'):
         raise Error('INPUT_INVALID', 'Use --compact and a private scope for combined continuation.')
-    if verb=='request' and args.maintenance:
-        raise Error('COMMAND_RETIRED','Send from your own Thread with thread request OWN_THREAD --to MAINTAINER; authorize that recipient explicitly.')
-    if verb == 'request' and bool(args.id) == args.maintenance:
-        raise Error('INPUT_INVALID', 'Choose a Thread ID or --maintenance.')
-    if verb == 'chat':
-        if bool(args.id)==bool(args.contact):raise Error('INPUT_INVALID','Choose a Thread/request ID or --with REAL_NAME.')
-        if args.contact:
-            if args.scope=='base':raise Error('INPUT_INVALID','Contact conversations use shared Mesh records.')
-            args.scope='mesh'
-        elif args.before or args.date or args.include_progress:
-            raise Error('INPUT_INVALID','Date, cursor and shared-progress filters apply to --with conversations.')
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
     if prefix and (root == Path(prefix).resolve() or Path(prefix).resolve() in root.parents):
         raise Error('PATH_INVALID', 'Keep the workbench outside the application installation.')
+    if verb == 'sync' and not args.id and Workbench(root).retired_sync():
+        from .sync import retired_transport
+        args._thread_sync_state = {'state': 'transport_retired', 'identity_verified': False}
+        raise retired_transport()
+    if verb=='unshare':
+        from .thread_access_cli import Online
+        if offline or dry:
+            raise Error('INPUT_INVALID','Withdrawing an old share requires online execution.')
+        online=Online(Workbench(root))
+        row=online.call('thread_access_status',thread=args.id)
+        result=online.call('thread_access_set',thread=args.id,visibility='private',readers=[],
+                           sha=row['content_revision'],expect=row['acl_revision'])
+        args._thread_sync_state=hub_receipt()
+        return result,None
+    if verb=='find' or (verb=='list' and not (args.personal or args.remote) and args.scope=='all' and not args.lifecycle and not args.all):
+        from .work_directory import lookup
+        wb=Workbench(root)
+        result=lookup(wb,args.query or '',offline,fresh or getattr(args,'remote',False))
+        if result['scope']=='local_and_current_hub':args._thread_sync_state=hub_receipt()
+        else:args._thread_sync_state={'state':'local_only','identity_verified':False}
+        return result,None
     if verb in {'personal', 'fetch', 'locations'} or (verb == 'sync' and args.id) or (verb == 'list' and (args.personal or args.remote)):
         from .thread_personal_cli import execute as execute_personal_thread
-        return execute_personal_thread(args, root)
-    if verb in {'public-branch','assign','decline','deliver','adopt','cancel'}:
-        raise Error('COMMAND_RETIRED','Use thread send or reply from your own Thread; keep outcomes as ordinary result records. Historical records remain readable.')
-    if verb in {'send','request','reply','inbox','outbox','mail','chat','search'}:
-        from .thread_messages_cli import execute as messages
-        return messages(args,root)
-    if verb=='share':raise Error('COMMAND_RETIRED','Use thread access ID --visibility public|restricted; select files with personal asset add and --files. Existing sources and previous versions are retained.')
-    if verb in {'access','browse','track'}:
-        from .thread_access_cli import execute as online
-        return online(args,root)
+        args._thread_sync_state = {'state': 'local_only', 'identity_verified': False}
+        result = execute_personal_thread(args, root)
+        if verb != 'locations' and not getattr(args,'off',False):
+            args._thread_sync_state = hub_receipt()
+        return result
+    if verb in {'send','request','reply','inbox','outbox','mail','chat','search','activity'}:
+        from .delivery_cli import execute as messages
+        result=messages(args,Workbench(root))
+        if not (dry or getattr(args,'local_only',False)):args._thread_sync_state=hub_receipt()
+        return result,None
     if verb == 'sync' and args.files:
         raise Error('INPUT_INVALID', '--files requires a selected Thread ID.')
     if verb == 'init':
@@ -234,8 +198,8 @@ def execute(args):
         if args.repo!='local' and not offline and wb.client.get('connection'):
             from .spaces import rpc
             result=rpc(wb.client['connection'],{'method':'thread_read','sources':[ref],'chars':args.chars,'offset':args.offset})
-            if result.get('actor')!=wb.client.get('actor'):raise Error('AUTH_DENIED','Source read identity differs.')
-            args._thread_sync_state={'state':'synced','identity_verified':True}
+            if not wb.client.get('actor') or result.get('actor')!=wb.client.get('actor'):raise Error('AUTH_DENIED','Source read identity differs.')
+            args._thread_sync_state = hub_receipt()
             return result['records'][0],None
         with wb.base.locked():
             wb.load();doc=wb.resolve(ref);end=args.offset+args.chars
@@ -260,12 +224,14 @@ def execute(args):
         return result,revision
     with wb.base.locked():
         wb.load()
+        if verb=='continue' and args.ready:
+            from .thread_lifecycle import continuation
+            args._thread_sync_state={'state':'local_only','identity_verified':False}
+            result=continuation(wb,args.id,ready=True,fresh=fresh)
+            if fresh:args._thread_sync_state=hub_receipt()
+            return result,wb._revisions['local']
         def finish(result, reload=False):
             if reload: wb.load()
-            if verb in {'show','context','continue'} and isinstance(result,dict) and wb.find(args.id)['doc']['meta']['kind']=='thread':
-                from .thread_tracking import view as tracking_view
-                tracked=tracking_view(wb,args.id,offline)
-                if tracked is not None:result['tracking']=tracked
             args._thread_sync_state = wb.status()
             if verb == 'overview' and args.compact:
                 status = args._thread_sync_state
@@ -294,9 +260,12 @@ def execute(args):
                 raise Error('INPUT_INVALID','Generation JSON accepts bounded tool, model, instruction and verification text.')
             wb.generation['verification']='client_reported'
         if verb == 'discover':
-            return finish(wb.discover(args.ssh, args.service))
+            result = finish(wb.discover(args.ssh, args.service))
+            if result[0].get('mode') == 'thread_access':
+                args._thread_sync_state = hub_receipt()
+            return result
         if verb == 'sync':
-            return finish(wb.synchronize(publish=not args.pull))
+            raise Error('COMMAND_RETIRED','Select a Thread ID to synchronize.')
         if fresh:
             update = wb.synchronize(publish=False)
             if update['errors']:
@@ -422,7 +391,4 @@ def execute(args):
         if verb in {'bind', 'bind-project'} and not dry:
             from .thread_execution_reader import owner_execution
             result['execution_metadata'] = owner_execution(wb, args.id)
-        if publish:
-            wb.load()
-            result = {'result': result, 'publication': wb.synchronize()}
         return finish(result, reload=verb not in {'status','maintenance','list','overview','locate','inbox','show','context','continue','backlinks','coordinate'} and not publish)

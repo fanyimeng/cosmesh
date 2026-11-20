@@ -169,7 +169,7 @@ class Hub:
             raise Error("AUTH_DENIED", "Hub administration requires the owning Unix account.")
         return value
 
-    def initialize(self):
+    def initialize(self, *, legacy=False):
         if self.root.exists() and any(self.root.iterdir()):
             raise Error("HUB_EXISTS", "Hub initialization requires an empty directory.")
         self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -178,6 +178,8 @@ class Hub:
             (self.root / directory).mkdir(mode=0o700)
         settings = {"format": 1, "host": socket.gethostname(), "admin_uid": os.getuid(),
                     "admin": actor(), "mode": "key_mapped_ssh_beta"}
+        if not legacy:
+            settings.update(format=2,thread_access_state="ready")
         atomic(self.root / "hub.json", json.dumps(settings, indent=2) + "\n")
         atomic(self.root / "policy/repos.json", "{}\n")
         atomic(self.root / "policy/keys.json", "{}\n")
@@ -375,6 +377,14 @@ class Hub:
     def spaces(self, payload, user):
         """One public Mesh space per authenticated server account."""
         settings=self.settings()
+        method=payload.get('method','')
+        if isinstance(method,str) and method.startswith('delivery_'):
+            if settings.get('thread_access_state') not in (None,'ready'):
+                raise Error('MAINTENANCE_REQUIRED','Finish the current Hub migration.')
+            from .deliveries import Deliveries
+            return Deliveries(self,user).dispatch(payload)
+        if (method=='thread_access_set' and payload.get('visibility')!='private') or method in {'thread_message_send','thread_message_preflight','thread_message_tracker'}:
+            raise Error('COMMAND_RETIRED','Use a 0.6 client to send selected content.')
         if settings.get('format')==2:
             if settings.get('thread_access_state')!='ready':raise Error('MAINTENANCE_REQUIRED','Thread migration is incomplete; resume the offline migration.')
             method=payload.get('method','')

@@ -7,22 +7,11 @@ from . import __version__
 from .errors import Error
 
 TOPICS = {
-    'components':'可选宿主组件：统一安装、独立版本、状态与回退',
-    'personal':'候选：同机个人共享、跨设备私人中转、按需拉取及回退',
-    'upgrade':'0.4.0 重要更新：统一 CosMesh、概念与用法',
-    'chat':'作者交互摘要、按人跨 Thread 的五轮对话、左右 TUI 与游标展开',
-    'sharing':'Thread 配套资料入库、固定打开引用、后缀与大小预检、Git 代码定位',
-    'pages':'Thread 与用户分级状态页、整体介绍、MD/SQLite 成品与局部更新',
-    'onboarding':'生成可转发安装 prompt、两条冷启动路径与身份填写',
-    'dsh':'DeepSeek Harness 安装、完全访问与工作续接',
-    'search':'个人 Agent 展开搜索、统一检索、回链与原文核验',
-    'knowledge':'知识库、文献、归档与贡献来源','users':'实名用户目录与进度总览',
-    'threads': 'Thread 工作串、跨人请求与个人 Agent 协调',
-    'overview': '系统概览与能力边界', 'usage': '日常使用与命令',
-    'architecture': '系统架构、数据与身份', 'files': '组件、源文件与运行文件',
-    'operations': '安装升级、部署与故障排查', 'profile': '私人档案与问答填写',
-    'feedback': '维护 Thread、普通请求与旧反馈兼容',
+    'usage':'工作、收集和收件', 'personal':'个人接续', 'sharing':'选定内容投递', 'chat':'按人交互与收件',
+    'components':'组件安装与管理','dsh':'DSH 宿主适配','upgrade':'本版更新说明',
+    'architecture':'工作与权限','threads':'执行位置','files':'模块职责','profile':'私人档案','operations':'安装和运维','feedback':'开发反馈',
 }
+
 
 
 def document(topic):

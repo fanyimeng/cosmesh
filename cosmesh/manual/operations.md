@@ -12,7 +12,7 @@
 
 Hub 由维护者配置兼容程序、受控身份入口、服务发现和共享存储。个人客户端用 client hub 设置默认服务，使用本人 SSH 身份；首次共享写入前本人填写姓名。默认服务发现位置为 /srv/cosmesh/service.json；COSMESH_SERVICE 可选择其他路径。
 
-本人 Thread 可离线读写，个人同步用 thread sync ID；查看他人 Thread 用 thread browse。权限用 thread access，Library 继承来源。旧公共 Git、旧版在线消息和旧成品接口在迁移后关闭，历史内容仍保留。
+本人 Thread 可离线读写，个人同步用 thread personal ID。给他人选定资料使用 thread send，在 thread inbox 收取。旧公开快照与 Library 历史保留已有访问范围。
 
 发布工具的 --root、网关工具的 --base 和安装脚本的 --source/--bootstrap 可配置部署目录。远端引导程序使用服务器 PATH 中的 python3，其版本应匹配所发布的 Linux 包。发布目录可读，Hub 数据与维护控制入口由维护者管理；共享 home 的节点共用同一用户程序与数据，并通过 POSIX lockf 协调写入。
 

@@ -1,6 +1,8 @@
 """Cross-device private locations for a public Thread; public records stay in Mesh."""
 import json
 
+import socket
+
 from .errors import Error
 from .personal import Personal
 from .personal_protocol import MAX_METADATA, digest, merge_maps, packed, private_dir, read_json, save_json
@@ -112,7 +114,7 @@ class ThreadExecution(ThreadLocations, Personal):
         # One atomic sidecar write. No document/history/author mapping is applied.
         save_json(self.directory / (tid + '.json'), value)
         from .thread_execution_projection import owner_projection
-        metadata = owner_projection(value['bindings'], current_device=self.state['device'])
+        metadata = owner_projection(value['bindings'], current_device=self.state['device'], current_host=socket.gethostname())
         return dict(thread=tid, sharing='public', audience='owner', personal_sync='execution',
                     published=False, public_content='fetched', source=source,
                     accepted_snapshot=accepted, uploaded=not pull, pulled=bool(head),

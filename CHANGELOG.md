@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+Owner work directory, scoped project collection, selected-content delivery and recipient-private inbox filing.
+
+A compact continuation returns recent decisions and local execution locations with fixed sources. Project scans and incremental personal synchronization avoid repeating unchanged work.
+
+Also included from the 0.5.1 development branch
+
+- Report authenticated online Thread operations separately from local or cached reads. Use `whoami --require-fresh` to check the configured Hub account.
+- Retire whole-repository sync on migrated Hubs without recording another failure. Keep historical metadata and working legacy connections.
+- Show the installed DSH Connector in each initialized profile and give a profile-specific next command when appropriate. Runtime activation remains host-reported.
+
 ## 0.5.0
 
 Released 2026-11-20. Optional DSH Connector 0.1.2 is available separately.

@@ -47,7 +47,7 @@ class Parser(argparse.ArgumentParser):
         raise Error("INPUT_INVALID", message, "Use --help or capabilities to inspect the available commands.")
 
 
-def parser(product):
+def parser(product, family=None):
     common = Parser(add_help=False)
     for name, options in (
         ("--root", {"help": "Explicit managed data directory"}),
@@ -63,7 +63,7 @@ def parser(product):
     speed = common.add_mutually_exclusive_group()
     speed.add_argument('--fast', dest='fast_override', action='store_true', default=argparse.SUPPRESS)
     speed.add_argument('--no-fast', dest='fast_override', action='store_false', default=argparse.SUPPRESS)
-    root = Parser(prog=product, description="CosMesh private and public Threads", parents=[common])
+    root = Parser(prog=product, description="Personal work, project continuity and selected deliveries", parents=[common])
     version_label = __version__ + (" (development)" if installation()["mode"] == "development" else "")
     root.add_argument("--version", action="version", version=version_label)
     commands = root.add_subparsers(dest="command", required=True)
@@ -78,6 +78,15 @@ def parser(product):
         inputs = p.add_mutually_exclusive_group()
         inputs.add_argument("--body", default=argparse.SUPPRESS)
         inputs.add_argument("--file", default=argparse.SUPPRESS)
+
+    from .thread_cli import add_commands as thread_commands
+    from .collector import commands as collector_commands
+    if family in (None, 'thread'):
+        thread_commands(commands, command, body)
+    if family in (None, 'collect'):
+        collector_commands(commands, command)
+    if family in ('thread','collect'):
+        return root
 
     def dates(p):
         for key in ("due", "followup"):
@@ -116,7 +125,7 @@ def parser(product):
     get.add_argument('topic', choices=tuple(guide.TOPICS))
     get.add_argument('--section', type=int)
     legacy_feedback = command(commands, 'feedback')
-    legacy_feedback.description = 'Legacy feedback history and pending queue compatibility; use thread request --maintenance for new feedback.'
+    legacy_feedback.description = 'Legacy feedback history and pending queue compatibility; use thread note for your own feedback or thread send --to ACCOUNT for a maintainer.'
     feedbacks = legacy_feedback.add_subparsers(dest='feedback_command', required=True)
     for verb in ('status', 'connect', 'add', 'reply', 'list', 'show', 'pull', 'sync', 'discard'):
         fb = command(feedbacks, verb, 'feedback.' + verb)
@@ -175,7 +184,8 @@ def parser(product):
     for verb in ('status', 'install', 'update', 'rollback'):
         cp = command(components, verb, 'component.' + verb)
         cp.add_argument('component', nargs='?', default='dsh', help='Component name or alias; default dsh')
-        cp.add_argument('--profile', default='desktop', help='Existing DSH profile')
+        cp.add_argument('--profile', default=None if verb == 'status' else 'desktop',
+                        help='Existing DSH profile (status checks all initialized profiles by default)')
         cp.add_argument('--component-root', help='Separate component software/cache directory')
         if verb != 'status':
             cp.add_argument('--dsh-cli', help='Absolute official DSH CLI executable')
@@ -262,8 +272,6 @@ def parser(product):
     se = command(sk, 'export', 'skills.export')
     se.add_argument('--ssh', required=True, help='Existing SSH alias on the user computer')
     se.add_argument('--bootstrap', default='/srv/cosmesh/agent/bootstrap.py')
-    from .thread_cli import add_commands
-    add_commands(commands, command, body)
     from .personal_cli import add_commands as add_personal_commands
     add_personal_commands(commands,command)
     from .community_cli import add_commands as add_community_commands
@@ -336,50 +344,17 @@ def parser(product):
 def capabilities(product):
     return {"client_version": __version__, "interface_version": 1, "schema_version": 1,
             "installation": installation(),
-            "product": product, "mode": "local_unverified", "agent_targets": list(AGENTS),
+            "product": product, "mode": "not_checked", "agent_targets": list(AGENTS),
             'profile': 'private',
             'document_semantics': {'project': 'context', 'task': 'action', 'update': 'record'},
             "thread_schema_version": 2, "schema_versions": [1, 2, 3], "knowledge_schema_version":3,"primary_model": "thread",
             "coordination": {"default": "personal_agents", "delegation": "ordinary_request", "requires_server_agent": False},
-            "features": {"component_management": True, "component_runtime_activation": "host_owned",
-                         "threads": True, "thread_requests": True, "thread_shared_references": True,
-                         "personal_sharing": True, "personal_relay_protocol": 1, "personal_background_sync": False,
-                         "thread_personal_protocol": "thread.personal.v1", "thread_personal_restore": True,
-                         "legacy_personal_commands": "retired",
-                         "knowledge_library":True,"knowledge_backlinks":True,"thread_archives":True,"real_name_directory":True,"contribution_history":True,
-                         "thread_coordination_context": True, "thread_cited_results": True,
-                         "thread_record_backlinks": True,
-                         "unified_search": True, "agent_search_workflow": True, "versioned_search_sources": True,
-                         "legacy_search_sources": True, "bounded_search_batch": True,
-                         "thread_split_merge": True, "thread_recycle_bin": True, "thread_withdrawal": True,
-                         "thread_session_lookup": True, "thread_overview": True, "compact_thread_overview": True,
-                         "combined_thread_continuation": True,
-                         "status_pages": True, "status_page_cache": "markdown_sqlite",
-                         "ready_status_pages": True,
-                         "project_thread_updates": True, "private_interaction_mail": True, "explicit_mail_seen": True,
-                         "quick_thread_checks": True, "compact_thread_inbox": True, "compact_thread_writes": True,
-                         "interaction_summaries": True, "thread_chat": True, "thread_chat_tui": False, "thread_messages_protocol": "thread.messages.v1", "thread_search": True, "thread_changes": True,
-                         "prepared_contact_documents": "legacy_only", "content_update_preparation": True, "bounded_thread_source_reads": True,
-                         "fast_mode": True, "agent_project_bindings": True,
-                          "execution_metadata": "thread.execution.v2", "shared_execution_projection": "thread.projects.v1",
-                          "thread_associate": True, "execution_revisioned_receipts": True,
-                         "thread_share_materials": "retired", "thread_access_files": True, "fixed_knowledge_file_links": True,
-                         "private_session_bindings": True, "maintenance_requests": "send_from_own_thread",
-                         "markdown_yaml": True, "local_git_history": True, "context": True,
-                         "json_receipts": True, "idempotency": True, "optimistic_concurrency": True,
-                         "personal_lifecycle": True, "local_control_updates": True, "unified_cosmesh": True, "explicit_send_receipts": True,
-                         "authenticated_identity": True, "remote_sync": True, "mcp": False,
-                         "hub_key_mapping": True,
-                         "system_identity": True, "local_gateway": True,
-                         "shared_personal_profile": True, "profile_export": True, "profile_sync": False,
-                         "installation_prompts": True, "profile_import_preview": True, "profile_interactive": True,
-                         "profile_field_encryption": True, "ssh_only_skills": True, "stdin_body": True,
-                         "local_first": True, "portable_install": True,
-                         "ssh_connection_reuse": True, "continuous_rpc": True, "batch_source_versions": True,
-                         "public_mesh": True, "personal_mesh_space": True, "space_discovery": True,
-                         'system_guide': True, 'system_feedback': True,
-                         "attachments": False, "cross_system_share": False, "notifications": False,
-                         "pdf_reports": False, "tui_store_integration": False}}
+            "features": {"work_directory": True, "personal_sharing": True, "thread_personal_restore": True,
+                         "thread_personal_protocol": "thread.personal.v1", "delivery_protocol": "delivery.v1",
+                         "selected_attachments": True, "private_mail_filing": True, "contact_view": True,
+                         "collector": ["once", "watch", "summary"], "session_context": "host_reported",
+                         "execution_metadata": "thread.execution.v2", "component_management": True,
+                         "whole_thread_publication": False, "automatic_contact_threads": False}}
 
 
 def profile_password(fd=None):
@@ -431,6 +406,9 @@ def read_input(file, limit):
 @networked
 def execute(args, product):
     action = args.action
+    if action.startswith('collect.'):
+        from .collector import execute as collect
+        return collect(args)
     if action.startswith('personal.'):
         from .personal_cli import execute as execute_personal
         return execute_personal(args)
@@ -609,11 +587,26 @@ def execute(args, product):
         raise Error("NOT_MANAGED_INSTALL", "This is a development or unmanaged command.",
                     "Install a release bundle and use its cosmesh self commands; the source environment remains separate.")
     root = root_for(product, getattr(args, 'root', None))
-    if action == "capabilities":
-        return capabilities(product), None
-    if action == 'whoami':
+    if action in {'whoami', 'capabilities'}:
         from .access import system_user
-        return {'system': system_user(), 'document_user': Store(root).client().get('user')}, None
+        from .threads import Workbench
+        wb = Workbench(getattr(args, 'root', None))
+        mode = 'thread_access' if 'retired_spaces' in wb.client else 'not_checked'
+        args._thread_sync_state = {'state': 'local_only', 'identity_verified': False, 'hub_check': 'not_checked'}
+        if getattr(args, 'require_fresh', False):
+            if getattr(args, 'offline', False):
+                raise Error('INPUT_INVALID', 'A fresh identity check requires online access.')
+            from .thread_access_cli import Online
+            from .sync import hub_receipt
+            info = Online(wb).info
+            mode = 'thread_access' if info.get('unified') else 'legacy'
+            args._thread_sync_state = hub_receipt()
+        if action == 'capabilities':
+            return dict(capabilities(product), mode=mode), None
+        result = {'system': system_user(), 'document_user': Store(root).client().get('user')}
+        if args._thread_sync_state['identity_verified']:
+            result.update(hub_actor=info['actor'], hub_id=info['hub_id'])
+        return result, None
     if action == "skills.install":
         names = ["cosmesh"]
         return install(args.agent, names, args.dest, getattr(args, "dry_run", False)), None
@@ -654,7 +647,19 @@ def execute(args, product):
             config = {'kind': 'system', 'discovery': args.service or os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY), 'repo': args.repo}
         return configure(store, product, config) if action == "repo.connect" else clone(root, product, config)
     if action == "sync":
-        return synchronize(store, product)
+        from .threads import Workbench
+        from .sync import retired_transport
+        wb = Workbench(getattr(args, 'root', None))
+        local = store.client()
+        if local.get('last_error') == 'COMMAND_RETIRED' or (product == 'cosmesh' and wb.retired_sync(local.get('remote'))):
+            args._thread_sync_state = {'state': 'transport_retired', 'identity_verified': False}
+            raise retired_transport()
+        try:
+            return synchronize(store, product)
+        except Error as exc:
+            if exc.code == 'COMMAND_RETIRED':
+                args._thread_sync_state = {'state': 'transport_retired', 'identity_verified': False}
+            raise
     if getattr(args, "require_fresh", False):
         if action not in READS:
             raise Error("INPUT_INVALID", "--require-fresh applies to reads; synchronize explicitly before writing.")
@@ -689,7 +694,8 @@ def main(argv=None, product="cosmesh"):
     machine = "--json" in argv
     revision, data, error = None, None, None
     try:
-        args = parser(product).parse_args(argv)
+        family = argv[0] if argv and argv[0] in ('thread','collect') else None
+        args = parser(product, family).parse_args(argv)
         if hasattr(args, 'scope'): args.scope = {'private':'base','public':'mesh'}.get(args.scope,args.scope)
         if args.action == 'skills.export':
             if machine or getattr(args, 'dry_run', False):
@@ -777,7 +783,7 @@ def main(argv=None, product="cosmesh"):
     sync_state = {"state": "local_only", "source_revision": revision, "remote_revision": None,
                   "last_sync_at": None, "identity_verified": False}
     try:
-        if 'args' in locals() and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'component.', 'invite.', 'space.', 'thread.', 'library.','user.','search.')):
+        if 'args' in locals() and args.action not in {'whoami', 'capabilities'} and not args.action.startswith(('hub.', 'profile.', 'guide.', 'feedback.', 'client.', 'component.', 'invite.', 'space.', 'thread.', 'collect.', 'library.','user.','search.')):
             root = root_for(product, getattr(args, "root", None))
             sync_state = state(Store(root), revision)
     except (Error, OSError, ValueError):
@@ -813,9 +819,14 @@ def main(argv=None, product="cosmesh"):
                 sync_state.update(state='offline' if data['sync_error']['code'] == 'SYNC_NETWORK' else 'sync_failed')
         except (Error, OSError, ValueError):
             pass
+    action = getattr(args, 'action', '') if 'args' in locals() else ''
+    if action.startswith('thread.') or action in {'whoami', 'capabilities'}:
+        receipt = getattr(args, '_thread_sync_state', {})
+        sync_state['hub_check'] = receipt.get('hub_check', 'not_checked') if not error else 'not_verified'
+    needs_warning = sync_state['state'] in {'needs_sync', 'offline', 'sync_failed'}
     result = {"ok": error is None, "data": data,
               "sync": None if profile_action or guide_action or client_action else sync_state,
-              "warnings": [] if profile_action or guide_action or client_action or sync_state["identity_verified"] else ["Local source has not been verified as accepted by the configured Hub."],
+              "warnings": [] if profile_action or guide_action or client_action or not needs_warning or sync_state["identity_verified"] else ["Local source has not been verified as accepted by the configured Hub."],
               "error": error}
     # A single flag rides on the existing receipt; there is no mode preflight.
     try:

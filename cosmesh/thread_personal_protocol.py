@@ -59,7 +59,8 @@ def validate_manifest(value, store):
     for aid, row in value['assets'].items():
         if not isinstance(row, dict): raise Error('SCHEMA_INVALID', 'Invalid Thread asset.')
         if 'relative_path' in row: portable_path(row['relative_path'])
-        assets[aid] = {k: v for k, v in row.items() if k != 'relative_path'}
+        if 'removed' in row and row['removed'] is not True: raise Error('SCHEMA_INVALID','Invalid removal marker.')
+        assets[aid] = {k: v for k, v in row.items() if k not in ('relative_path','removed')}
     model = validate_snapshot(dict(format=1, files={'.cosmesh/config.json': json.dumps(config), **documents},
                                   assets=assets, bindings={}, sources=value['history']), store)
     validate_bindings(value['bindings'], tid)

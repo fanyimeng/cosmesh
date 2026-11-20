@@ -44,11 +44,13 @@ def materialize(personal, value, destination):
     policy = personal.limits()
     rows = []; targets = {}; invalid = {}; total = 0; count = 0
     for aid, asset in sorted(value['assets'].items()):
+        if asset.get('removed'):continue
         try: name = portable_path(asset.get('relative_path', asset['name']))
         except Error as exc: invalid[aid] = exc.code; continue
         key = name.casefold()
         targets.setdefault(key, []).append((aid, asset['blob']))
     for aid, asset in sorted(value['assets'].items()):
+        if asset.get('removed'):continue
         if aid in invalid:
             rows.append(dict(id=aid,state='skipped',reason=invalid[aid]));continue
         name = portable_path(asset.get('relative_path', asset['name']))

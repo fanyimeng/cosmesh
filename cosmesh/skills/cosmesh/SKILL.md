@@ -1,64 +1,20 @@
 ---
 name: cosmesh
-description: 管理本人 Thread、跨设备接续、按人追踪与按权限在线查看；Library 资料继承来源权限。
+description: 查找与接续本人的 Thread、收集项目变化、向指定联系人投递资料并处理收件。
 ---
 
-## 一个 Thread，一位所有者
+## 快速接续
 
-Thread 有私有／指定可见／全员可见三种范围，个人同步独立设置。本人多设备、多 Agent 沿用原 ID，项目、目录和会话分别登记。设备、路径与会话由本人管理。其他用户获得查看权限，自己的工作和反馈记录到本人 Thread。复用已有合适 Thread；新建、绑定、改权限和发布按用户授权执行，首次收取有效新消息会自动建立无重名的私人按人 Thread；其余工作按明确授权执行。
+已知 Thread ID 或本机唯一名称，直接 `cosmesh thread continue ID --ready --json`。刚从另一设备回来、需要最新进展时，已开启个人同步的 Thread 加上 `--require-fresh`。这一次读取给出目标、交接摘要、最近进展和本机登记位置。能据此工作就开始。需要精确原文时按回执中的来源用 `thread read ID@VERSION --repo REPO`；需要其他设备或完整位置时用 `thread locations ID`。
 
-明确工作目标后直接使用已知 ID；缺少才一次 thread locate。本人本地总览 thread page --ready --json；记录进展 thread update ID --file FILE --interaction-summary TEXT --ready --json。已授权同步的新访问 Thread，再 thread sync ID。edit 使用 --expect，重试沿用原输入／操作键。只读取任务必需材料，不扫描聊天数据库或整个目录，不重复查成功回执。
+只知道当前目录或真实项目 ID 时用 `thread locate --workdir DIR` 或 `--project-id ID`。只知道工作名、或新设备还没有这项工作，用 `thread find 名称`；明确只找本机可加 `--offline`，要求 Hub 最新可加 `--require-fresh`。恢复用 `thread fetch ID --workdir DIR --agent AGENT --files`，沿用原 ID。回执分别给出记录、文件与位置的结果。项目绑定需要真实原生 ID；目录登记用 `--kind directory`。DSH 是否已创建会话以宿主回执为准。
 
-## 个人同步与恢复
+## 工作中
 
-thread personal ID 主动保存选定 Thread，完整记录、可用历史和完整 owner 执行元数据仅本人可取。thread list --personal --remote 查看远端；thread fetch ID --workdir DIRECTORY --agent AGENT 恢复原 ID 并登记目的地。真实原生项目可加 --project-id/--project-name，目录工作区使用实际目录。后续 thread sync ID，--pull 只拉取；thread locations ID 展开完整关联与 execution_metadata。设备／目录登记与实际执行分别报告，registered_only 不表示宿主已创建或可运行。
+本人选择同步用 `thread personal ID --files`。要持续收集新的项目文件，在对应设备上登记 `collect add ID DIR --personal`，多个目录使用不同的 `--as PREFIX`。`collect once` 对本机所有登记范围检查一次，`collect watch` 可持续运行。在任务停顿、换人或换设备时，用 `collect summary ID --event STABLE_ID --body TEXT` 留下决定、已完成事项和下一步。宿主维护交接文件时，登记时可加 `--context-file RELATIVE_PATH`。磁盘扫描只覆盖已登记的文件。同一阶段的多次保存合并处理。用 `thread personal ID --off` 暂停个人同步。
 
-明确选择文件用 personal asset add ID FILE [--as RELATIVE_PATH]，thread sync ID --files 上传选定文件，fetch 加 --files 恢复。已有不同内容保留并报告冲突；冲突时可选新本地数据根 --root，原数据与缓存保留。不要自动覆盖或删除旧副本。
+## 给人发、收和归档
 
-## 执行元数据与补关联
+`thread send [ID] --to ACCOUNT --body TEXT` 可重复指定 `--record ID` 和 `--attach FILE`。按用户要求选取内容和收件人。需要审阅时使用 `--dry-run`，随后带 `--expect PREVIEW` 发送；网络重试复用同一操作键或预览。成功回执已确认投递。
 
-本人按设备和 Agent 登记 Project、目录和 Session。用 thread associate ID 预览摘要，发布时在 thread access ID --visibility public 或 restricted 命令中加 --share-projects，只批准本次的 Agent、Project 类型和显示名称。设备标识、主机名、原生 ID、目录和会话保留在本人视图。旧快照维持原范围，私人变动不推进共享版本。
-
-旧 Thread 没有关联时用 thread associate --missing 查看，再以 thread associate ID --host-file FILE 只读预览；可另加明确选择的 --journal FILE，但仍须宿主观测核验。只有唯一有效候选才可 --confirm CANDIDATE --expect REVISION，重试沿用原 host-file、候选和幂等键。标题、generation.tool、目录相似或同名不单独构成关联；歧义先厘清，不在 sync/fetch/browse 中自动补写。
-
-## 可见范围与在线查看
-
-thread access ID 查询当前权限。指定查看者用 thread access ID --visibility restricted --to USER，可重复 --to；全员用 public，仅本人用 private。迁移后若 sync 返回 review_required，先展示保留的私人历史／文件范围，沿用户明确授权使用 thread access 发布；原公共版本保持。首次发布选定 Thread 完整记录与历史，文件需明确登记及 --files；说明范围，不沿用旧“仅简报”的授权扩大发布。修改名单使用 --expect-acl REVISION。成功授权不等于已发送通知。
-
-thread browse [ID] 在线读；--direct 列指定给本人的来源，--owner USER 按人；--records 列记录，--record ID/--version VERSION 看历史，--snapshot SHA 固定快照，--files 列文件。列表与详情按当前 ACL 返回 shared execution_metadata，变化只含脱敏摘要。明确下载才 --asset ID --output NEW_PATH，按 next_offset 分页。默认不全量恢复别人的 Thread，不自动执行文件。
-
-thread track 提供按人追踪建议，只包含对方指定给本人的 Thread，排除全员可见。优先复用本人同名 Thread，授权后 --use ID；确需新建 --create，默认名字为对方实名。连接按 Hub 和稳定用户 ID，改名不重复创建。可 --dismiss 忽略建议。show/context/continue 或 track --show ID 在线刷新来源；撤权后来源移除，本人笔记保留。离线仅展示已保存本人资料及明确标记的 shared 缓存，不声称旧权限仍有效。
-
-## 消息与增量检索
-
-thread send OWN_THREAD --to USER --body TEXT 明确发送，request 是请求类型；thread reply MESSAGE_ID --thread OWN_THREAD --body TEXT 在本人 Thread 回应。需要先有来源查看权限，发送不自动授权。--local-only 保存草稿；相同输入／操作键重试，只有 accepted/sent 回执才称已发送。消息只引用选定记录，个人同步不顺带公开其他草稿。
-
-thread inbox 默认消息，outbox 查看本人发出，chat --with USER 查看双方对话；mail show MESSAGE_ID 分页原文，mail mark MESSAGE_ID --seen 明确标已读，列信和搜索不标读。首次来信按稳定用户 ID 复用私人追踪 Thread，无重名时自动创建；同名未登记则提示选择，不能仅凭姓名合并。另一设备恢复原 ID，来源工作仍在线读取，定向工作清单排除全员可见内容。历史来信不触发批量创建。
-
-thread search QUERY 搜索当前可见 Thread，--messages 搜索本人收发消息，--with USER 筛消息往来。结果给固定来源，可用 browse --snapshot/--record/--version 或 mail show 获取原文。thread browse ID --changes REVISION 仅列变动，后续页固定返回的新 --snapshot，完成后推进本地游标。索引按记录版本增量刷新，撤权即时过滤。完整说明见 guide show chat。
-
-## Library 继承来源
-
-有复用价值的文件用 library add --title TITLE --file FILE --thread THREAD_ID --sync，多个来源可重复 --thread。所有历史版本、搜索、目录、原件及提取文本都继承来源 Thread 的当前权限；多个来源取共同允许范围。查看者不能扩大来源权限。
-
-独立面向全员的资源需用户明确授权后 --public；从已有来源独立公开须拥有全部来源。library revise 保留来源关系，修改用 --expect VERSION。library list/search/show/history/text 在线核验；--offline 仅查看已下载缓存，撤权不删除历史下载件。原件用 library fetch ID --name NAME --output NEW_PATH，固定引用用 library open cosmesh://library/K-ID@VERSION/FILENAME；--launch 仅在明确要求打开且文件适合查看时使用。
-
-个人文件默认5 GB/份、10 GB/批、本人服务端总容量30 GB；对外2 GB/份、5 GB/批、单Thread总容量15 GB（含历史）。GB按十进制10⁹字节计算。Library单项最多32份文件，继承资料计入来源 Thread 容量。原未改动默认额度更新为本版限额，自定义不同值保留；服务器和本地额度取较小值。科学数据、压缩包、二进制及未知后缀允许原件存储，凭证及特殊路径仍过滤；目录不递归上传，文件不自动解包或运行，大文件不做全文提取。大小未实测到上限时不声称完成实测。
-
-## 旧版本迁移与回退
-
-新 CLI 的 thread share 已退役，统一使用 thread access；旧整库 personal connect/sync/join、asset push 保留替代提示。旧公开内容经管理员离线迁移后，保留原 ID、作者、贡献和固定历史；Library 同步建立来源权限。迁移前旧 Hub 保留原行为，不能把旧公开内容说成已缩权。管理员需停止所有网关，执行 hub migrate-threads --hub-root PATH 预览，明确授权后 --apply --gateways-stopped。个人 Agent 不自行进行 Hub 管理。
-
-迁移保存原仓库、Library、私人流和独立备份，失败保持维护状态可重试。迁移后的 Hub 拒绝旧程序服务，防止回退重新暴露已收窄的内容；回退程序时服务暂停，恢复新版继续。备份可离线恢复核验，恢复旧服务须单独审阅当前权限，不自动恢复旧访问范围。原缓存保留，属于已下载历史资料。
-
-旧公共 Git 整库读写、旧版在线消息与公共成品接口在迁移后关闭。历史消息作为 Thread 记录保留，可在线 browse；新消息使用 thread send/reply，在本人 Thread 中记录并按接收者权限投递，只有 accepted 才称已发送。私人反馈写入本人 Thread，引用来源按实际授权处理。
-
-## 本人账号、宿主与入口
-
-可选宿主组件由 component list/status/install/update/rollback 管理，独立版本、按需安装。先 component status dsh；用户授权安装后，完成初始化并退出目标宿主，再 install/update dsh --host-stopped，已有显式 profile/DSH_HOME 保持。使用现有软件发布源；--artifact/--offline 支持固定包。回执 installed 与运行生效分开，重启后从 DSH 核对。失败保留 pending，用原命令重试或 rollback；不手改 profile，不删除旧包、日志或资料。细节 guide show components。
-
-user me/list/show 读取实名目录；user set-name NAME --expect VERSION 只修改本人真实姓名。Profile 联系方式与偏好保持私人。服务器 DSH 是本人个人客户端；发布源负责软件分发，Hub 负责中转与权限，三者分别配置。client hub --service FILE 设置默认 Hub，已有显式连接保持。
-
-需要在 DSH 自动创建原生项目与新会话时，可选 DSH Connector；先看 guide show dsh，不因普通续接自动安装或改 profile。仅用户明确要求新开会话且宿主提供 cosmesh_open_work 时调用，默认一轮初始化确认后等待，会产生模型请求并将接续背景送入所选模型；不开展实际研究。同操作键恢复原请求，initialize:false仅建空白会话（未选中时可能隐藏）。目录／Session登记不等于宿主已创建或已执行，部分成功按回执报告。组件仍为独立发布组件，CLI/Skill安装不附带启用。
-
-本 Skill 末尾安装器记录实际 CLI 入口。普通业务不先查更新或诊断；明确更新才 client update。升级后完整展示 update_notice.document 并提示新开 Agent 会话。安装器替换托管 Skill，自定义文件和旧程序按原冲突保护／回退规则保留。
+收消息用 `thread inbox --json`，只看未读可加 `--unread`。列表已有摘录和关联建议，确需全文时用 `thread mail show MID`，多个已读标记可以一次执行 `thread mail mark MID1 MID2 --seen`。用户选定后用 `thread mail file MID --thread ID` 或 `--defer`。`thread reply MID --body TEXT` 沿原往来回复，按人查询用 `thread chat --with ACCOUNT`，按工作查询用 `thread activity ID`。附件按需下载，发送人可撤回后续在线读取。

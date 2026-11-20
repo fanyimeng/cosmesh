@@ -1,15 +1,24 @@
-# Architecture / 架构
+# CosMesh 0.6 的工作模型
 
-CosMesh is local-first: the user's Agent calls a deterministic CLI, which stores ordinary Markdown records with Git history. A Thread has a stable ID and exactly one owner. Its first-class execution metadata records actual devices, Agents, projects, directories and sessions, with a deterministic execution revision.
+一个 Thread 对应一项具体工作，有稳定 ID 和唯一所有者。资料在哪里、在哪个 Agent 里做过、哪些成果给过谁，都能从这项工作追溯。换设备继续工作时沿用同一个 ID。
 
-Visibility has three values: private, restricted to named Hub users, and public to all authenticated Hub users. Owners can preview Agent and Project display labels with `thread associate ID` and approve them with `thread access ID --visibility public --share-projects` (or restricted visibility with named readers). Approval is pinned to the publication. Device identifiers, hostnames, native Project IDs, workdirs and Sessions stay in the owner view. Personal synchronization is independent: it restores the same Thread and full owner execution metadata on another device; other users browse online and explicitly download selected files. A reader never acquires ownership or write/delegation rights.
+| 范围 | 保存什么 | 如何更新 |
+| --- | --- | --- |
+| 本人工作 | 目标、记录、结论和下一步，以及设备、Agent、Project、目录和会话的关联 | 本地 Agent 共用工作记录。原生项目 ID 在对应设备和 Agent 内解释 |
+| 个人同步 | 选中工作的记录、私人执行位置和可传输文件 | 每台设备统一收集。增量传送变动文件，Hub 按账号保存，其他设备按需取回 |
+| 给人分享 | 某次投递的文字、固定版本记录、明确选中的附件和收件人 | 发件人可以预览。后续工作变化只进入自己的工作；要传新版本，再投递一次 |
+| 收件箱 | 收到的原文、回复关系、本人选择的工作归属 | 回复沿用各自对原信的归属。独立来信按工作名和别名建议，用户可改选或暂不归档。按联系人查看历史 |
 
-The Hub authenticates the caller using the existing server/SSH identity boundary. Local gateways also verify kernel peer credentials with SO_PEERCRED on supported Unix sockets; no caller-supplied username creates an identity. Private relay storage is partitioned by owner. Published snapshots expose records, selected files and the whitelist-built shared execution projection through current per-Thread authorization; raw execution coordinates and operation receipts are never exposed. Both projections derive from the same execution revision. Library versions, indexes, search and file reads inherit current source permissions; multiple sources require access to all of them.
+## 从哪里得到上下文
 
-Messages are ordinary records in the sender's own Thread. A private delivery ledger references exactly one accepted record version and stores recipients, idempotency and explicit read marks. Replies belong to the responder's own Thread. Recipient visibility is checked before delivery and every subsequent read. Sending a selected record does not publish unrelated private drafts.
+统一收集器只遍历本人明确登记的目录。Git 项目列出已跟踪和未忽略文件，普通目录按范围遍历。文件清单、增删改和产物能用来还原发生了哪些磁盘变化。目录绑定本身只表达工作地点。一个宿主里的完整对话、未落盘草稿、用户刚口头改变的要求，单靠目录扫描无法获得。
 
-Incoming messages reuse a private person Thread keyed by Hub and stable person ID. If none exists and the name is unambiguous, an ordinary private Thread is created in the recipient's relay and restored locally. Another device restores the same ID. Existing ambiguous names require explicit choice; historical migration does not create a flood of Threads. Person work lists include only restricted shares, while explicitly delivered messages can originate from any authorized Thread.
+当前宿主可写约定的交接文件，或按稳定事件 ID 提交工作摘要。建议在结束一轮工作、切换任务或明确要求交接时记录决定、待办和下一步。收集器分别报告文件检查点和最近的摘要，离线时积累待传内容。每台设备可以手动收集一次，也可以启动一个周期收集进程。同一共享 home 上的执行节点各有自己的收集范围。
 
-Text indexes are disposable SQLite/FTS products, incrementally refreshed by record content version. Current permissions constrain candidate scopes before search; results point to fixed records. Version-to-version change lists expose changed record/file metadata, pin the destination snapshot for pagination and stop after revocation. Personal synchronization keeps three-way merging and content-addressed files; changed metadata manifests are still submitted as complete bounded snapshots.
+## 存储和权限
 
-The software distribution source, Hub administration and a server-hosted personal client are separate roles. Programs and managed Skills are versioned independently of data. Legacy public Git repositories remain as historical originals after an explicit, stopped-gateway migration and backup; format fencing disables old broad read/write paths. Reverting software preserves current permissions and new data. The compatibility modules remain for old formats and rollback, while user guidance uses the unified Thread interfaces.
+本地工作记录与 Git 历史保留原格式。私人中继按账号分开保存对象和版本，复用相同文件内容。轻量名称索引使新设备可以先找工作再恢复。跨机同步使用单条 Thread 的三方合并。路径绑定可以有多个；自动采集相互重叠的目录需要明确唯一归属。目的目录已有异内容时报告冲突并保留原件。
+
+投递将正文、来源版本和附件清单固定在同一事务中。收发件箱归属分别按参与者保存。一份内容发给多人时，各收件人只看到发件人与自己，回复回到自己的往来记录。列表、搜索、原文和附件读取都检查当前账号的参与资格。撤回后停止后续在线读取，已下载到收件人设备的副本由对方持有。原版公开快照和旧权限记录独立保留，私人更新不会刷新它们。新版工作不提供整条 Thread 公开开关。
+
+Hub、软件发布源和服务器上的个人客户端各自配置身份和目录。同一台服务器可以承担三种角色。本人在服务器上运行的 Agent 与其他个人设备使用相同的客户端流程。

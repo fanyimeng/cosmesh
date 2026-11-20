@@ -18,8 +18,19 @@ def home():
     return safe_path(Path(os.environ.get('DSH_HOME', str(Path.home() / '.dsh'))))
 
 
+PROFILE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+
+
+def profiles():
+    directory = safe_path(home() / 'profiles')
+    if not directory.is_dir():
+        return []
+    return sorted(p.name for p in directory.iterdir()
+                  if PROFILE_NAME.fullmatch(p.name) and not p.is_symlink() and (p / 'package.json').is_file())
+
+
 def profile_path(profile):
-    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', profile):
+    if not PROFILE_NAME.fullmatch(profile):
         raise Error('INPUT_INVALID', 'Invalid DSH profile name.')
     return safe_path(home() / 'profiles' / profile)
 

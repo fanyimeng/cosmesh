@@ -10,7 +10,7 @@ def execute(args, root):
     verb = args.thread_command
     if getattr(args, 'dry_run', False) or getattr(args, 'require_fresh', False) or getattr(args, 'idempotency_key', None):
         raise Error('INPUT_INVALID', 'Thread personal sync uses fixed manifest versions; omit dry-run, require-fresh and operation keys.')
-    if getattr(args, 'offline', False) and verb != 'locations':
+    if getattr(args, 'offline', False) and verb != 'locations' and not getattr(args,'off',False):
         raise Error('OFFLINE', 'This operation requires your private relay.')
     if verb == 'list' and (not args.personal or not args.remote or args.scope != 'all' or args.mine or args.all or args.lifecycle):
         raise Error('INPUT_INVALID', 'Use thread list --personal --remote [--query TEXT] for the private server index.')
@@ -21,6 +21,10 @@ def execute(args, root):
     wb = Workbench(root)
     with wb.base.locked():
         wb.load()
+        if verb=='personal' and getattr(args,'off',False):
+            from .collector import enable_sync,owned
+            tid=owned(wb,args.id);enable_sync(wb,tid,False)
+            return {'thread':tid,'personal_sync':'off','previous_snapshot_retained':True},wb.base.head
         if verb == 'locations' and not wb.base.path('.cosmesh/personal-v1/state.json').exists():
             item = wb.find(args.id, 'thread'); tid = item['doc']['meta']['id']
             from .thread_execution_reader import owner_execution
@@ -68,7 +72,7 @@ def execute(args, root):
                 personal = ThreadExecution(wb)
             if verb == 'locations': return personal.locations(tid), wb.base.head
             result = personal.synchronize(tid, getattr(args, 'pull', False), args.files)
-            if verb == 'sync' and not getattr(args, 'pull', False) and type(personal) is ThreadPersonal and getattr(personal,'server_info',{}).get('access_protocol')=='thread.access.v1':
-                from .thread_access_cli import refresh_published
-                result['access_update'] = refresh_published(wb, personal, tid, result['accepted_snapshot'])
+        if verb in {'personal','fetch'}:
+            from .collector import enable_sync
+            enable_sync(wb,result['thread'],True)
         return result, wb.base.head

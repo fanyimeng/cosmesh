@@ -46,7 +46,7 @@ class Relay:
             'personal_put':{'method','sha','offset','data'},
             'personal_get':{'method','sha','offset'},
             'personal_commit':{'method','workspace','sha','expect'},
-            'personal_thread_list':{'method'},
+            'personal_thread_list':{'method'}, 'personal_work_list':{'method'},
             'personal_thread_head':{'method','thread'},
             'personal_thread_commit':{'method','thread','sha','expect'},
             'personal_execution_list':{'method'},
@@ -71,6 +71,7 @@ class Relay:
                     CREATE TABLE IF NOT EXISTS history(workspace TEXT,sha TEXT,at REAL,UNIQUE(workspace,sha));
                     CREATE TABLE IF NOT EXISTS traffic(at REAL,bytes INTEGER);
                     CREATE TABLE IF NOT EXISTS thread_heads(thread TEXT PRIMARY KEY,sha TEXT,title TEXT);
+                    CREATE TABLE IF NOT EXISTS work_names(thread TEXT PRIMARY KEY,card TEXT NOT NULL);
                     CREATE TABLE IF NOT EXISTS thread_history(thread TEXT,sha TEXT,at REAL,UNIQUE(thread,sha));
                     CREATE TABLE IF NOT EXISTS execution_heads(thread TEXT PRIMARY KEY,sha TEXT,title TEXT);
                     CREATE TABLE IF NOT EXISTS execution_history(thread TEXT,sha TEXT,at REAL,UNIQUE(thread,sha));
@@ -95,6 +96,20 @@ class Relay:
                     'traffic_bytes':db.execute('SELECT COALESCE(SUM(bytes),0) FROM traffic').fetchone()[0]}
         if method=='personal_list':
             return {'workspaces':[dict(r) for r in db.execute('SELECT * FROM heads ORDER BY workspace')]}
+        if method=='personal_work_list':
+            from .protocol import decode
+            from .work_directory import names_from_docs
+            result = []
+            for row in db.execute('SELECT h.thread,h.sha,n.card FROM thread_heads h LEFT JOIN work_names n USING(thread) ORDER BY h.thread'):
+                if row['card']:
+                    card = json.loads(row['card'])
+                else:
+                    snapshot = json.loads((self.blobs/row['sha']).read_bytes())
+                    docs = [decode(raw) for raw in snapshot['documents'].values()]
+                    card = names_from_docs(row['thread'], {d['meta']['id']:d for d in docs})
+                    db.execute('INSERT INTO work_names VALUES(?,?)', (row['thread'],packed(card)))
+                result.append(dict(card,sha=row['sha']))
+            return {'threads':result,'audience':'owner'}
         if method in {'personal_thread_list','personal_execution_list'}:
             table='execution_heads' if method=='personal_execution_list' else 'thread_heads'
             return {'threads':[dict(r) for r in db.execute('SELECT * FROM '+table+' ORDER BY thread')], 'audience':'owner'}
@@ -213,6 +228,9 @@ class Relay:
                     raise Error('SOURCE_PENDING','Selected file must be accepted in this owner space first.')
                 reason=content_reason(self.blobs/asset['blob'],asset['name'],asset['science'])
                 if reason: raise Error('TRANSFER_FILTERED','Selected file rejected: '+reason)
+        from .work_directory import names_from_docs
+        card = names_from_docs(p['thread'],model.docs)
+        db.execute('INSERT OR REPLACE INTO work_names VALUES(?,?)',(p['thread'],packed(card)))
         title=model.docs[p['thread']]['meta']['title']
         db.execute('INSERT OR REPLACE INTO thread_heads VALUES(?,?,?)',(p['thread'],p['sha'],title))
         db.execute('INSERT OR IGNORE INTO thread_history VALUES(?,?,?)',(p['thread'],p['sha'],time.time()))

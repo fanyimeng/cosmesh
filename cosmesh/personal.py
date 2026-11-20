@@ -65,8 +65,12 @@ class Personal:
         from .spaces import rpc
         config=self.state['connection']
         if not config: raise Error('HUB_CONNECTION_REQUIRED','Use thread personal ID with your existing Hub connection.')
+        if self.wb.client.get('actor') not in (None,self.state.get('actor')):
+            raise Error('AUTH_DENIED','The selected local account differs from the private relay.')
+        if self.wb.client.get('connection') and self.wb.client['connection']!=config:
+            raise Error('STATE_CONFLICT','The work store and personal relay use different connections.')
         reply=rpc(config,payload)
-        if reply.get('actor')!=self.state['actor']:
+        if not self.state.get('actor') or reply.get('actor')!=self.state['actor']:
             raise Error('AUTH_DENIED','Personal relay identity changed; retain all local sources.')
         return reply
 
@@ -92,7 +96,7 @@ class Personal:
         from .transfer_policy import effective
         return {k:min(v,remote[k]) for k,v in effective(self.state['policy'],self.state.get('policy_overrides',[])).items()}
 
-    def add(self,tid,path,science=False,relative_path=None):
+    def add(self,tid,path,science=False,relative_path=None,persist=True):
         item=self.wb.find(tid,'thread')
         tid=item['doc']['meta']['id']
         if item['repo']!='local': raise Error('POLICY_DENIED','Register files on a private Thread; public attachments use thread share.')
@@ -110,7 +114,7 @@ class Personal:
             self.state['assets'][aid]={'name':path.name,'thread':tid,'device':self.state['device'],
                 'path':str(path),'science':science,'blob':None,'size':info.st_size}
         if relative_path is not None:self.state.setdefault('asset_paths',{})[aid]=relative_path
-        self.save()
+        if persist:self.save()
         return {'id':aid,'state':'local_reference','path':str(path),'copied_bytes':0,'transfer_limits_applied':False,
                 'relative_path':self.state.get('asset_paths',{}).get(aid,path.name)}
 
@@ -161,7 +165,7 @@ class Personal:
                 offset=next_offset;source.seek(offset)
             if size and not result.get('complete'): raise Error('SOURCE_PENDING','Upload is not confirmed complete.')
 
-    def push(self,ids=None,explicit=False):
+    def push(self,ids=None,explicit=False,persist=True):
         # Server hard limits are combined locally without changing saved user preferences.
         local_policy=self.state['policy'];self.state['policy']=self.limits()
         try: plan=self.plan(ids,explicit)
@@ -188,9 +192,10 @@ class Personal:
                 sha=h.hexdigest();self.upload(staged,sha,size)
                 row.update(blob=sha,size=size,device=self.state['device'],path=str(path),name=path.name)
                 self.state.setdefault('asset_copies',{})[entry['id']]={'device':self.state['device'],'path':str(path),'blob':sha}
-                self.save()
                 entry.update(state='server_available',sha=sha)
             finally: staged.unlink(missing_ok=True)
+        if persist and any(entry['state']=='server_available' for entry in plan['files']):
+            self.save()
         return plan
 
     def download(self,sha,expected=None,metadata=False):

@@ -9,11 +9,11 @@ from contextlib import contextmanager
 from uuid import uuid4
 
 from .errors import Error
-from .personal_protocol import HASH, MAX_METADATA, MIB, GIB, check_id, digest, integer, packed, private_dir, read_json, save_json
+from .personal_protocol import HASH, MAX_METADATA, check_id, digest, integer, private_dir, read_json, save_json
 from .personal_relay import Relay
 from .protocol import decode
 from .store import Store, safe_path
-from .thread_personal_protocol import validate_manifest, protect_history
+from .thread_personal_protocol import validate_manifest
 from .thread_protocol import content_version, identifier
 
 FORMAT = 'thread.access.v1'
@@ -89,97 +89,20 @@ class Access:
     def manifest(self, row, sha=None):
         return read_manifest(self.hub,row,sha)
 
-    def legacy_check(self, tid):
-        policies = read_json(self.hub.root / 'policy/repos.json', {})
-        for repo, policy in policies.items():
-            if policy.get('thread_format'):
-                found = self.hub.repo(repo).git('cat-file', '-e', 'refs/heads/main:documents/'+tid+'.md', check=False)
-                if not found.returncode:
-                    raise Error('LEGACY_PUBLIC_MIGRATION_REQUIRED',
-                                'This ID already exists in legacy public Git. Its old read paths must be migrated before changing visibility; existing content is retained.')
-
-    def publish(self, data, p):
-        tid = identifier(p['thread'], 'W'); mode = p['visibility']
-        if mode not in MODES: raise Error('INPUT_INVALID', 'Use private, restricted or public.')
-        self.community.check(self.account, write=mode!='private')
-        readers = self.people(p['readers'])
-        if mode != 'restricted' and readers: raise Error('INPUT_INVALID', 'Reader lists apply only to restricted Threads.')
-        if mode == 'restricted' and not readers: mode = 'private'
-        old = data['threads'].get(tid)
-        if old and old['owner_id'] != self.person['id']:
-            raise Error('NOT_FOUND', 'This Thread is unavailable to this account.')
-        sha = check_id(p['sha'], HASH)
-        expect = integer(p['expect'], 2**63-1)
-        approval = p.get('approve_projects')
-        if approval is not None:
-            check_id(approval, HASH)
-            if mode == 'private': raise Error('INPUT_INVALID', 'Project approval needs reader access.')
-        prior = self.execution(old) if old else None
-        changed_approval = approval is not None and (prior or {}).get('shared_revision') != approval
-        if old and not changed_approval and (old['sha'], old['visibility'], old['readers']) == (sha, mode, readers):
-            return dict(self.brief(tid, old), accepted=True, replayed=True)
-        if expect != (old['acl_revision'] if old else 0):
-            raise Error('STATE_CONFLICT', 'Thread access changed; review the current access before retrying.')
-        if mode == 'private':
-            if not old:
-                raise Error('NOT_FOUND', 'This Thread is already private; use personal sync for owner-only content.')
-            old.update(visibility='private', readers=[], acl_revision=expect+1)
-            save_json(self.root / 'catalog.json', data)
-            return dict(self.brief(tid, old), accepted=True, replayed=False)
-        # Legacy Git is a separate namespace. New ACL IDs cannot be published there.
-        if not old or not old.get('migrated'):self.legacy_check(tid)
-        relay = Relay(self.hub, self.account)
-        head = relay.dispatch({'method': 'personal_thread_head', 'thread': tid})['sha']
-        if head != sha and (not old or old['sha']!=sha): raise Error('STATE_CONFLICT', 'Publish the accepted current personal Thread snapshot.')
-        candidate = {'sha': sha, 'owner_account': self.account, 'history': [sha]}
-        value, relay = self.manifest(candidate)
-        if value['thread'] != tid: raise Error('POLICY_DENIED', 'The source belongs to another Thread.')
-        metadata = prior
-        if changed_approval:
-            from .thread_execution_projection import shared_projection
-            metadata = shared_projection(value['bindings'])
-            if metadata['shared_revision'] != approval or (old and sha in old['history']):
-                raise Error('STATE_CONFLICT', 'Review and approve a fresh Project snapshot.')
-        if old:
-            before, _ = self.manifest(old)
-            protect_history(before, value)
-            if not changed_approval and public_content(before) == public_content(value):
-                # Private paths, sessions and operation receipts never advance the shared head.
-                unchanged = (mode, readers) == (old['visibility'], old['readers'])
-                if not unchanged:
-                    old.update(visibility=mode, readers=readers, acl_revision=expect + 1)
-                    save_json(self.root / 'catalog.json', data)
-                return dict(self.brief(tid, old), accepted=True, replayed=unchanged)
-        # Raw coordinates and receipts stay private; only the whitelist projection is public.
-        objects = {sha: len(packed(value).encode()), **{k:v for k,v in (old['objects'] if old else {}).items() if k.startswith('message:')}}
-        for asset in value['assets'].values():
-            if asset['blob']:
-                if mode != 'private' and asset['size'] > LIMITS['file']:
-                    raise Error('FILE_QUOTA', 'A published file exceeds the configured file limit; retain it privately and choose a smaller source or index.')
-                objects[asset['blob']] = asset['size']
-        retained = dict(old['objects']) if old else {}
-        new_files = sum(a['size'] for blob,a in {a['blob']:a for a in value['assets'].values() if a['blob']}.items() if blob not in retained)
-        if new_files > LIMITS['batch']:
-            raise Error('TRANSFER_BUDGET', 'New published files exceed the configured batch limit.')
-        retained.update(objects)
-        usage = {'current': sum(objects.values()), 'retained': sum(retained.values())}
-        if self.hub.settings().get('format')==2:
-            with self.community.db() as db:library_current,library_retained=self.community.usage(db,tid)
-            usage={'current':sum({**objects,**library_current}.values()),'retained':sum({**retained,**library_retained}.values())}
-        if mode != 'private' and (usage['current'] > LIMITS['current'] or usage['retained'] > LIMITS['retained']):
-            raise Error('STORAGE_QUOTA', 'Thread current or retained capacity exceeds the public limit; accepted content is retained.')
-        doc = decode(value['documents']['documents/'+tid+'.md'])
-        row = dict(owner_id=self.person['id'], owner_account=self.account, visibility=mode, readers=readers,
-                   acl_revision=expect+1, sha=sha, title=doc['meta']['title'], usage=usage, objects=retained,
-                   direct_current=sum(objects.values()), history=list(dict.fromkeys([*(old['history'] if old else []), sha])))
-        if changed_approval:
-            self.project_approvals[sha] = metadata
-        if old and old.get('migrated'):
-            row['migrated']=old['migrated']
-            row['migration_review']=old.get('migration_review',False) and sha==old['sha']
-        data['threads'][tid] = row
-        save_json(self.root / 'catalog.json', data)
-        return dict(self.brief(tid, row), accepted=True, replayed=False)
+    def withdraw(self, data, request):
+        if request['visibility']!='private' or request['readers'] or 'approve_projects' in request:
+            raise Error('COMMAND_RETIRED','Use selected-content delivery for new shares.')
+        tid=identifier(request['thread'],'W')
+        row=self.lookup(data,tid)
+        if row['owner_id']!=self.person['id']:
+            raise Error('AUTH_DENIED','Only the owner may withdraw an archived share.')
+        if row['visibility']=='private':
+            return dict(self.brief(tid,row),accepted=True,replayed=True)
+        if request['expect']!=row['acl_revision'] or request['sha']!=row['sha']:
+            raise Error('STATE_CONFLICT','The archived share changed; read its current revision.')
+        row.update(visibility='private',readers=[],acl_revision=row['acl_revision']+1)
+        save_json(self.root/'catalog.json',data)
+        return dict(self.brief(tid,row),accepted=True,replayed=False)
 
     def dispatch(self, p):
         method = p.get('method')
@@ -201,8 +124,8 @@ class Access:
             raise Error('INPUT_INVALID', 'Invalid Thread access request; caller identity is server-derived.')
         with self.state() as data:
             if method == 'thread_access_info':
-                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'project_summary_protocol': 'thread.projects.v1'}
-            if method == 'thread_access_set': return self.publish(data, p)
+                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'delivery_protocol':'delivery.v1','messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'project_summary_protocol': 'thread.projects.v1'}
+            if method == 'thread_access_set': return self.withdraw(data, p)
             if method == 'thread_access_list':
                 if type(p['direct']) is not bool: raise Error('INPUT_INVALID', 'direct must be boolean.')
                 offset=integer(p['offset'], 2**31-1); limit=integer(p['limit'], 100, 1)

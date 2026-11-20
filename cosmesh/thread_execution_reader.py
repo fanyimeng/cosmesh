@@ -3,6 +3,8 @@
 This reader is deliberately offline and side-effect free: it never initializes
 personal sync, contacts a Hub, probes project directories or rewrites bindings.
 """
+import socket
+
 from .personal_protocol import digest, packed, read_json
 from .thread_protocol import identifier
 
@@ -21,6 +23,11 @@ def raw_locations(wb, tid):
     for directory in ('threads', 'executions'):
         value = read_json(root / directory / (tid + '.json'), {}) or {}
         rows.update(value.get('bindings', {}))
+    return binding_rows(wb,tid,state,rows)
+
+
+def binding_rows(wb,tid,state,known):
+    rows=dict(known)
     groups = dict(state.get('bindings', {}))
     replica = state.get('replica')
     groups[replica] = {
@@ -42,7 +49,7 @@ def raw_locations(wb, tid):
 def owner_execution(wb, tid):
     """Build the canonical owner view from the same rows used for recovery."""
     from .thread_execution_projection import owner_projection
-    return owner_projection(raw_locations(wb, tid), current_device=personal_state(wb).get('device'))
+    return owner_projection(raw_locations(wb, tid), current_device=personal_state(wb).get('device'), current_host=socket.gethostname())
 
 
 def execution_stamp(wb):

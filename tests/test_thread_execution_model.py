@@ -105,6 +105,13 @@ class ExecutionModelTests(unittest.TestCase):
         self.assertEqual(owner_projection(projects)['contexts'][0]['workdirs'], ['/other', '/work/repo'])
         self.assertEqual(shared_projection(projects + rows), shared_projection(projects[:1]))
 
+    def test_shared_home_preserves_two_execution_hosts(self):
+        rows=[project('one',host='node-a'),project('two',host='node-b')]
+        owner=owner_projection(rows,current_device='device-a',current_host='node-b')
+        self.assertEqual(owner['summary']['device_count'],2)
+        self.assertEqual({c['device']['host']:c['current_device'] for c in owner['contexts']},
+                         {'node-a':False,'node-b':True})
+
     def test_same_project_on_multiple_agents_does_not_merge(self):
         rows = [project('dsh', agent='DeepSeek-Harness'), project('codex', agent='Codex')]
         owner = owner_projection(rows)

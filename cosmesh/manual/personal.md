@@ -1,22 +1,9 @@
-# 同一 Thread 跨设备接续
+## 找到并继续工作
 
-个人同步保持原 Thread ID，在不同设备上恢复本人的完整执行关联。查看者在线读取已发布内容及所有者批准的 Project 摘要。
+Thread 表示一项具体工作，有稳定 ID 和唯一所有者。人通过联系人视图查看。用 `thread find 名称 --json` 查本人本地与个人中继；明确核对最新情况用 `--require-fresh`。离线只查本机，如实报告已查范围。已知 ID 直接使用。`thread page ID --level status --ready` 查看进展，`thread locations ID` 查看设备、Agent、原生 Project、目录和 Session。选择实际工作地点，名称相同不能证明 Project 归属。
 
-```sh
-cosmesh thread personal THREAD_ID --json
-cosmesh personal asset add THREAD_ID FILE --as RELATIVE_PATH --json
-cosmesh thread sync THREAD_ID --files --json
-cosmesh thread list --personal --remote --json
-cosmesh thread fetch THREAD_ID --workdir DIRECTORY --agent AGENT --files --json
-cosmesh thread locations THREAD_ID --json
-```
+`thread personal ID --files` 将这项工作和已登记文件保存到本人 Hub。`thread fetch ID --workdir DIR --agent AGENT --files` 恢复相同 ID 并登记目的地。以回执分别确认记录、文件和执行位置。新建宿主会话须宿主支持和用户明确要求。DSH 可选组件独立，用 component status dsh 查看各 profile。
 
-真实原生项目可加 --project-id/--project-name；目录与会话按实际位置登记。目录登记不授权递归扫描，文件仅明确选择。正文恢复、文件恢复、入口登记与实际执行分别报告。bind、fetch、sync 和 locations 回执中的 execution_metadata 使用同一 revision；registered_only 不表示宿主已创建或环境可执行。同设备共享原位引用，不应用网络传输配额。
+## 工作中收集
 
-默认单文件5 GB、每批10 GB/10000份、服务端本人总容量30 GB（含保留对象与历史）。GB为10⁹字节。每日传输1 TiB、本地缓存100 GiB独立设置。personal policy 查看或设置本地额度，与 Hub 取较小值。旧未改变默认值按新额度解释，自定义不同值保留，旧配置文件可回退。科学数据、压缩包及未知后缀可传输，无需 --science；保留该标志作兼容。凭证、特殊路径、目录和非普通文件继续过滤；超限在哈希前跳过。
-
-流式传输、摘要校验、失败续传、三方合并和历史保留沿用原机制；已有不同内容报告冲突并保留。旧公开 Thread 迁移后也使用本人完整内容流，公共来源与私人资产仍分别控制；已有私人流的原始版本和关联保留，新公开视图只包含原获准公开内容。迁移发现原私人流时，普通 sync 保持原公共版本并提示 review_required；审阅私人历史与文件后，显式 thread access 才授权新的完整内容范围。首次恢复遇到本地历史冲突可选新 --root，本机原资料保留。
-
-迁移后本人 fetch 将旧公共缓存退出当前活动目录，磁盘缓存保留用于离线历史和回退。旧 whole-store personal init/connect/sync/join 与 asset push 已退役，不降级整库上传。旧公开执行关联实现仅用于未迁移 Hub 的历史兼容；新 Hub 统一按 Thread 内容流。
-
-thread access 管理查看权限，thread browse 在线读，thread track 按人追踪。Library 来源权限与配额见 guide show knowledge，管理员迁移与版本回退见 guide show operations。中转没有端到端加密。
+用户指定项目目录后，用 `collect add ID DIR --personal` 登记自动收集范围。多目录用不同的 `--as PREFIX`。只需本机检查点时省略 --personal。每台设备可运行一个 `collect watch` 周期收集；`collect once` 立即检查所有已登记范围。不要为每次工具调用触发 Skill。收集器记录可见文件变化；会话的重要决定、产物、待办、下一步由宿主或 Agent 在自然停顿处用 `collect summary ID --event STABLE_EVENT_ID --body TEXT` 报告。没有宿主授权的上下文不能声称已读取。停止跟踪用 collect remove ID DIR。

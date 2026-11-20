@@ -1,6 +1,7 @@
 """Shared private execution bindings and explicit destination registration."""
+import socket
+
 from .errors import Error
-from .personal_protocol import digest, packed
 from .store import safe_path
 
 
@@ -8,17 +9,8 @@ class ThreadLocations:
     supports_files = True
 
     def binding_rows(self, tid, known):
-        rows = dict(known)
-        groups = dict(self.state['bindings'])
-        groups[self.state['replica']] = dict(device=self.state['device'],
-            bindings=self.wb.client.get('bindings', []), project_bindings=self.wb.client.get('project_bindings', []))
-        for replica, group in groups.items():
-            for kind in ('bindings', 'project_bindings'):
-                for binding in group[kind]:
-                    if binding['thread'] == tid:
-                        row = dict(device=group['device'], replica=replica, kind=kind, binding=binding)
-                        rows[digest(packed(row).encode())] = row
-        return rows
+        from .thread_execution_reader import binding_rows
+        return binding_rows(self.wb,tid,self.state,known)
 
     def locations(self, tid):
         tid = self.wb.find(tid, 'thread')['doc']['meta']['id']
@@ -27,9 +19,9 @@ class ThreadLocations:
         value['bindings'] = self.binding_rows(tid, value['bindings'])
         value['assets'] = self.selected_assets(tid)
         from .thread_execution_projection import owner_projection
-        metadata = owner_projection(value['bindings'], current_device=self.state['device'])
+        metadata = owner_projection(value['bindings'], current_device=self.state['device'], current_host=socket.gethostname())
         return {'thread': tid, 'private': True, 'locations': [dict(id=k, **row,
-                current_device=row['device'] == self.state['device']) for k, row in sorted(value['bindings'].items())],
+                current_device=row['device'] == self.state['device'] and row['binding']['host']==socket.gethostname()) for k, row in sorted(value['bindings'].items())],
                 'execution_metadata': metadata,
                 'assets': self.asset_status(value)}
 
@@ -67,5 +59,5 @@ class ThreadLocations:
         value = self.view(tid)
         value['bindings'] = self.binding_rows(tid, value['bindings'])
         from .thread_execution_projection import owner_projection
-        result['execution_metadata'] = owner_projection(value['bindings'], current_device=self.state['device'])
+        result['execution_metadata'] = owner_projection(value['bindings'], current_device=self.state['device'], current_host=socket.gethostname())
         return result

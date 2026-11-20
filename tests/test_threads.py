@@ -29,7 +29,11 @@ class ThreadFixture(unittest.TestCase):
         # Tests that exercise background preparation set COSMESH_PAGE_BACKGROUND=1.
         environment = patch.dict(os.environ, {'COSMESH_PAGE_BACKGROUND': '0'})
         environment.start(); self.addCleanup(environment.stop)
-        self.hub = Hub(self.root / 'hub'); self.hub.initialize()
+        self.hub = Hub(self.root / 'hub')
+        unified = getattr(self, 'unified', False)
+        self.hub.initialize(legacy=not unified)
+        if unified:
+            self.hub.initialize_community(self.root/'library')
         self.entry = self.root / 'prefix/bin/cosmesh'; self.entry.parent.mkdir(parents=True)
         source = str(Path(__file__).resolve().parents[1])
         code = 'import sys;sys.path.insert(0,%r);from cosmesh.cli import main;raise SystemExit(main())' % source
@@ -62,7 +66,7 @@ class ThreadFixture(unittest.TestCase):
             return {**result,'actor':user}
         for name, target in [('cosmesh.sync.remote_status',status),('cosmesh.sync.git_transport',git_env),('cosmesh.spaces.rpc',rpc)]:
             p = patch(name,target);p.start();self.addCleanup(p.stop)
-        for user in self.configs:
+        for user in self.configs if not unified else ():
             result = rpc(self.connection(user),'ensure_threads');self.repos[user]=result['own_id']
         self.wbs = {user:self.workbench(user) for user in self.configs}
 

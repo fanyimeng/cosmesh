@@ -21,7 +21,7 @@ from .store import Store, atomic, safe_path
 from .threads import Workbench, now
 from .thread_protocol import REPO, reference_edges
 
-FORMAT = 13
+FORMAT = 14
 LEVELS = ('brief', 'status', 'index')
 
 

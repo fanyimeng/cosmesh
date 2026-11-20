@@ -14,7 +14,7 @@ from cosmesh.thread_access import Access
 from cosmesh.thread_access_cli import Online
 from cosmesh.thread_cli import execute
 from cosmesh.thread_personal import ThreadPersonal
-from cosmesh.thread_tracking import attach
+from tests.legacy_tracking import attach
 from cosmesh.threads import Workbench, initialize as init_work
 
 

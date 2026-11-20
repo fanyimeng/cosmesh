@@ -120,9 +120,11 @@ class Workbench:
         rebuild(self)
 
     def find(self, value, kind=None):
+        exact = self.catalog.get(value)
+        if exact is not None and (kind is None or exact['doc']['meta']['kind'] == kind):
+            return exact
         allowed=[x for x in self.catalog.values() if kind is None or x['doc']['meta']['kind']==kind]
-        matches=[x for x in allowed if x['doc']['meta']['id']==value]
-        if not matches:matches=[x for x in allowed if x['doc']['meta']['id'].startswith(value)]
+        matches=[x for x in allowed if x['doc']['meta']['id'].startswith(value)]
         if not matches:
             from .thread_names import normalized
             ids=getattr(self,'_name_index',{}).get(normalized(value),set())
@@ -531,8 +533,19 @@ class Workbench:
         if materials is not None:payload['materials']=materials
         return self._commit(target, 'share', payload, build, key, dry_run)
 
+    def retired_sync(self, remote=None):
+        if 'retired_spaces' not in self.client or self.client['spaces']:
+            return False
+        if not remote:
+            return True
+        bound = self.client.get('connection') or {}
+        return bound.get('kind') in {'system', 'ssh-system'} and all(
+            bound.get(key) == remote.get(key) for key in ('kind', 'host', 'discovery'))
+
     @networked
     def synchronize(self, publish=True,knowledge_keys=None,publish_repos=None):
+        if self.retired_sync():
+            raise sync.retired_transport()
         def prepared_sources():
             knowledge=self.base.path('.cosmesh/knowledge/snapshot.json')
             return (dict(getattr(self,'_revisions',{})),{repo:store.client().get('remote_revision') for repo,store in self.stores.items()},
@@ -557,6 +570,8 @@ class Workbench:
                     except Error as exc:
                         errors.append({'repo': space['id'], 'error': exc.as_dict()})
             except Error as exc:
+                if exc.code == 'COMMAND_RETIRED':
+                    raise sync.retired_transport() from exc
                 errors.append({'repo': None, 'error': exc.as_dict()})
         self.load()
         if self.client.get('community_enabled'):
@@ -805,8 +820,12 @@ class Workbench:
         for repo, store in self.stores.items():
             if repo != 'local':
                 spaces.append({'repo': repo, 'owner': self.client['spaces'][repo]['owner'], **sync.state(store)})
+        last_sync = self.client.get('last_sync')
+        if 'retired_spaces' in self.client and last_sync and last_sync.get('errors'):
+            errors = [e for e in last_sync['errors'] if e.get('error', {}).get('code') != 'COMMAND_RETIRED']
+            last_sync = dict(last_sync, errors=errors) if errors else None
         return {'root': str(self.base.root), 'user': self.user, 'local_user': self.config['user'],
                 'thread_count': sum(x['doc']['meta']['kind'] == 'thread' for x in self.catalog.values()),
-                'spaces': spaces, 'last_sync': self.client.get('last_sync'),
+                'spaces': spaces, 'last_sync': last_sync,
                 'identity_verified': bool(spaces) and all(x.get('identity_verified') for x in spaces),
-                'state': 'private' if not spaces else ('synced' if all(x['state'] == 'synced' for x in spaces) else 'needs_sync')}
+                'state': ('local_only' if self.retired_sync() else 'private') if not spaces else ('synced' if all(x['state'] == 'synced' for x in spaces) else 'needs_sync')}

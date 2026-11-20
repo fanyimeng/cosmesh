@@ -14,6 +14,14 @@ from .store import Store, atomic, safe_path
 from .connections import networked, control_options
 
 
+def retired_transport():
+    return Error('COMMAND_RETIRED', 'Use thread sync ID for personal synchronization or thread browse for online access.')
+
+
+def hub_receipt():
+    return {'state': 'hub_verified', 'identity_verified': True, 'hub_check': 'verified'}
+
+
 def transport(value):
     value = dict(value)
     if value.get('kind') == 'system':
@@ -125,6 +133,8 @@ def configure(store, product, config):
             raise Error("PRODUCT_MISMATCH", "Hub and client products differ.")
         if local.get("user", source["user"]) != status["actor"]:
             raise Error("AUTH_DENIED", "Existing local identity differs from the registered SSH key; preserve drafts and clone separately.")
+        if local.get('last_error') == 'COMMAND_RETIRED':
+            local.pop('last_error')
         local.update(remote=config, user=status["actor"])
         store.save_client(local)
         return {"remote": config, "actor": status["actor"], "configured": True}, store.head
@@ -257,6 +267,8 @@ def synchronize(store, product, publish=True, remote_hint=None):
                     raise Error("SYNC_REJECTED", "Hub rejected the push: " + result.stderr.strip(), "Local commits are preserved.")
             raise Error("SYNC_RETRY_LIMIT", "The Hub kept advancing; retry later. Local commits are preserved.")
         except Error as exc:
+            if exc.code == 'COMMAND_RETIRED':
+                raise retired_transport() from exc
             local["last_error"] = exc.code
             store.save_client(local)
             raise
@@ -272,6 +284,8 @@ def state(store, revision=None):
     result["local_revision"] = head
     if not local.get("remote"):
         return result
+    if local.get('last_error') == 'COMMAND_RETIRED':
+        return dict(result, state='transport_retired')
     remote = local.get("remote_revision")
     result.update(remote_revision=remote, last_sync_at=local.get("last_sync_at"), actor=local.get("user"),
                   state="needs_sync")

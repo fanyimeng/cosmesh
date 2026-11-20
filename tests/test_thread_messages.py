@@ -4,7 +4,7 @@ from tests.test_thread_tracking import TrackingTests
 from cosmesh.errors import Error
 from cosmesh.thread_access_cli import Online
 from cosmesh.thread_migration import migrate
-from cosmesh.thread_tracking import bindings
+from tests.legacy_tracking import bindings
 from cosmesh.thread_personal import ThreadPersonal
 from cosmesh.personal_protocol import packed
 from cosmesh.threads import Workbench,initialize

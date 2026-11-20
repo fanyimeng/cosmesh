@@ -1,6 +1,8 @@
 """Owner-only synchronization of one existing Thread, with additive local recovery."""
 import json
 
+import socket
+
 from .errors import Error
 from .personal import Personal
 from .thread_locations import ThreadLocations
@@ -44,9 +46,17 @@ class ThreadPersonal(ThreadLocations, Personal):
         if previous and self.wb.base.git('merge-base','--is-ancestor',previous,self.wb.base.head,check=False).returncode == 0:
             history_range = [previous + '..HEAD']
         value['documents'] = {'documents/' + k + '.md': files['documents/' + k + '.md'] for k in selected}
+        # Include intermediate edits even if a file returned to its original bytes.
+        # With an accepted baseline, one Git query narrows history walks to touched files.
+        changed_paths = None
+        if history_range:
+            changed_paths = set(self.wb.base.git('log', '--format=', '--name-only', *history_range,
+                                                 '--', 'documents').splitlines())
         for path, text in value['documents'].items():
             doc = decode(text)
             value['history'][doc['meta']['id'] + '@' + content_version(doc)] = text
+            if changed_paths is not None and path not in changed_paths:
+                continue
             # Only paths selected above are traversed. All their prior authored versions survive.
             for commit in self.wb.base.git('log', '--format=%H', *history_range, '--', path).splitlines():
                 old = self.wb.base.git('show', commit + ':' + path, check=False)
@@ -66,7 +76,7 @@ class ThreadPersonal(ThreadLocations, Personal):
 
     def selected_assets(self, tid):
         paths = self.state.get('asset_paths', {})
-        return {k: dict(v, **({'relative_path': paths[k]} if k in paths else {}))
+        return {k: dict(v, **({'removed':True} if self.state.get('removed_assets',{}).get(k) else {}), **({'relative_path': paths[k]} if k in paths else {}))
                 for k, v in self.state['assets'].items() if v['thread'] == tid}
 
     def load_manifest(self, sha, tid):
@@ -97,7 +107,9 @@ class ThreadPersonal(ThreadLocations, Personal):
             sources[key] = text
         save_json(self.root / 'sources.json', sources)
         for aid, row in value['assets'].items():
-            self.state['assets'][aid] = {k: v for k, v in row.items() if k != 'relative_path'}
+            self.state['assets'][aid] = {k: v for k, v in row.items() if k not in ('relative_path','removed')}
+            if row.get('removed'):self.state.setdefault('removed_assets',{})[aid]=True
+            else:self.state.get('removed_assets',{}).pop(aid,None)
             if 'relative_path' in row: self.state.setdefault('asset_paths', {})[aid] = row['relative_path']
         self.save()
         save_json(self.directory / (tid + '.json'), value)
@@ -110,7 +122,7 @@ class ThreadPersonal(ThreadLocations, Personal):
         from .status_pages import schedule
         schedule(self.wb)
 
-    def synchronize(self, tid, pull=False, files=False):
+    def synchronize(self, tid, pull=False, files=False, file_ids=None):
         identifier(tid, 'W')
         if pull and files: raise Error('INPUT_INVALID', '--pull never uploads files.')
         self.capability()  # Must precede any blob upload, including files.
@@ -137,6 +149,10 @@ class ThreadPersonal(ThreadLocations, Personal):
         transfers = None
         if files:
             ids = [k for k, row in self.state['assets'].items() if row['thread'] == tid]
+            if file_ids is not None:
+                allowed = set(file_ids)
+                ids = [k for k in ids if k in allowed]
+            ids = [k for k in ids if not merged['assets'][k].get('removed')]
             advanced = [k for k in ids if merged['assets'][k]['blob'] != self.state['assets'][k]['blob']]
             transfers = self.push([k for k in ids if k not in advanced])
             transfers['files'].extend(dict(id=k,name=self.state['assets'][k]['name'],state='skipped',
@@ -166,7 +182,7 @@ class ThreadPersonal(ThreadLocations, Personal):
                 if ref['repo'] == 'local' and ref['id'] + '@' + ref['version'] not in merged['history'] and ref not in missing:
                     missing.append(ref)
         from .thread_execution_projection import owner_projection
-        metadata = owner_projection(merged['bindings'], current_device=self.state['device'])
+        metadata = owner_projection(merged['bindings'], current_device=self.state['device'], current_host=socket.gethostname())
         return dict(thread=tid, sharing='personal', audience='owner', published=False,
                     accepted_snapshot=accepted, uploaded=not pull, pulled=bool(head),
                     execution_metadata=metadata,

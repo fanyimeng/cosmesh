@@ -125,17 +125,65 @@ def merge(wb, values, into, body='', key=None, dry_run=False):
     return wb._commit(target['store'], 'merge', {'sources': ids, 'into': target['doc']['meta']['id'], 'body': body}, build, key, dry_run)
 
 
-def continuation(wb, value):
+def handoff(wb, item, focus, trail, history, status):
+    from .agent_projects import active
+    from .thread_chat import summary
+
+    def excerpt(source, limit):
+        doc = source['doc']
+        return dict(source=wb.ref(source), title=doc['meta']['title'],
+                    at=doc['meta']['created_at'], **summary(doc['body'], limit))
+
+    tid = item['doc']['meta']['id']
+    superseded = {r['doc']['meta']['supersedes']['id'] for r in history if r['doc']['meta'].get('supersedes')}
+    recent = []
+    latest = None
+    for record in reversed(history):
+        meta = record['doc']['meta']
+        if meta['id'] in superseded:
+            continue
+        if len(recent) < 3:
+            recent.append(excerpt(record, 320))
+        if latest is None and (meta['type']=='summary' or meta['title'] in ('宿主交接摘要','Agent 工作摘要')):
+            latest = excerpt(record, 1200)
+        if latest and len(recent)==3:
+            break
+    host = socket.gethostname().casefold()
+    points = [r for r in active(wb,tid) if r['host'].casefold()==host]
+    points.extend(r for r in reversed(wb.client['bindings']) if r['thread']==tid and r['host'].casefold()==host)
+    locations = [{k:r[k] for k in ('agent','kind','name','workdir','project_id','session_id') if r.get(k)}
+                 for r in points[:4]]
+    return dict(format='thread.handoff.v1',thread=tid,goal=excerpt(item,600),latest_summary=latest,
+                recent=recent,record_count=len(history),work_state=status['work_state'],
+                lifecycle=status['lifecycle'],local_locations=locations,local_location_count=len(points),
+                continued_from=trail,focus=excerpt(focus,600) if focus['doc']['meta']['kind']=='entry' else None)
+
+
+def continuation(wb, value, ready=False, fresh=False):
     focus = wb.find(value)
     first = focus if focus['doc']['meta']['kind'] == 'thread' else wb.find(focus['doc']['meta']['thread'], 'thread')
     item, trail, seen = first, [], set()
-    while state(wb, item)['merged_into']:
+    while True:
+        if ready:
+            if item['repo']!='local':
+                raise Error('POLICY_DENIED','Choose your own local work for a compact handoff.')
+            owner(wb,item)
+            if fresh:
+                from .thread_personal import ThreadPersonal
+                ThreadPersonal(wb).synchronize(item['doc']['meta']['id'],pull=True)
+                item=wb.find(item['doc']['meta']['id'],'thread')
+        history = wb.records(item['doc']['meta']['id'])
+        status = thread_state([row['doc']['meta'] for row in history])
+        destination = status['merged_into']
+        if not destination:
+            break
         if item['doc']['meta']['id'] in seen:
             raise Error('REFERENCE_INVALID', 'Thread continuation contains a cycle.')
         seen.add(item['doc']['meta']['id']);trail.append(wb.ref(item))
-        destination = state(wb, item)['merged_into']
         wb.resolve(destination)
         item = wb.find(destination['id'], 'thread')
+    if ready:
+        return handoff(wb, item, wb.find(focus['doc']['meta']['id']), trail, history, status)
     packet = wb.context(item['doc']['meta']['id'] if trail else value)
     packet['continued_from'] = trail
     for ref in trail:

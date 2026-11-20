@@ -112,6 +112,22 @@ class ComponentManagerTests(unittest.TestCase):
         with self.assertRaises(Error) as caught: call()
         self.assertEqual(caught.exception.code, code)
 
+    def test_status_discovers_actual_profiles_without_host_changes(self):
+        (self.home/'profiles/desktop').rename(self.home/'profiles/web')
+        self.run_op('install', '0.1.1', profile='web')
+        args = parser('cosmesh').parse_args(['component','status','dsh','--component-root',str(self.store)])
+        calls = self.calls()
+        web = components.execute(args)[0]
+        self.assertEqual((web['profile'], web['installed']['version']), ('web', '0.1.1'))
+        self.assertIn('update dsh --profile web --host-stopped', web['next_command'])
+        self.profile('headless')
+        rows = components.execute(args)[0]['profiles']
+        self.assertEqual([r['profile'] for r in rows], ['headless', 'web'])
+        self.assertIn('install dsh --profile headless', rows[0]['next_command'])
+        self.assertTrue(all(r['activation'] == 'unknown' for r in rows))
+        self.assertEqual(self.run_op('status', profile='web'), web)
+        self.assertEqual(self.calls(), calls)
+
     def test_read_only_and_dry_run_do_not_create_state_or_touch_threads(self):
         with patch('cosmesh.cli.Store', side_effect=AssertionError('Thread store opened')):
             with contextlib.redirect_stdout(io.StringIO()) as out:

@@ -1,45 +1,15 @@
-# 日常使用
+## 快速接续
 
-## 从 Agent 开始
+已知 Thread ID 或本机唯一名称，直接 `cosmesh thread continue ID --ready --json`。这一次读取给出目标、交接摘要、最近进展和本机登记位置。能据此工作就开始。需要精确原文时按回执中的来源用 `thread read ID@VERSION --repo REPO`；需要其他设备或完整位置时用 `thread locations ID`。
 
-可以说“记下这件事”“看看我的跟进”“读取这个任务的背景”“把今天进展记下来并同步”“帮我完善个人资料”“解释系统架构”“记录这个系统问题”“查看大家的系统反馈”。统一 Skill 能使用共同说明和反馈接口。
+只知道当前目录或真实项目 ID 时用 `thread locate --workdir DIR` 或 `--project-id ID`。只知道工作名、或新设备还没有这项工作，用 `thread find 名称`；明确只找本机可加 `--offline`，要求 Hub 最新可加 `--require-fresh`。恢复用 `thread fetch ID --workdir DIR --agent AGENT --files`，沿用原 ID。回执分别给出记录、文件与位置的结果。项目绑定需要真实原生 ID；目录登记用 `--kind directory`。DSH 是否已创建会话以宿主回执为准。
 
-Agent 按当前问题选择最短入口：总览用 thread page --ready，请求回应与资料状态用 thread check，收件箱用 thread inbox --ready。先用两三句话说明整体工作、当前进展和待办，材料够用就结束；内容解释、打开、核验或实际执行时再展开必要原文。已有目标和入口直接复用，写入成功按回执回答。系统说明和私人 Profile 无需先初始化业务仓库；系统反馈走普通维护 Thread 请求，业务进展留在所属 Thread。详见 guide show pages。
+## 工作中
 
-## Thread 日常操作
+本人选择同步用 `thread personal ID --files`。要持续收集新的项目文件，在对应设备上登记 `collect add ID DIR --personal`，多个目录使用不同的 `--as PREFIX`。`collect once` 对本机所有登记范围检查一次，`collect watch` 可持续运行。在任务停顿、换人或换设备时，用 `collect summary ID --event STABLE_ID --body TEXT` 留下决定、已完成事项和下一步。宿主维护交接文件时，登记时可加 `--context-file RELATIVE_PATH`。磁盘扫描只覆盖已登记的文件。同一阶段的多次保存合并处理。用 `thread personal ID --off` 暂停个人同步。
 
-cosmesh thread init 初始化；thread create 新建本人 Thread；thread page --ready 本地总览；thread update ID 记进展；thread sync ID 本人同步；thread access ID 管理私有／指定可见／全员可见；thread browse 在线查看；thread track 按人追踪。Library 用 library add --thread THREAD_ID 继承来源权限。旧 thread share 已退役。
+## 给人发、收和归档
 
-## 程序、能力与数据位置
+`thread send [ID] --to ACCOUNT --body TEXT` 可重复指定 `--record ID` 和 `--attach FILE`。按用户要求选取内容和收件人。需要审阅时使用 `--dry-run`，随后带 `--expect PREVIEW` 发送；网络重试复用同一操作键或预览。成功回执已确认投递。
 
-程序默认 ~/.local/opt/cosmesh/bin/cosmesh（cosbase 仅为旧命令兼容入口），选装 Skill 位于 ~/.agents/skills。capabilities --json 返回版本和真实能力，doctor --agent codex 或 opencode 检查环境与 Skill，whoami 显示本地系统账号和当前文档身份。
-
-默认入口在本地执行。client check --json 按需查更新，client update --json 明确更新本地程序和统一 Skill；更新失败仍可使用本地资料。普通操作不检查服务器。可选的旧 SSH Skill 通过 scripts/run.sh 在服务器执行，需要连接。
-
-旧文档默认业务空间为 ~/.local/share/cosmesh/cosmesh 和 cosbase。--root 选择独立业务空间，后续文档命令沿用它。COSMESH_DATA_DIR 可改变共同数据父目录。Profile 和系统反馈有各自独立位置，--root 不切换这两种共同能力。
-
-## 旧个人文档兼容（原 CosBase）
-
-旧个人文档可继续使用 cosbase init --json；已有旧库也可用 cosmesh --root OLD_ROOT 操作。首次初始化沿用系统账号；新空间时区优先使用显式 --timezone，再用 Profile 的 timezone，最后 Asia/Shanghai。已有空间直接使用。
-
-task create --title TEXT --next TEXT --due DATE --followup DATE --waiting TEXT 按需填入字段。零散 Task 自动归入个人项目，update add --body TEXT 可保存独立想法。inbox 查询待整理，doc list --query TEXT 或 --waiting 筛选，agenda --from DATE --to DATE 查询日期。
-
-修改前用 doc show ID 或 context ID 取 version。doc edit ID --expect VERSION 修改字段；空日期用 --clear-due 或 --clear-followup。doc convert ID --to project|task|update 新建目标、关联来源并归档原文；doc derive 派生新文档并保持原文有效。doc archive / trash / restore ID 管理存放状态。task finish ID --outcome done|cancelled 与 task reopen ID 管理业务结果，均携带 --expect。
-
-## 旧协作文档兼容
-
-安装/更新自动 space discover，使用已登录系统账号准备本人 Mesh。space list 列出公开空间，space fetch USER 只拉取该账号内容并返回 root；后续读取传 --root。本人日常命令使用保存的活动 root。Mesh 公开读取，项目与任务角色继续决定写入。
-
-project create --title TEXT --member USER 建共享上下文。task create --project P_ID --title TEXT --invite USER 创建行动；创建者是 Task Lead，邀请初始 pending。受邀者从 inbox/context 取得邀请引用，用 task accept/decline T_ID --invitation REF --expect-revision REV 明确响应。
-
-Task Lead 或已接受成员用 update add --project P_ID --task T_ID --type progress|feedback|decision|correction|session --file FILE 追加记录。--reply-to 关联回复，--supersedes 关联更正。Session 使用实际 --agent、--host、--workdir，按可得信息附 --session-id。
-
-Task Lead 用 task state T_ID --to STATUS --reason TEXT --expect-revision REV 控制整体状态；task schedule 调整共享日期。成员的部分完成写进展。状态路径为 todo → in_progress，执行中可 blocked/review，review → done；取消和重开遵循原因与状态链。项目 Lead 与 Task Lead 相对于各自对象。
-
-## 保存、同步与失败
-
-文档默认写本地，sync 明确 fetch/merge/push。普通文档读取的 --require-fresh 会先完整同步。JSON 检查 ok、error.code、data 和 sync；只有远端接受已核验才说明已同步。
-
---expect VERSION 检查对象内容，--expect-revision REV 检查控制动作来源，来自最近一次读取。一次逻辑操作使用稳定 --idempotency-key；重试沿用原 key 和完整参数。STATE_CONFLICT 先保留输入再重新读取，IDEMPOTENCY_CONFLICT 表示同 key 的内容不同，STORE_DIRTY 表示手改现场需要保留诊断。
-
-私人 Thread 初始化和日常读写均不需要服务器。公开空间首次在线取得缓存后，--offline 明确只用本地，支持查询、创建任务和追加记录；恢复连接后显式 sync。回执提供上次同步时间、remote_revision 和 unpushed_count。网络失败保留提交；同步重试有上限。新反馈从本人 Thread 用 thread request OWN_THREAD --to MAINTAINER 发送；详见 feedback 主题。Profile 与说明读取不联系 Hub。
+收消息用 `thread inbox --json`，只看未读可加 `--unread`。列表已有摘录和关联建议，确需全文时用 `thread mail show MID`，多个已读标记可以一次执行 `thread mail mark MID1 MID2 --seen`。用户选定后用 `thread mail file MID --thread ID` 或 `--defer`。`thread reply MID --body TEXT` 沿原往来回复，按人查询用 `thread chat --with ACCOUNT`，按工作查询用 `thread activity ID`。附件按需下载，发送人可撤回后续在线读取。

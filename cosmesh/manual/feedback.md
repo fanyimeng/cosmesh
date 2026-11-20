@@ -1,7 +1,3 @@
-# 工作反馈与维护记录
+# 开发反馈
 
-反馈、问题、验证和结果写入本人已有合适 Thread，注明来源 Thread ID、记录版本与实际观察。普通进展用 update/note，独立成果用 result，贡献署名与原资料保持。
-
-明确希望其他人查看时，以 thread access 设置指定或全员可见；Library 附带资料继承来源。成功保存／授权与通知送达分别报告，不自动发送消息。
-
-旧维护请求与回应保留在原 Thread 的历史中，迁移后通过 browse 按权限读取。旧公共 Git 多人追加接口在迁移后关闭；新消息用 thread send/reply，从本人 Thread 发给获准查看者。个人客户端不因位于服务器就进入 Hub 管理或发布目录。
+自己的发现写入开发工作 thread note ID --body TEXT。发给维护人使用 thread send [ID] --to ACCOUNT --body TEXT。

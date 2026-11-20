@@ -18,7 +18,7 @@ list 读取随 CLI 提供的兼容清单；status 读取本机安装和恢复记
 cosmesh component install dsh --host-stopped --json
 ```
 
-默认 profile 为 desktop，可用 --profile 指定已初始化的其他 profile。自动查找本机官方 DSH CLI；非标准安装用 --dsh-cli 指定绝对路径。组件管理只调用官方 CLI，通过它维护 profile；不改写宿主配置文件、认证信息或数据库。
+status 默认列出所有已初始化的 profile，每项显示磁盘版本和适用的 next_command。可用 --profile web 单查。install、update、rollback 默认选择 desktop，其他 profile 请显式指定。自动查找本机官方 DSH CLI；非标准安装用 --dsh-cli 指定绝对路径。组件管理只调用官方 CLI，通过它维护 profile；不改写宿主配置文件、认证信息或数据库。
 
 有网络的显式 install/update 从已配置的软件发布源读取 components/catalog.json 和选定版本 ZIP。它沿用 client.json 的 ssh/source，与个人默认 Hub 分开。新版本可通过该清单独立发布；已有版本的摘要及兼容条件不可替换。软件源尚无清单或不可达时明确失败。
 

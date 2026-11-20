@@ -12,7 +12,13 @@ def agent_name(value):
 
 
 def identity(row):
-    return (row['thread'], row['agent'], row['host'], row['kind'], row.get('project_id') or row['name'])
+    if row.get('project_id'):
+        key = ('native', row['project_id'])
+    elif row['kind'] == 'directory' and row.get('workdir'):
+        key = ('directory', row['workdir'])
+    else:
+        key = ('named', row['name'], row.get('workdir'))
+    return (row['thread'], row['agent'], row['host'].casefold(), row['kind'], key)
 
 
 def active(wb, thread):
@@ -38,6 +44,8 @@ def bind(wb, thread, agent, name=None, project_id=None, kind='project', host=Non
     for value, limit in ((agent,80),(host,500),(name,500),(project_id,1000),(workdir,4096)):
         if value is not None and (not isinstance(value,str) or not value.strip() or len(value)>limit or '\x00' in value or '\n' in value):
             raise Error('INPUT_INVALID', 'Use bounded project/workspace metadata without control characters.')
+    if kind == 'directory' and workdir and not name:
+        name = Path(workdir).expanduser().absolute().name or '/'
     if not name and not (remove and project_id):
         raise Error('INPUT_INVALID', 'Provide the actual project/workspace name; use a native ID when available.')
     if kind == 'directory' and not workdir and not remove:

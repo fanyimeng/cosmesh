@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shlex
 from pathlib import Path
 from uuid import uuid4
 
@@ -71,16 +72,28 @@ def release_info(args, root, item):
     return item
 
 
-def status(root, profile, item):
+def status(root, profile, item, explicit_root=None):
     saved = read_state(state_path(root, profile))['components'].get(item['id'], {})
     issue = None
     try:
         actual = dsh.installed(profile, item['package'])
     except Error as exc:
         actual, issue = None, exc.as_dict()
-    return {'component': item['id'], 'recommended_version': item['version'],
+    action = None
+    if not issue and not saved.get('pending') and (not saved.get('current') or same(actual, saved['current'])):
+        if actual is None:
+            action = 'install'
+        elif actual['version'] in item['releases'] and (
+                tuple(map(int, actual['version'].split('.'))) < tuple(map(int, item['version'].split('.')))
+        ):
+            action = 'update'
+    command = ['cosmesh', 'component', action, 'dsh', '--profile', profile, '--host-stopped'] if action else []
+    if command and explicit_root:
+        command += ['--component-root', str(root)]
+    return {'component': item['id'], 'profile': profile, 'recommended_version': item['version'],
+            'next_command': shlex.join(command) if command else None,
             'installed': actual, 'managed': saved, 'host_issue': issue,
-            'matches_managed': same(actual, saved.get('current')),
+            'matches_managed': None if issue else same(actual, saved.get('current')),
             'activation': 'unknown', 'read_only': True,
             'hint': 'Installation metadata does not prove runtime activation; verify through DSH after restart.'}
 
@@ -176,7 +189,14 @@ def execute(args):
     item = artifacts.select(args.component)
     if args.component_command == 'status':
         item = release_info(args, root, item)
-        return status(root, args.profile, item), None
+        profiles = [args.profile] if args.profile else dsh.profiles()
+        rows = [status(root, profile, item, args.component_root) for profile in profiles]
+        if len(rows) == 1:
+            return rows[0], None
+        return {'component': item['id'], 'recommended_version': item['version'], 'profiles': rows,
+                'read_only': True, 'activation': 'unknown',
+                'hint': 'Choose a profile explicitly for changes.' if rows else
+                        'Initialize the intended profile through DSH first.'}, None
     # A plan must not create even a lock or cache directory.
     if getattr(args, 'dry_run', False):
         item = release_info(args, root, item)

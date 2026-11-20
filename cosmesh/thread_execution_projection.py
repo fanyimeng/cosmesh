@@ -31,21 +31,22 @@ def _shared(model):
     return result
 
 
-def project_execution(model, audience='shared', current_device=None):
+def project_execution(model, audience='shared', current_device=None, current_host=None):
     if audience == 'shared':
         return _shared(model)
     if audience != 'owner':
         raise ValueError('Execution projection audience must be shared or owner.')
     contexts = deepcopy(model['contexts'])
     for row in contexts:
-        row['current_device'] = bool(current_device and row['device']['id'] == current_device)
+        row['current_device'] = bool(current_device and row['device']['id'] == current_device and
+                                     (current_host is None or row['device']['host'].casefold() == current_host.casefold()))
     return {'format': FORMAT, 'audience': 'owner', 'execution_revision': model['execution_revision'],
             'shared_revision': _shared(model)['shared_revision'], 'contexts': contexts,
-            'summary': {'device_count': len({(c['device']['id'] or c['device']['host']) for c in contexts}),
+            'summary': {'device_count': len({(c['device']['id'],c['device']['host']) for c in contexts}),
                         'agent_count': len({c['agent'] for c in contexts}),
                         'project_count': sum(c['project'] is not None for c in contexts),
                         'context_count': len(contexts), 'removed_count': model['removed_count'],
-                        'session_count': len({(c['device']['id'] or c['device']['host'], c['agent'], s['id'])
+                        'session_count': len({(c['device']['id'], c['device']['host'], c['agent'], s['id'])
                                               for c in contexts for s in c['sessions']})},
             'current_device': current_device, 'removed_count': model['removed_count'], 'truncated': False}
 
@@ -73,5 +74,5 @@ def validate_shared_projection(value):
     return value
 
 
-def owner_projection(raw_locations, current_device=None):
-    return project_execution(build_execution_model(raw_locations), 'owner', current_device)
+def owner_projection(raw_locations, current_device=None, current_host=None):
+    return project_execution(build_execution_model(raw_locations), 'owner', current_device, current_host)

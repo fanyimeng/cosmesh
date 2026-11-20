@@ -74,7 +74,7 @@ def _location_rows(locations):
 
 def _device_key(device, host):
     # An old host-only row never acquires a synthetic stable device identifier.
-    return 'device:' + device if device else 'host:' + host.casefold()
+    return 'device:' + device + '@' + host.casefold() if device else 'host:' + host.casefold()
 
 
 def _normalize_event(row, location_id):

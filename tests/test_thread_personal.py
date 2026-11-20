@@ -71,7 +71,9 @@ class ThreadPersonalTests(unittest.TestCase):
         with self.assertRaises(Error): bob.dispatch({'method': 'personal_get', 'sha': sha, 'offset': 0})
         with self.assertRaises(Error): bob.dispatch({'method': 'personal_thread_list', 'owner': 'alice'})
         self.assertEqual(Relay(self.hub, 'alice').dispatch({'method': 'personal_list'})['workspaces'], [])
-        self.assertEqual(self.hub.spaces({'method': 'list_threads'}, 'bob')['spaces'], [])
+        with self.assertRaises(Error) as exc:
+            self.hub.spaces({'method': 'list_threads'}, 'bob')
+        self.assertEqual(exc.exception.code, 'COMMAND_RETIRED')
 
     def test_history_bidirectional_offline_append_and_small_file_lazy_fetch(self):
         with self.use(self.a) as p:
@@ -200,6 +202,10 @@ class ThreadPersonalTests(unittest.TestCase):
         with self.use(self.a) as p:
             p.wb.client['actor'] = 'server-alias'; p.wb.save_client(); p.wb.load()
             first = p.wb.append(self.t, 'old alias operation', key='alias-replay'); p.wb.load()
+            with self.assertRaises(Error) as exc:
+                p.synchronize(self.t)
+            self.assertEqual(exc.exception.code, 'AUTH_DENIED')
+            p.wb.client['actor'] = 'alice'; p.wb.save_client(); p.wb.load()
             p.synchronize(self.t)
             self.assertEqual(p.wb.append(self.t, 'old alias operation', key='alias-replay')['id'], first['id'])
         with self.use(self.b) as p:
@@ -212,6 +218,7 @@ class ThreadPersonalTests(unittest.TestCase):
         from cosmesh.cli import parser
         from cosmesh.thread_cli import execute
         self.start()
+        self.hub.initialize_community(self.root / 'library')
         target = self.root / 'project'; target.mkdir()
         args = parser('cosmesh').parse_args(['thread', 'fetch', self.t, '--root', str(self.b.base.root),
                                    '--workdir', str(target), '--agent', 'dsh'])
