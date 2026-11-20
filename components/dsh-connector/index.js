@@ -2,6 +2,7 @@
 import { createBridge } from './lib/work-link.js';
 import { hostAdapter, defaultCliPath } from './lib/dsh.js';
 import path from 'node:path';
+import { profileReceivers, startReceiver } from './lib/tasks.js';
 
 export const name = 'cosmesh-dsh-connector';
 export const inject = ['tools', 'sandboxPolicy', 'workspaceRegistry', 'sessionController', 'sessions', 'sessionPersistence'];
@@ -18,6 +19,14 @@ export function validateConfig(config = {}) {
 
 export function apply(ctx, config = {}) {
   const { namespace, cliPath } = validateConfig(config);
+  const profile = ctx.get?.('profileContext');
+  if (profile?.dir) {
+    try {
+      for (const route of profileReceivers(profile.dir)) ctx.effect(() => startReceiver(ctx, cliPath, route));
+    } catch {
+      ctx.logger?.warn?.('Check cosmesh-receivers.json in this DSH profile.');
+    }
+  }
   const bridge = createBridge(hostAdapter(ctx, namespace, cliPath));
   ctx.effect(() => ctx.tools.register({
     name: 'cosmesh_open_work',

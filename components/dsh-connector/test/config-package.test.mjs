@@ -99,7 +99,7 @@ test('npm pack is self-contained and root, locale and icon exports resolve witho
   const dir = await temporary(t);
   const packed = JSON.parse(execFileSync('npm', ['pack', '--offline', '--ignore-scripts', '--json', '--cache', path.join(dir, 'cache'), '--pack-destination', dir], { cwd: packageRoot, encoding: 'utf8' }))[0];
   const files = packed.files.map(f => f.path).sort();
-  assert.deepEqual(files, ['README.md', 'cordis.patch.yml', 'icon.svg', 'index.js', 'lib/cosmesh.js', 'lib/dsh.js', 'lib/work-link.js', 'locale/en.json', 'locale/zh.json', 'package.json'].sort());
+  assert.deepEqual(files, ['README.md', 'cordis.patch.yml', 'icon.svg', 'index.js', 'lib/cosmesh.js', 'lib/dsh.js', 'lib/tasks.js', 'lib/work-link.js', 'locale/en.json', 'locale/zh.json', 'package.json'].sort());
   const installed = path.join(dir, 'node_modules', '@cosmesh', 'dsh-connector');
   await fs.mkdir(installed, { recursive: true });
   const archives = (await fs.readdir(dir)).filter(name => name.endsWith('.tgz'));

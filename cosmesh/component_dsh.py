@@ -60,9 +60,10 @@ def compatibility(cli, item, version):
     if tuple(map(int, __version__.split('.'))) < tuple(map(int, minimum.split('.'))):
         raise Error('COMPONENT_INCOMPATIBLE', 'Update CosMesh before installing this component.')
     found = invoke(cli, ['--version']).strip()
-    if found != required['dsh']:
+    verified = [required['dsh'], *required.get('dsh_also', [])]
+    if found not in verified:
         raise Error('COMPONENT_INCOMPATIBLE', 'This DSH version has not been verified for the selected component.',
-                    {'required': required['dsh'], 'detected': found})
+                    {'required': verified, 'detected': found})
     return found
 
 

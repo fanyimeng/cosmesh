@@ -254,8 +254,8 @@ class ComponentManagerTests(unittest.TestCase):
         args=self.command('install');args.offline=False
         with patch('cosmesh.client.config',return_value=(self.root,{'source':'synthetic-release-source'})), patch('cosmesh.client.fetch',side_effect=fetch):
             result=components.execute(args)[0]
-        self.assertEqual(result['installed']['version'],'0.1.2')
-        self.assertEqual(self.run_op('status')['recommended_version'],'0.1.2')
+        self.assertEqual(result['installed']['version'],future)
+        self.assertEqual(self.run_op('status')['recommended_version'],future)
         self.assertIsNone(self.run_op('rollback')['installed'])
 
     def test_remote_catalog_cannot_replace_existing_pins_or_package(self):

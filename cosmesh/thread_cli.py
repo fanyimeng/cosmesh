@@ -11,6 +11,8 @@ def add_commands(commands, command, body):
     group = command(commands, 'thread').add_subparsers(dest='thread_command', required=True)
     from .delivery_cli import add_commands as add_mailbox_commands
     add_mailbox_commands(group, command, body)
+    from .thread_tasks import commands as task_commands
+    task_commands(group, command, body)
     p=command(group,'unshare','thread.unshare');p.add_argument('id',help='Withdraw a historical 0.x share you own')
     find = command(group, 'find', 'thread.find')
     find.add_argument('query', nargs='?', default='')
@@ -153,6 +155,11 @@ def execute(args):
         from .sync import retired_transport
         args._thread_sync_state = {'state': 'transport_retired', 'identity_verified': False}
         raise retired_transport()
+    if verb == 'task':
+        from .thread_tasks import execute as tasks
+        result = tasks(args, Workbench(root))
+        args._thread_sync_state = hub_receipt()
+        return result, None
     if verb=='unshare':
         from .thread_access_cli import Online
         if offline or dry:

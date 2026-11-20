@@ -47,3 +47,13 @@ CLI 启动需要读写 ~/.local/opt/cosmesh/.lock；工作库、Git 锁和 Mesh 
 ## 核验范围
 
 安装器或 doctor 确认文件、入口和版本；DSH 的实际发现、加载与执行须在 DSH 内检查。权限设置用于未来会话时，已存在会话仍保留自身模式；恢复旧会话时检查当前模式。验收可在临时工作库记录、查询和跨会话续接，真实 Mesh 只读核验与请求预览保持业务空间整洁。
+
+## 接收本人派来的任务
+
+CosMesh 客户端和 Hub 均需 0.6.2。两端先在同一个 W-ID 上绑定真实会话，例如 `cosmesh thread bind ID --agent codex --session-id NATIVE_ID --workdir DIR`，随后 `cosmesh thread personal ID` 登记位置。另一设备首次接续可用 `thread fetch ID --workdir DIR --agent dsh --session-id NATIVE_ID`。用主机名或设备 ID 定向。一个目标有多个会话时，发送方需补上会话 ID。
+
+**Codex** 在目标设备运行 `cosmesh thread task receive ID --agent codex --session NATIVE_ID`，可由现有用户进程管理器托管。它使用本机 Codex App Server 的控制套接字，指定现有实例可加 `--socket PATH`。需要支持 `app-server proxy`、`thread/turns/list` 和 `thread/queue/add` 的宿主。接收器与目标 Codex 必须指向同一原生会话库。
+
+**DSH** 使用连接器 0.1.3。将 `[{"thread":"W-ID","session":"NATIVE_ID"}]` 保存到目标 profile 目录下的 `cosmesh-receivers.json`，设为本人所有、权限 0600。独立工作库可在对应条目添加 `"root":"/absolute/path/to/store"`。启动或重载 profile 后生效，回退到旧组件可保留这份文件。接收器随 profile 启停，继承该会话的权限。
+
+接收器默认每 15 秒查一次队列。有任务才访问模型。关闭设备后，任务在私人 Hub 等待；启动接收器后继续。若原生提交的回执丢失，接收器按任务 ID 核对原生历史。持续显示 `unconfirmed` 时，先核对目标会话；已确认最终结果后，可在原接收端执行 `thread task resolve ID --agent AGENT --session NATIVE_ID --task-id TASK --outcome completed|failed --body TEXT` 登记。此命令会写回结果并让下一项继续。需要再次委派时明确创建新任务。CLI 回退前停止接收器；恢复候选后按原配置继续。

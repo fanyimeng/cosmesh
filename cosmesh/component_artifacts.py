@@ -36,7 +36,10 @@ def merge_catalog(base, document):
     releases = dict(base['releases'])
     for version, release in remote.get('releases', {}).items():
         required = release.get('requires', {})
-        if (not re.fullmatch(r'\d+\.\d+\.\d+', version) or
+        additional = required.get('dsh_also', [])
+        if (not isinstance(additional, list) or any(not isinstance(v, str) or
+                not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', v) for v in additional) or
+                not re.fullmatch(r'\d+\.\d+\.\d+', version) or
                 not re.fullmatch(r'[a-f0-9]{64}', release.get('archive_sha256', '')) or
                 not re.fullmatch(r'>=\d+\.\d+\.\d+', required.get('cosmesh', '')) or
                 not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', required.get('dsh', ''))):

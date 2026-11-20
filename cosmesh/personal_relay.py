@@ -53,6 +53,8 @@ class Relay:
             'personal_execution_head':{'method','thread'},
             'personal_execution_commit':{'method','thread','sha','expect'},
         }
+        from .task_queue import FIELDS
+        allowed.update(FIELDS)
         method=payload.get('method')
         if method not in allowed or set(payload)!=allowed[method]:
             raise Error('INPUT_INVALID','Invalid personal relay request; caller identity is server-derived.')
@@ -88,8 +90,11 @@ class Relay:
         if amount: db.execute('INSERT INTO traffic VALUES(?,?)',(time.time(),amount))
 
     def run(self, db, method, p):
+        if method.startswith('personal_task_'):
+            from .task_queue import dispatch
+            return dispatch(self, db, method[len('personal_task_'):], p)
         if method=='personal_info':
-            return {'protocol':'personal.v1','thread_protocol':'thread.personal.v1','execution_protocol':'thread.execution.v1','limits':self.policy,
+            return {'protocol':'personal.v1','thread_protocol':'thread.personal.v1','task_protocol':'thread.task.v1','execution_protocol':'thread.execution.v1','limits':self.policy,
                     'access_protocol':'thread.access.v1' if self.hub.community() else None,
                     'unified':self.hub.settings().get('format')==2,
                     'stored_bytes':db.execute('SELECT COALESCE(SUM(size),0) FROM blobs').fetchone()[0],

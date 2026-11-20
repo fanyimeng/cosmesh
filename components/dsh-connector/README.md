@@ -1,8 +1,18 @@
 # CosMesh DSH connector
 
-可选、独立安装的 Host bundle：`@cosmesh/dsh-connector`，版本 **0.1.2**。此组件随 CosMesh 源码独立发布，**未在 npm 发布**；与 CosMesh CLI 的版本独立。
+可选、独立安装的 Host bundle：`@cosmesh/dsh-connector`，版本 **0.1.3**。此组件随 CosMesh 源码独立发布，**未在 npm 发布**；与 CosMesh CLI 的版本独立。
 
-**0.1.2 更新：新增统一 execution_revision 与 owner 执行元数据回执，保持旧参数、旧回执、journal 和初始化语义；修复已初始化操作以 initialize:false 重试时状态回退的问题。绝对目录与 Session 仍只在本机回执和日志中，查看者可读所有者批准的 Agent／Project 显示摘要。升级保留原项目、会话、资料和回退包。**
+**0.1.2 历史：新增统一 execution_revision 与 owner 执行元数据回执，保持旧参数、旧回执、journal 和初始化语义；修复已初始化操作以 initialize:false 重试时状态回退的问题。绝对目录与 Session 仍只在本机回执和日志中，查看者可读所有者批准的 Agent／Project 显示摘要。升级保留原项目、会话、资料和回退包。**
+
+## 0.1.3 定向接活
+
+与 CosMesh 0.6.2 配合，支持 DSH 0.2.2-rc.3、rc.5。在目标 DSH profile 目录中新建本人私有的 `cosmesh-receivers.json`（权限 0600），按需登记已绑定并个人同步的真实会话。独立文件可随旧组件回退保留。示例中的值替换为实际值。
+
+```json
+[{"thread":"W-xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx","session":"session-xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"}]
+```
+
+使用独立工作库时在该项添加 `"root":"/absolute/path/to/cosmesh-store"`。启动或重载此 profile 后生效。每项接收器只在有任务时访问会话。清空列表并重载可停止接活；恢复原列表后按原任务 ID 继续。用户也可在 DSH 中通过 CosMesh Skill 把工作派回其他设备。
 
 ## 能力与边界
 
