@@ -1,7 +1,7 @@
 """Prepare exactly the selected content, then deliver it to named people."""
 
 import base64
-import fcntl
+from . import _fcntl as fcntl
 from uuid import uuid4
 import hashlib
 import os
@@ -41,6 +41,9 @@ def add_commands(group, command, body):
         parser.add_argument("--record", action="append", default=[])
         parser.add_argument("--attach", action="append", default=[])
         parser.add_argument("--expect")
+        sharing = parser.add_mutually_exclusive_group()
+        sharing.add_argument("--share-workspace", action="store_true", help="Grant named recipients ongoing read access to this work")
+        sharing.add_argument("--message-only", action="store_true", help="Deliver only the selected message content")
     for verb in ("inbox", "outbox", "chat", "activity", "search"):
         parser = command(group, verb, "thread." + verb)
         parser.add_argument("--limit", type=int, default=20)
@@ -55,15 +58,34 @@ def add_commands(group, command, body):
         if verb == "search":
             parser.add_argument("query")
     mail = command(group, "mail").add_subparsers(dest="mail_action", required=True)
-    for action in ("show", "file", "revoke", "download", "mark"):
+    for action in ("show", "file", "revoke", "download", "mark", "open", "unshare", "sharing", "pending", "resume"):
         parser = command(mail, action, "thread.mail")
         if action == "mark":
             parser.add_argument("ids", nargs="+")
             seen = parser.add_mutually_exclusive_group(required=True)
             seen.add_argument("--seen", dest="seen", action="store_true")
             seen.add_argument("--unseen", dest="seen", action="store_false")
-        else:
+        elif action != "pending":
             parser.add_argument("id")
+        if action == "open":
+            view = parser.add_mutually_exclusive_group()
+            view.add_argument("--records", action="store_true")
+            view.add_argument("--record")
+            view.add_argument("--history", metavar="RECORD")
+            view.add_argument("--files", action="store_true")
+            view.add_argument("--download", metavar="ASSET")
+            version = parser.add_mutually_exclusive_group()
+            version.add_argument("--at-send", action="store_true")
+            version.add_argument("--workspace-revision", metavar="REVISION")
+            parser.add_argument("--version", help="Authored version of --record")
+            parser.add_argument("--limit", type=int)
+            parser.add_argument("--offset", type=int, default=0)
+            parser.add_argument("--chars", type=int)
+            parser.add_argument("--output")
+        if action == "unshare":
+            parser.add_argument("--from", dest="accounts", action="append", required=True)
+        if action == "sharing":
+            parser.add_argument("--to", dest="accounts", action="append", required=True)
         if action == "file":
             filing = parser.add_mutually_exclusive_group(required=True)
             filing.add_argument("--thread")
@@ -111,28 +133,45 @@ def download(online, mid, name, output):
     f = next((f for f in item["files"] if f["name"] == name), None)
     if not f:
         raise Error("NOT_FOUND", "Attachment unavailable.")
-    with tempfile.NamedTemporaryFile(dir=path.parent) as stream:
-        checksum = hashlib.sha256()
-        while stream.tell() < f["size"] or stream.tell() == 0:
-            part = online.call("delivery_file", id=mid, name=name, offset=stream.tell())
-            raw = base64.b64decode(part["data"], validate=True)
-            if (
-                part["offset"] != stream.tell()
-                or part["size"] != f["size"]
-                or part["sha"] != f["sha"]
-                or (not raw and f["size"])
-            ):
-                raise Error("SYNC_PROTOCOL", "Attachment changed during transfer.")
-            checksum.update(raw)
-            stream.write(raw)
-            if stream.tell() >= f["size"]:
-                break
-        if stream.tell() != f["size"] or checksum.hexdigest() != f["sha"]:
-            raise Error("CHECKSUM_MISMATCH", "Downloaded bytes differ from the approved attachment.")
-        stream.flush()
-        os.fsync(stream.fileno())
-        os.link(stream.name, path)
-    return {"path": str(path), "size": f["size"], "sha": f["sha"]}
+    return receive_file(path, lambda offset: online.call("delivery_file", id=mid, name=name, offset=offset), f)
+
+
+def receive_file(path, read_chunk, expected=None):
+    path = safe_path(path)
+    if path.exists() or not path.parent.is_dir():
+        raise Error("PATH_INVALID", "Choose a new file in an existing directory.")
+    # Close the temporary handle before publishing the verified file on Windows.
+    with tempfile.TemporaryDirectory(dir=path.parent) as directory:
+        partial = Path(directory) / "content"
+        with partial.open("xb") as stream:
+            size, sha = stream_file(stream, read_chunk, expected)
+        if os.name == "nt":
+            os.rename(partial, path)  # Windows rejects an existing destination.
+        else:
+            os.link(partial, path)
+    return {"path": str(path), "size": size, "sha": sha}
+
+
+def stream_file(stream, read_chunk, expected):
+    f = expected
+    checksum = hashlib.sha256()
+    while True:
+        part = read_chunk(stream.tell())
+        if not f:
+            f = {"size": part["size"], "sha": part["sha"]}
+        raw = base64.b64decode(part["data"], validate=True)
+        if (part["offset"] != stream.tell() or part["size"] != f["size"] or part["sha"] != f["sha"]
+                or stream.tell() + len(raw) > f["size"] or (not raw and f["size"])):
+            raise Error("SYNC_PROTOCOL", "File changed during transfer.")
+        checksum.update(raw)
+        stream.write(raw)
+        if stream.tell() == f["size"]:
+            break
+    if checksum.hexdigest() != f["sha"]:
+        raise Error("CHECKSUM_MISMATCH", "Downloaded bytes differ from the approved file.")
+    stream.flush()
+    os.fsync(stream.fileno())
+    return f["size"], f["sha"]
 
 
 def submit(online, payload, signature, key):
@@ -156,6 +195,7 @@ def submit(online, payload, signature, key):
 
 
 def send(args, wb, online):
+    from . import workspace_delivery_cli as workspace
     from .cli import read_input
     from .protocol import MAX_DOCUMENT
 
@@ -166,13 +206,26 @@ def send(args, wb, online):
     if isinstance(recipients, str):
         recipients = [recipients]
     body = read_input(args.file, MAX_DOCUMENT) if hasattr(args, "file") else getattr(args, "body", "")
+    if not recipients and parent:
+        if not online:
+            raise Error("INPUT_INVALID", "Specify --to when previewing a reply offline.")
+        original = online.call("delivery_show", id=parent)
+        recipients = (
+            original["recipients"]
+            if original["sender"] == online.info["actor"]
+            else [original["sender"]]
+        )
+    if not origin and not getattr(args, "expect", None):
+        origin = workspace.select_source(args, online, recipients)
     records = getattr(args, "record", []) or []
     sources = []
+    work_title = None
     if origin:
         with wb.base.locked():
             wb.load()
             item = wb.find(origin, "thread")
             origin = item["doc"]["meta"]["id"]
+            work_title = item["doc"]["meta"]["title"]
             if item["repo"] != "local" or item["doc"]["meta"]["author"] != wb.author_for(item):
                 raise Error("AUTH_DENIED", "Choose your own work.")
             parts = [body] if body else []
@@ -187,15 +240,6 @@ def send(args, wb, online):
             body = "\n\n".join(parts)
     elif records:
         raise Error("INPUT_INVALID", "Choose the source work for selected records.")
-    if not recipients and parent:
-        if not online:
-            raise Error("INPUT_INVALID", "Specify --to when previewing a reply offline.")
-        original = online.call("delivery_show", id=parent)
-        recipients = (
-            original["recipients"]
-            if original["sender"] == online.info["actor"]
-            else [original["sender"]]
-        )
     paths = getattr(args, "attach", [])
     if sum(safe_path(p).stat().st_size for p in paths) > PUBLIC["batch"]:
         raise Error("TRANSFER_BUDGET", "Attachments exceed one delivery batch.")
@@ -210,9 +254,16 @@ def send(args, wb, online):
             files=files,
             sources=sources,
         )
-        signature = digest(packed(payload).encode())
+        mode = workspace.mode(args)
+        if mode == "share" and not origin:
+            raise Error("INPUT_INVALID", "Choose the source Thread for --share-workspace.")
+        # The legacy default preview remains valid. Explicit consent is bound to the preview.
+        signature = digest(packed(payload if mode == "ask" else [mode, payload]).encode())
         if not online:
-            return dict(payload, preview=uuid4().hex + "." + signature, sent=False)
+            result = dict(payload, preview=uuid4().hex + "." + signature, sent=False)
+            if origin:
+                result["workspace_choice"] = workspace.preview(origin, work_title, recipients, mode)
+            return result
         expected = getattr(args, "expect", None)
         if expected and (
             len(expected) != 97
@@ -222,9 +273,13 @@ def send(args, wb, online):
             raise Error("STATE_CONFLICT", "Delivery differs from the reviewed preview.")
         if not recipients:
             raise Error("INPUT_INVALID", "Choose a recipient.")
+        key = getattr(args, "idempotency_key", None) or expected
+        if mode == "share" or (origin and mode == "ask" and (
+                workspace.supported(online) or workspace.previously_chosen(wb, online, signature, key))):
+            return workspace.deliver(wb, online, args, payload, signature, key, work_title, paths, temp)
         for i, f in enumerate(files):
             AttachmentUpload(online).upload(Path(temp) / str(i), f["sha"], f["size"])
-        return submit(online, payload, signature, getattr(args, "idempotency_key", None) or expected)
+        return submit(online, payload, signature, key)
 
 
 def execute(args, wb):
@@ -243,6 +298,9 @@ def execute(args, wb):
         return send(args, wb, online)
     if verb == "mail":
         action = args.mail_action
+        if action in {"open", "unshare", "sharing", "pending", "resume"}:
+            from .workspace_delivery_cli import mail
+            return mail(wb, online, args)
         if action == "show":
             return online.call("delivery_show", id=args.id)
         if action == "download":

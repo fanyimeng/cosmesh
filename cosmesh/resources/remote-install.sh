@@ -28,10 +28,10 @@ remote() {
 cosmesh_temp=$(mktemp -d)
 trap 'rm -rf "$cosmesh_temp"' EXIT HUP INT TERM
 if [ -n "$cosmesh_prefix" ]; then
-    remote python3 "$cosmesh_bootstrap" ensure --prefix "$cosmesh_prefix" || fail 'Server setup failed; local Skills were preserved.'
+    remote env COSMESH_BOOTSTRAP_HUMAN=1 python3 "$cosmesh_bootstrap" ensure --prefix "$cosmesh_prefix" || fail 'Server setup failed; local Skills were preserved.'
     cosmesh_entry="exec $(quote "$cosmesh_prefix/bin/cosmesh")"
 else
-    remote python3 "$cosmesh_bootstrap" ensure || fail 'Server setup failed; local Skills were preserved.'
+    remote env COSMESH_BOOTSTRAP_HUMAN=1 python3 "$cosmesh_bootstrap" ensure || fail 'Server setup failed; local Skills were preserved.'
     cosmesh_entry='exec "$HOME/.local/opt/cosmesh/bin/cosmesh"'
 fi
 cosmesh_entry="$cosmesh_entry skills export --ssh $(quote "$cosmesh_host") --bootstrap $(quote "$cosmesh_bootstrap")"

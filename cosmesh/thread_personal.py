@@ -8,6 +8,7 @@ from .personal import Personal
 from .thread_locations import ThreadLocations
 from .personal_protocol import MAX_METADATA, digest, merge_maps, packed, private_dir, read_json, save_json
 from .protocol import decode
+from .source_paths import manifest_path
 from .store import atomic
 from .thread_protocol import Snapshot, content_version, identifier, references
 from .thread_personal_protocol import FORMAT, MAPS, belongs, empty, protect_history, validate_manifest
@@ -76,8 +77,13 @@ class ThreadPersonal(ThreadLocations, Personal):
 
     def selected_assets(self, tid):
         paths = self.state.get('asset_paths', {})
-        return {k: dict(v, **({'removed':True} if self.state.get('removed_assets',{}).get(k) else {}), **({'relative_path': paths[k]} if k in paths else {}))
-                for k, v in self.state['assets'].items() if v['thread'] == tid}
+        removed = self.state.get('removed_assets', {})
+        return {
+            aid: dict(row, path=manifest_path(row['path']),
+                      **({'removed': True} if removed.get(aid) else {}),
+                      **({'relative_path': paths[aid]} if aid in paths else {}))
+            for aid, row in self.state['assets'].items() if row['thread'] == tid
+        }
 
     def load_manifest(self, sha, tid):
         value = json.loads(self.download(sha, metadata=True).read_bytes())
@@ -107,7 +113,12 @@ class ThreadPersonal(ThreadLocations, Personal):
             sources[key] = text
         save_json(self.root / 'sources.json', sources)
         for aid, row in value['assets'].items():
-            self.state['assets'][aid] = {k: v for k, v in row.items() if k not in ('relative_path','removed')}
+            asset = {k: v for k, v in row.items() if k not in ('relative_path','removed')}
+            previous = self.state['assets'].get(aid)
+            if (previous and previous['device'] == asset['device'] == self.state['device']
+                    and manifest_path(previous['path']) == asset['path']):
+                asset['path'] = previous['path']
+            self.state['assets'][aid] = asset
             if row.get('removed'):self.state.setdefault('removed_assets',{})[aid]=True
             else:self.state.get('removed_assets',{}).pop(aid,None)
             if 'relative_path' in row: self.state.setdefault('asset_paths', {})[aid] = row['relative_path']
@@ -122,7 +133,7 @@ class ThreadPersonal(ThreadLocations, Personal):
         from .status_pages import schedule
         schedule(self.wb)
 
-    def synchronize(self, tid, pull=False, files=False, file_ids=None):
+    def synchronize(self, tid, pull=False, files=False, file_ids=None, compact=False):
         identifier(tid, 'W')
         if pull and files: raise Error('INPUT_INVALID', '--pull never uploads files.')
         self.capability()  # Must precede any blob upload, including files.
@@ -164,6 +175,8 @@ class ThreadPersonal(ThreadLocations, Personal):
                 if entry['state']=='server_available':
                     aid = entry['id']
                     for key, value in self.state['assets'][aid].items():
+                        if key == 'path':
+                            value = manifest_path(value)
                         if local['assets'][aid].get(key) != value:
                             merged['assets'][aid][key] = value
         raw = packed(merged).encode()
@@ -173,9 +186,17 @@ class ThreadPersonal(ThreadLocations, Personal):
             sha = digest(raw); path = self.cache / sha
             if not path.exists():
                 self.cache_room(len(raw)); atomic(path, raw.decode()); path.chmod(0o600)
-            self.upload(path, sha, len(raw))
+            request = {'method': 'personal_thread_commit', 'thread': tid, 'sha': sha, 'expect': head}
+            if compact and remote and sha != head:
+                from .thread_personal_protocol import DELTA_FORMAT, MAX_DELTA, manifest_delta
+                if self.server_info.get('delta_protocol') == DELTA_FORMAT:
+                    changes = manifest_delta(remote, merged)
+                    if changes is not None and len(packed(changes).encode()) < min(MAX_DELTA, len(raw) // 2):
+                        request.update(method='personal_thread_delta', changes=changes)
+            if request['method'] == 'personal_thread_commit' and (not compact or sha != head):
+                self.upload(path, sha, len(raw))
             save_json(intent_path, {'sha': sha, 'expect': head, 'local': local})
-            receipt = self.rpc({'method': 'personal_thread_commit', 'thread': tid, 'sha': sha, 'expect': head})
+            receipt = self.rpc(request)
             if receipt.get('accepted') is not True or receipt.get('sha') != sha:
                 raise Error('SYNC_PROTOCOL', 'Thread acceptance was not confirmed; retry the same Thread.')
             accepted = sha

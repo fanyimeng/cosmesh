@@ -39,7 +39,7 @@ def inspect(agent, names, dest=None):
     prefix = os.environ.get("COSMESH_INSTALL_PREFIX")
     owned = {}
     if prefix and (Path(prefix) / "state.json").is_file():
-        owned = json.loads((Path(prefix) / "state.json").read_text()).get("skills", {})
+        owned = json.loads((Path(prefix) / "state.json").read_text(encoding="utf-8")).get("skills", {})
     target = destination(dest) if dest or not owned else None
     records = []
     for name in names:
@@ -67,13 +67,13 @@ def install(agent, names, dest=None, dry_run=False):
     names = ["cosmesh"] if names else []
     prefix = os.environ.get("COSMESH_INSTALL_PREFIX")
     if prefix:
-        command = [sys.executable, str(Path(prefix) / "manager.py"), "skills", "--prefix", prefix,
+        command = [sys.executable, "-I", "-X", "utf8", str(Path(prefix) / "manager.py"), "skills", "--prefix", prefix,
                    "--agent", agent, "--skills", "both" if len(names) == 2 else names[0], "--json"]
         if dest:
             command += ["--skills-dir", str(dest)]
         if dry_run:
             command.append("--dry-run")
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
         reply = json.loads(result.stdout)
         if not reply["ok"]:
             raise Error(reply["error"]["code"], reply["error"]["message"])

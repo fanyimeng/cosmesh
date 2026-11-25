@@ -23,7 +23,7 @@ def server_entry(root=None, source=None, service=None):
     connection = {}
     path = workspace_root(root) / '.cosmesh/thread-client.json'
     if path.is_file():
-        connection = json.loads(path.read_text()).get('connection') or {}
+        connection = json.loads(path.read_text(encoding="utf-8")).get('connection') or {}
     discovery = service or saved.get('discovery') or connection.get('discovery')
     source = source or (str(PurePosixPath(service).parent / 'agent') if service else saved.get('source'))
     source = source or (str(PurePosixPath(discovery).parent / 'agent') if discovery else None)

@@ -1,7 +1,7 @@
 """One local collector for explicitly selected work directories and host summaries."""
 
 from copy import deepcopy
-import fcntl
+from . import _fcntl as fcntl
 import json
 import os
 from pathlib import Path
@@ -18,6 +18,7 @@ from .store import safe_path
 from .thread_files import portable_path
 from .thread_personal import ThreadPersonal
 from .threads import Workbench, workspace_root, now
+from .workspace_progress import policy as workspace_policy
 
 IGNORE = {
     ".git",
@@ -156,6 +157,8 @@ def sync_records(wb, offline):
         diffs = {}
         for path in sorted(policies.iterdir()):
             if not path.name.startswith("W-"):
+                continue
+            if read_json(workspace_policy(wb, path.name), {}).get('enabled'):
                 continue
             state = read_json(path)
             if not state["enabled"]:
@@ -298,6 +301,10 @@ class Collector:
                     for aid in known_paths.get(relative, []):
                         personal.state.setdefault("removed_assets", {})[aid] = True
                 personal.save()
+                if read_json(workspace_policy(wb, tid), {}).get('enabled'):
+                    # Every scope registers changes locally first. The shared source
+                    # then prepares all registered files and publishes once per pass.
+                    return dict(report, pending=True, workspace_sync=True)
                 originals = {
                     aid: (
                         deepcopy(personal.asset(aid)),
@@ -374,8 +381,10 @@ class Collector:
             state = read_json(self.path, {"scopes": []})
             scopes = state["scopes"]
             verb = args.collector
+            from .workspace_progress import report as workspace_progress
             if verb == "status":
                 return {
+                    "shared_workspaces": workspace_progress(self.wb, status=True),
                     "scopes": [
                         {k: v for k, v in s.items() if k not in {"files", "pending_files", "removed"}}
                         for s in scopes
@@ -476,10 +485,20 @@ class Collector:
                         }
                     )
             records = sync_records(self.wb, getattr(args, "offline", False))
+            shared = workspace_progress(self.wb, offline=getattr(args, "offline", False), force=verb == "once")
+            accepted = {r["thread"]: r for r in shared if r.get("enabled") and not r.get("pending") and r.get("snapshot")}
+            for item in reports:
+                if item.pop("workspace_sync", False) and item["thread"] in accepted:
+                    scope = next(s for s in scopes if s["directory"] == item["directory"] and s["thread"] == item["thread"])
+                    snapshot = accepted[item["thread"]]["snapshot"]
+                    scope.update(pending=False, pending_files=[], removed=[], snapshot=snapshot)
+                    item.update(pending=False, snapshot=snapshot)
+                    self.save(state)
             return {
                 "scopes": reports,
                 "records": records,
-                "complete": all(not r.get("error") and not r.get("pending") for r in reports + records),
+                "shared_workspaces": shared,
+                "complete": all(not r.get("error") and not r.get("pending") for r in reports + records + shared),
             }
 
 

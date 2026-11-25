@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cosmesh import spaces
-from tools import release_installer
+from tools import build_portable, release_installer
 
 
 def bootstrap():
@@ -23,6 +23,27 @@ def bootstrap():
 
 
 class PortableReleaseTests(unittest.TestCase):
+    def test_pinned_requirement_with_windows_marker(self):
+        row = 'tzdata==2025.2; sys_platform == "win32"'
+        self.assertEqual(build_portable.pinned_project(row), ('tzdata', '2025.2'))
+        with self.assertRaises(ValueError):
+            build_portable.pinned_project('tzdata; sys_platform == "win32"')
+
+    def test_windows_client_update_uses_the_local_manager(self):
+        from cosmesh import client
+        from cosmesh.errors import Error
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'manager.py').write_text('import json,sys;print(json.dumps({"ok":True,"data":sys.argv[1:]}))')
+            with patch.dict(os.environ, COSMESH_INSTALL_PREFIX=str(root)), patch.object(sys, 'platform', 'win32'):
+                with self.assertRaises(Error) as context:
+                    client.update()
+                self.assertEqual(context.exception.code, 'UPDATE_SOURCE_REQUIRED')
+                self.assertEqual(client.check()['update_source'], 'offline_release')
+                args = client.update_release(root / 'bundle', True)
+            self.assertEqual(args, ['upgrade', '--prefix', str(root), '--release', str((root / 'bundle').resolve()),
+                                    '--json', '--dry-run'])
+
     def test_materialized_bundle_preserves_lifecycle_gate(self):
         module = bootstrap()
         with tempfile.TemporaryDirectory() as folder:

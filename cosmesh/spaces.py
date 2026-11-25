@@ -1,5 +1,5 @@
 """Public Mesh discovery over the existing kernel-authenticated SSH gateway."""
-import fcntl
+from . import _fcntl as fcntl
 import json
 import os
 from pathlib import Path
@@ -16,7 +16,7 @@ from .sync import clone, synchronize, system_command, system_ssh
 def settings():
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
     path = Path(prefix) / 'client.json' if prefix else None
-    return json.loads(path.read_text()) if path and path.is_file() else {}
+    return json.loads(path.read_text(encoding="utf-8")) if path and path.is_file() else {}
 
 
 def root_for(product, explicit=None):

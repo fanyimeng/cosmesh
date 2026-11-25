@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cosmesh"
-version = "0.6.2"
+version = "0.7.0"
 description = "Local-first documents, actions and records for people and their agents"
 requires-python = ">=3.9"
-dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<51", "pypdf==6.21.4", "websocket-client==1.8.0"]
+dependencies = ["PyYAML>=6.0.2,<7", "cryptography>=46,<51", "pypdf==6.21.4", "websocket-client==1.8.0",
+                "tzdata; sys_platform == 'win32'"]
 
 [project.scripts]
 cosmesh = "cosmesh.cli:main"

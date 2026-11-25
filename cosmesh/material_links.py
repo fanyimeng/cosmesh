@@ -9,6 +9,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import quote,unquote,urlsplit
 
+from . import _platform
 from .errors import Error
 from .knowledge_protocol import knowledge_id,DIGEST
 from .store import safe_path
@@ -87,7 +88,7 @@ def open_file(kb,value,offline=False,launch=False):
         import shutil
         from .personal_protocol import sha_file, private_dir
         source=kb.download_path(file['sha256'],file['size'],offline)
-        directory=private_dir(Path(tempfile.gettempdir())/('cosmesh-open-'+str(os.geteuid()))/ref['id']/ref['version'])
+        directory=private_dir(Path(tempfile.gettempdir())/('cosmesh-open-'+_platform.cache_user())/ref['id']/ref['version'])
         target=safe_path(directory/name)
         if target.exists() and sha_file(target)!=file['sha256']:raise Error('PATH_CONFLICT','Opened copy changed; preserve it and choose a new download path.')
         if not target.exists():
@@ -98,17 +99,17 @@ def open_file(kb,value,offline=False,launch=False):
     raw=kb.download(file['sha256'],file['size'])
     if len(raw)!=file['size'] or hashlib.sha256(raw).hexdigest()!=file['sha256']:
         raise Error('CHECKSUM_MISMATCH','The fixed file differs from its recorded size or checksum.')
-    root=safe_path(Path(os.environ.get('COSMESH_OPEN_CACHE',str(Path(tempfile.gettempdir()).resolve()/('cosmesh-open-'+str(os.geteuid()))))))
+    root=safe_path(Path(os.environ.get('COSMESH_OPEN_CACHE',str(Path(tempfile.gettempdir()).resolve()/('cosmesh-open-'+_platform.cache_user())))))
     prefix=os.environ.get('COSMESH_INSTALL_PREFIX')
     if root==kb.wb.base.root or kb.wb.base.root in root.parents or (prefix and Path(prefix).resolve() in [root,*root.parents]):
         raise Error('PATH_INVALID','Keep opened files outside source workbenches and application installations.')
     directory=root/ref['id']/ref['version']
     for p in (root,root/ref['id'],directory):
         p.mkdir(mode=0o700,parents=True,exist_ok=True)
-        if p.is_symlink() or p.stat().st_uid!=os.geteuid() or p.stat().st_mode&0o077:
+        if p.is_symlink() or not _platform.private_path(p):
             raise Error('AUTH_DENIED','Opened documents require a private owned cache.')
     path=safe_path(directory/name)
-    if path.exists() and (path.stat().st_uid!=os.geteuid() or path.stat().st_mode&0o077 or path.stat().st_nlink!=1):
+    if path.exists() and (not _platform.private_path(path) or path.stat().st_nlink!=1):
         raise Error('AUTH_DENIED','The opened copy must be private and owned by this account.')
     if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest()!=file['sha256']:
         fd,tempname=tempfile.mkstemp(prefix='.open-',dir=str(directory));temp=Path(tempname)
@@ -140,7 +141,7 @@ def open_file(kb,value,offline=False,launch=False):
                 raise Error('CHECKSUM_MISMATCH','A referenced offline file differs from its fixed checksum.')
             content=kb.download(sibling['sha256'],sibling['size']);output=safe_path(directory/target)
             output.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
-            if output.exists() and (output.stat().st_uid!=os.geteuid() or output.stat().st_mode&0o077 or output.stat().st_nlink!=1):
+            if output.exists() and (not _platform.private_path(output) or output.stat().st_nlink!=1):
                 raise Error('AUTH_DENIED','Opened sibling files must remain private.')
             if not output.exists() or hashlib.sha256(output.read_bytes()).hexdigest()!=sibling['sha256']:
                 fd,tmp=tempfile.mkstemp(prefix='.open-',dir=str(output.parent))

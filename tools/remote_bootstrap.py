@@ -111,7 +111,13 @@ def main(argv=None):
                 'skill_update_available': args.local_skill_version is not None and args.local_skill_version != current,
                 'prefix': str(prefix), 'data_unchanged': True, 'automatic_updates': False}
         if notice: data['update_notice'] = notice
-        print(json.dumps({'ok': True, 'data': data, 'error': None}, ensure_ascii=False))
+        if args.action == 'ensure' and os.environ.get('COSMESH_BOOTSTRAP_HUMAN') == '1':
+            label = {'install': '首次安装完成', 'upgrade': '已更新', 'unchanged': '当前版本'}[action]
+            print(f'CosMesh {current} · {label}')
+            if notice:
+                print(notice['document'].rstrip())
+        else:
+            print(json.dumps({'ok': True, 'data': data, 'error': None}, ensure_ascii=False))
         return 0
     except (Failure, OSError, ValueError, KeyError) as exc:
         print(json.dumps({'ok': False, 'data': None, 'error': {'code': 'REMOTE_SETUP_FAILED', 'message': str(exc)}}, ensure_ascii=False))

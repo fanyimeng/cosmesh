@@ -35,15 +35,15 @@ class Knowledge:
     def __init__(self,wb):
         self.wb=wb;self.root=wb.base.path('.cosmesh/knowledge');self._uploaded=set();self._known_blobs=None
         exclude=wb.base.path('.git/info/exclude')
-        if exclude.is_file() and '.cosmesh/knowledge/' not in exclude.read_text().splitlines():
-            atomic(exclude,exclude.read_text()+'\n.cosmesh/knowledge/\n')
+        if exclude.is_file() and '.cosmesh/knowledge/' not in exclude.read_text(encoding="utf-8").splitlines():
+            atomic(exclude,exclude.read_text(encoding="utf-8")+'\n.cosmesh/knowledge/\n')
         self.root.mkdir(exist_ok=True,mode=0o700)
         self.path=self.root/'snapshot.json'
         stamp=self.path.stat().st_mtime_ns if self.path.is_file() else None
         cached=getattr(wb,'_knowledge_snapshot',None)
         if cached and cached[0]==stamp:
             self.data=cached[1];self.versions=cached[2];return
-        self.data=json.loads(self.path.read_text()) if self.path.is_file() else {'users':[],'versions':[],'heads':{},'events':[],'contributions':[],'archives':[]}
+        self.data=json.loads(self.path.read_text(encoding="utf-8")) if self.path.is_file() else {'users':[],'versions':[],'heads':{},'events':[],'contributions':[],'archives':[]}
         self.versions={(x['doc']['meta']['id'],x['version']):x['doc'] for x in self.data['versions']}
         wb._knowledge_snapshot=(stamp,self.data,self.versions)
 
@@ -187,12 +187,12 @@ class Knowledge:
         data={'operation':operation,'value':value,'key':key}
         receipt=self.root/('receipt-'+path.name)
         if receipt.exists():
-            saved=json.loads(receipt.read_text());old=saved['request']
+            saved=json.loads(receipt.read_text(encoding="utf-8"));old=saved['request']
             if operation=='resource_add':value['id']=old['value']['id']
             if data!=old:raise Error('IDEMPOTENCY_CONFLICT','This completed key identifies different input.')
             return {**saved['result'],'replayed':True,'saved_locally':True}
         if path.exists():
-            old=json.loads(path.read_text())
+            old=json.loads(path.read_text(encoding="utf-8"))
             # A caller-generated new ID is replaced by the original ID on a retry.
             if operation=='resource_add':value['id']=old['value']['id']
             if old!=data:raise Error('IDEMPOTENCY_CONFLICT','This local key already identifies different input.')
@@ -204,7 +204,7 @@ class Knowledge:
         if refresh:self.refresh()
         results=[];errors=[]
         for path in sorted(self.outbox().glob('*.json')):
-            request=json.loads(path.read_text());value=request['value']
+            request=json.loads(path.read_text(encoding="utf-8"));value=request['value']
             if keys is not None and request['key'] not in keys:continue
             try:
                 for file in value.get('files',[]):
@@ -242,7 +242,7 @@ class Knowledge:
                 files.append({'name':path.name,'sha256':sha,'size':size,'text_sha256':None,'text_status':'not_extracted','extractor':'opaque_storage'});continue
             # Parsing runs in a separate process with a bounded lifetime; originals survive extraction failures.
             try:
-                result=subprocess.run([sys.executable,'-m','cosmesh.knowledge','extract',str(path.resolve())],capture_output=True,text=True,timeout=30)
+                result=subprocess.run([sys.executable,'-m','cosmesh.knowledge','extract',str(path.resolve())],capture_output=True,text=True,encoding='utf-8',timeout=30)
                 extracted=json.loads(result.stdout) if result.returncode==0 else {'status':'failed','text':'','tool':'extractor_failed'}
             except (OSError,ValueError,subprocess.TimeoutExpired):extracted={'status':'failed','text':'','tool':'extractor_timeout'}
             text=extracted['text'].encode()
@@ -264,7 +264,7 @@ class Knowledge:
                 if offline:raise Error('CONTENT_NOT_CACHED','Fetch this item text while connected before using it offline.')
                 # Size is requested separately to keep catalog records small.
                 first=self.rpc({'method':'community_get','sha256':sha,'offset':0});self.download(sha,first['size'])
-            parts.append({'file':f['name'],'status':f['text_status'],'text':path.read_text()})
+            parts.append({'file':f['name'],'status':f['text_status'],'text':path.read_text(encoding="utf-8")})
         return {'id':doc['meta']['id'],'parts':parts}
 
     @networked

@@ -6,7 +6,9 @@ import re
 import stat
 from pathlib import Path
 
+from . import _platform
 from .errors import Error
+from .source_paths import absolute_source_path
 from .store import safe_path, atomic
 
 MIB = 1024 ** 2
@@ -42,8 +44,8 @@ def private_dir(path):
     path = safe_path(path)
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     info = path.stat()
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
-        raise Error('AUTH_DENIED', 'Personal storage must be owned by this account and mode 700.')
+    if not stat.S_ISDIR(info.st_mode) or not _platform.private_path(path, info):
+        raise Error('AUTH_DENIED', 'Personal storage must be private and owned by this account.')
     return path
 
 
@@ -51,11 +53,11 @@ def read_json(path, default=None):
     path = safe_path(path)
     if not path.exists(): return default
     info = path.stat()
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+    if not stat.S_ISREG(info.st_mode) or not _platform.private_path(path, info):
         raise Error('AUTH_DENIED', 'Personal metadata must be a private owned regular file.')
     if info.st_size > MAX_METADATA:
         raise Error('INPUT_TOO_LARGE', 'Personal metadata exceeds its protocol limit.')
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def save_json(path, value):
@@ -133,7 +135,7 @@ def validate_snapshot(value, store):
         check_id(row['device'])
         if not isinstance(row['name'],str) or not row['name'] or '/' in row['name'] or '\\' in row['name'] or len(row['name'])>240:
             raise Error('PATH_INVALID','Invalid asset filename.')
-        if not isinstance(row['path'],str) or not Path(row['path']).is_absolute() or len(row['path'])>4096 or '\x00' in row['path']:
+        if not absolute_source_path(row['path']):
             raise Error('PATH_INVALID','Invalid source location.')
         if type(row['science']) is not bool: raise Error('SCHEMA_INVALID','Invalid asset policy.')
         if row['thread'] not in model.docs or model.docs[row['thread']]['meta']['kind']!='thread':

@@ -6,6 +6,7 @@ from pathlib import Path
 import socket
 
 from .agent_projects import active, agent_name, bind as bind_project
+from . import _platform
 from .errors import Error
 from .personal_protocol import digest, packed
 from .store import safe_path
@@ -28,7 +29,7 @@ def read_journal(value):
     if path.is_symlink() or not path.is_file():
         raise Error('INPUT_INVALID', 'Select a regular Connector journal file.')
     info = path.stat()
-    if info.st_uid != os.geteuid() or info.st_mode & 0o077 or info.st_size > 100000:
+    if not _platform.private_path(path, info) or info.st_size > 100000:
         raise Error('AUTH_DENIED', 'Connector journals must be private, owned and at most 100000 bytes.')
     try:
         raw = path.read_bytes()

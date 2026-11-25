@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 
+from . import __version__
 from .errors import Error
 
 
@@ -75,7 +76,7 @@ class Codex:
                 stream.connect(self.sock)
             self.channel = websocket.create_connection('ws://localhost/', socket=stream,
                                                        suppress_origin=True, timeout=10)
-            self.rpc('initialize', {'clientInfo': {'name':'cosmesh-receiver','version':'0.6.2'},
+            self.rpc('initialize', {'clientInfo': {'name':'cosmesh-receiver','version':__version__},
                                     'capabilities': {'experimentalApi': True}})
             self.channel.send(json.dumps({'method':'initialized'}))
         except BaseException:

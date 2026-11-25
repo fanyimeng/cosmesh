@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+Includes an offline Windows x64 / Python 3.12 client, named-recipient read access to the source Thread of a message, fixed and latest workspace revisions, and incremental work progress synchronization. The workspace actions require a compatible Hub.
+
 ## 0.6.2
 
 - Dispatch owner-only work to a registered DSH or Codex session on a named device. Offline and busy receivers retain their queue. Correlate native turns and sync their results to the original Thread.

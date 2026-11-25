@@ -1,10 +1,14 @@
 """Git-over-SSH Hub; protected key mappings identify application users."""
 import base64
-import fcntl
+from . import _fcntl as fcntl
+from . import _platform
 import hashlib
 import json
 import os
-import pwd
+try:
+    import pwd
+except ImportError:  # Windows: the Hub role requires POSIX accounts.
+    pwd = None
 import re
 import shlex
 import socket
@@ -28,6 +32,10 @@ ZERO = "0" * 40
 
 
 def actor():
+    if pwd is None:
+        # Windows has no POSIX account database; the operating-system name is
+        # what the Hub records as the administrator of a local store.
+        return _platform.account_name()
     return pwd.getpwuid(os.getuid()).pw_name
 
 
@@ -156,6 +164,8 @@ def validate_change(store, before, after, product, user):
 
 class Hub:
     def __init__(self, root):
+        if _platform.WINDOWS:
+            raise Error('PLATFORM_UNSUPPORTED', 'The Hub and gateway require POSIX. Connect over SSH from Windows.')
         self.root = safe_path(root)
 
     def settings(self):
@@ -300,6 +310,8 @@ class Hub:
             community.check(user,write=True)
         # Kernel/SSH callers are already authenticated. Keep legacy registered IDs compatible.
         try:
+            if pwd is None:
+                raise KeyError(user)   # Windows: no POSIX account database.
             pwd.getpwnam(user)
             known = True
         except KeyError:

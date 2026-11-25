@@ -196,7 +196,7 @@ def parser(product, family=None):
 
     clients = command(commands, 'client').add_subparsers(dest='client_command', required=True)
     command(clients, 'check', 'client.check')
-    command(clients, 'update', 'client.update')
+    command(clients, 'update', 'client.update').add_argument('--release', help='Install a local unpacked offline release')
     client_hub = command(clients, 'hub', 'client.hub')
     client_hub.add_argument('--service', help='Default local Hub discovery for this personal client')
     mode = command(clients, 'mode', 'client.mode')
@@ -351,6 +351,8 @@ def capabilities(product):
             "coordination": {"default": "personal_agents", "delegation": "ordinary_request", "requires_server_agent": False},
             "features": {"work_directory": True, "personal_sharing": True, "thread_personal_restore": True,
                          "thread_personal_protocol": "thread.personal.v1", "delivery_protocol": "delivery.v1",
+                         "workspace_protocol": "workspace.v1", "recipient_workspace_access": "read_only",
+                         "work_progress_delta": "thread.delta.v1",
                          "selected_attachments": True, "private_mail_filing": True, "contact_view": True,
                          "collector": ["once", "watch", "summary"], "session_context": "host_reported",
                          "execution_metadata": "thread.execution.v2", "component_management": True,
@@ -458,8 +460,10 @@ def execute(args, product):
         from . import client
         if action == 'client.hub':
             return client.hub(args.service, getattr(args, 'dry_run', False)), None
+        if action == 'client.update' and args.release:
+            return client.update_release(args.release, getattr(args, 'dry_run', False)), None
         if getattr(args, 'dry_run', False) or getattr(args, 'offline', False):
-            raise Error('INPUT_INVALID', 'Client check/update explicitly contacts the release server.')
+            raise Error('INPUT_INVALID', 'Use client update --release DIR for an offline update.')
         return (client.check() if action == 'client.check' else client.update()), None
     if action.startswith('guide.'):
         if getattr(args, 'require_fresh', False) or getattr(args, 'revision', None):
@@ -576,7 +580,7 @@ def execute(args, product):
         if verb == "grant":
             return hub.grant(args.repo, args.user, args.access), None
         if verb == "key-add":
-            registration = hub.register_key(args.user, Path(args.public_key_file).read_text(), args.entrypoint)
+            registration = hub.register_key(args.user, Path(args.public_key_file).read_text(encoding="utf-8"), args.entrypoint)
             return (hub.authorize_key(registration) if args.authorize else registration), None
         if verb == "key-revoke":
             return hub.revoke_key(args.key_id), None
@@ -618,7 +622,7 @@ def execute(args, product):
     # Existing schema-1 personal stores keep their original behavior under the unified CLI.
     config_file = store.path('.cosmesh/config.json')
     if config_file.is_file():
-        legacy = json.loads(config_file.read_text())
+        legacy = json.loads(config_file.read_text(encoding="utf-8"))
         if legacy.get('schema_version') == 1 and legacy.get('product') == 'cosbase': product = 'cosbase'
     if action == "doctor":
         result = {"capabilities": capabilities(product), "python": sys.version.split()[0],
@@ -770,6 +774,10 @@ def main(argv=None, product="cosmesh"):
                 print("[COSMESH:%s] %s" % (getattr(exc, "code", "HUB_VALIDATION_FAILED"), str(exc)), file=sys.stderr)
                 return 1
         data, revision = execute(args, product)
+        if (args.action.startswith(('thread.', 'personal.', 'collect.')) and not getattr(args, 'dry_run', False)
+                and args.action not in {'collect.once', 'collect.status', 'collect.watch'}):
+            from .workspace_progress import after_command
+            after_command(args)
         if args.action in {'library.add','library.revise','library.sync','library.transfer','library.reindex','user.set_name','user.manage'}:
             from .status_pages import schedule
             from .threads import Workbench, workspace_root
@@ -849,10 +857,16 @@ def main(argv=None, product="cosmesh"):
         for issue in receipt.get('issues', []):
             print(issue['file'], issue['reason'])
         return 0
-    if not machine and error is None and action == 'client.update' and data.get('update_notice'):
-        print(data['update_notice']['document'].rstrip())
-        if not (data.get('mesh') or {}).get('ok'):
+    if not machine and error is None and action == 'client.update' and not data.get('dry_run'):
+        if data.get('update_notice'):
+            print(data['update_notice']['document'].rstrip())
+        else:
+            print('当前版本 CosMesh ' + (data.get('version') or data['to']))
+        if 'mesh' in data and not (data['mesh'] or {}).get('ok'):
             print('Hub 连接待确认。联网后运行 cosmesh thread discover。')
+        return 0
+    if not machine and error is None and action == 'guide.show':
+        print(data['text'].rstrip())
         return 0
     if error is None and args.action == 'invite.prompt' and not machine:
         print(data['prompt'], end='')

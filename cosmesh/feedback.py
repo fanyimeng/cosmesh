@@ -1,5 +1,5 @@
 """Shared system feedback: private outbox plus ordinary append-only Updates."""
-import fcntl
+from . import _fcntl as fcntl
 import hashlib
 import json
 import os
@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from . import __version__
 from .access import DEFAULT_DISCOVERY, discovery
+from . import _platform
 from .errors import Error
 from .protocol import identifier, public
 from .service import Service
@@ -94,27 +95,23 @@ class Feedback:
         if self.root.exists():
             safe_path(self.root)
             info = self.root.stat()
-            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            if not stat.S_ISDIR(info.st_mode) or not _platform.private_path(self.root, info):
                 raise Error('AUTH_DENIED', 'The feedback directory must be private and owned by the current account.')
 
     def read_json(self, path):
         safe_path(path)
-        info = path.stat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077 or info.st_nlink != 1:
-            raise Error('AUTH_DENIED', 'Unsafe feedback metadata file.')
-        if info.st_size > 8 * MAX_BODY:
+        with os.fdopen(_platform.private_fd(path, 'AUTH_DENIED'), 'rb') as handle:
+            raw = handle.read(8 * MAX_BODY + 1)
+        if len(raw) > 8 * MAX_BODY:
             raise Error('INPUT_TOO_LARGE', 'Feedback metadata exceeds its limit.')
-        return json.loads(path.read_text())
+        return json.loads(raw.decode('utf-8'))
 
     @contextmanager
     def locked(self, name):
         self.directory(create=True)
         path = safe_path(self.root / (name + '.lock'))
-        descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        descriptor = _platform.private_fd(path, 'AUTH_DENIED', create_lock=True)
         with os.fdopen(descriptor, 'a+') as handle:
-            info = os.fstat(handle.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077 or info.st_nlink != 1:
-                raise Error('AUTH_DENIED', 'Unsafe feedback lock.')
             deadline = time.monotonic() + 3
             while True:
                 try:
@@ -132,7 +129,11 @@ class Feedback:
     def drafts(self):
         self.directory()
         folder = safe_path(self.root / 'outbox')
-        return [(p, self.read_json(p)) for p in sorted(folder.glob('*.json'))] if folder.exists() else []
+        if not folder.exists():
+            return []
+        if _platform.WINDOWS and not _platform.private_path(folder):
+            raise Error('AUTH_DENIED', 'The feedback outbox must be private.')
+        return [(p, self.read_json(p)) for p in sorted(folder.glob('*.json'))]
 
     def queue(self, request, key=None, dry_run=False):
         request = dict(request)
@@ -174,6 +175,8 @@ class Feedback:
         with self.locked('outbox'):
             folder = safe_path(path.parent)
             folder.mkdir(mode=0o700, exist_ok=True)
+            if _platform.WINDOWS and not _platform.private_path(folder):
+                raise Error('AUTH_DENIED', 'The feedback outbox must be private.')
             result = prepare()
             if not result['replayed']:
                 atomic(path, json.dumps(result, ensure_ascii=False, indent=2) + '\n')
@@ -193,7 +196,7 @@ class Feedback:
         for product in ('cosmesh', 'cosbase'):
             client = parent / product / '.cosmesh/client.json'
             if client.is_file():
-                remote = json.loads(client.read_text()).get('remote', {})
+                remote = json.loads(client.read_text(encoding="utf-8")).get('remote', {})
                 if remote.get('kind') in ('system', 'ssh-system'):
                     remote = {**remote, 'repo': repo or DEFAULT_REPO}
                     candidates[json.dumps(remote, sort_keys=True)] = remote

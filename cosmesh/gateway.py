@@ -1,5 +1,5 @@
 """Local kernel-authenticated Git access; one trusted relay between execution hosts."""
-import fcntl
+from . import _fcntl as fcntl
 import json
 import os
 import re
@@ -350,9 +350,17 @@ class Handler(socketserver.BaseRequestHandler):
                 pass
 
 
-class Server(socketserver.ForkingMixIn, socketserver.UnixStreamServer):
-    max_children = 32
-    timeout = 1
+if hasattr(socketserver, 'ForkingMixIn') and hasattr(socketserver, 'UnixStreamServer'):
+    class Server(socketserver.ForkingMixIn, socketserver.UnixStreamServer):
+        max_children = 32
+        timeout = 1
+else:
+    class Server:
+        """The gateway role needs fork and AF_UNIX, so it stays POSIX-only."""
+
+        def __init__(self, *args, **kwargs):
+            raise Error('PLATFORM_UNSUPPORTED',
+                        'The local gateway requires POSIX fork and AF_UNIX sockets.')
 
 
 def run(hub_root, discovery_path):

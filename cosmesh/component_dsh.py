@@ -44,7 +44,7 @@ def executable(value=None):
 
 def invoke(cli, args):
     try:
-        result = subprocess.run([cli] + args, capture_output=True, text=True, timeout=120)
+        result = subprocess.run([cli] + args, capture_output=True, text=True, encoding='utf-8', timeout=120)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise Error('COMPONENT_HOST_FAILED', 'DSH command did not complete; inspect status before retrying.', type(exc).__name__) from None
     if result.returncode:
@@ -72,7 +72,7 @@ def installed(profile, package):
     manifest_path = safe_path(directory / 'package.json')
     if not manifest_path.is_file():
         raise Error('HOST_PROFILE_REQUIRED', 'Initialize the intended DSH profile through DSH first.')
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     dependencies = manifest.get('dependencies', {})
     bundles = manifest.get('dsh', {}).get('profile', {}).get('bundles', [])
     if '@local/cosmesh-dsh-bridge' in dependencies or '@local/cosmesh-dsh-bridge' in bundles:
@@ -82,7 +82,7 @@ def installed(profile, package):
     path = directory / 'node_modules' / package
     if not (path / 'package.json').is_file():
         raise Error('COMPONENT_DRIFT', 'DSH package registration is incomplete; repair it through DSH first.')
-    metadata = json.loads((path / 'package.json').read_text())
+    metadata = json.loads((path / 'package.json').read_text(encoding="utf-8"))
     if metadata.get('name') != package or package not in bundles or package not in dependencies:
         raise Error('COMPONENT_DRIFT', 'DSH bundle registration and installed package disagree.')
     dependency = dependencies[package]

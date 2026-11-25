@@ -124,7 +124,7 @@ class Access:
             raise Error('INPUT_INVALID', 'Invalid Thread access request; caller identity is server-derived.')
         with self.state() as data:
             if method == 'thread_access_info':
-                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'delivery_protocol':'delivery.v1','messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'project_summary_protocol': 'thread.projects.v1'}
+                return {'protocol': FORMAT, 'hub_id': data['hub_id'], 'person': {k:self.person[k] for k in ('id','account','name')}, 'limits': LIMITS, 'unified':self.hub.settings().get('format')==2, 'delivery_protocol':'delivery.v1','workspace_protocol':'workspace.v1','messages_protocol':'thread.messages.v1' if self.hub.settings().get('format')==2 else None, 'project_summary_protocol': 'thread.projects.v1'}
             if method == 'thread_access_set': return self.withdraw(data, p)
             if method == 'thread_access_list':
                 if type(p['direct']) is not bool: raise Error('INPUT_INVALID', 'direct must be boolean.')

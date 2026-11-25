@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+from . import _platform
 from .errors import Error
 from .store import atomic, safe_path
 
@@ -16,10 +17,10 @@ def read():
     target = path()
     if not target.exists(): return {'schema_version': 1, 'fast_mode': True}
     info = target.stat()
-    if info.st_uid != os.geteuid() or info.st_mode & 0o077 or not target.is_file() or info.st_nlink != 1:
+    if not _platform.private_path(target, info) or not target.is_file() or info.st_nlink != 1:
         raise Error('PREFERENCES_INVALID', 'Keep the interaction preference in a private owned file.')
     if info.st_size > 4096: raise Error('PREFERENCES_INVALID', 'Interaction preference is too large.')
-    value = json.loads(target.read_text())
+    value = json.loads(target.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or value.get('schema_version') != 1 or type(value.get('fast_mode')) is not bool:
         raise Error('PREFERENCES_INVALID', 'Expected a versioned boolean fast_mode preference.')
     return value
@@ -34,7 +35,7 @@ def mode(value=None, dry_run=False):
             raise Error('PATH_INVALID', 'Keep interaction preferences outside application versions and Git stores.')
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         info = target.parent.stat()
-        if info.st_uid != os.geteuid() or info.st_mode & 0o077:
+        if not _platform.private_path(target.parent, info):
             raise Error('PREFERENCES_INVALID', 'Keep the preference directory private and owned by you.')
         current['fast_mode'] = value == 'fast'
         atomic(target, json.dumps(current, ensure_ascii=False)+'\n')

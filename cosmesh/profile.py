@@ -1,5 +1,5 @@
 """One private personal profile shared by both clients, outside document stores."""
-import fcntl
+from . import _fcntl as fcntl
 import hashlib
 import os
 import re
@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import yaml
 
 from .access import system_user
+from . import _platform
 from .errors import Error
 from .protocol import StrictLoader
 from .store import atomic, safe_path
@@ -81,14 +82,8 @@ class PersonalProfile:
     def check_directory(self):
         safe_path(self.directory)
         info = self.directory.stat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
-            raise Error('PROFILE_PERMISSIONS', 'The profile directory must be owned by you with mode 700.')
-
-    @staticmethod
-    def check_file(info):
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077 or
-                info.st_nlink != 1):
-            raise Error('PROFILE_PERMISSIONS', 'Profile files must be private regular files owned by you.')
+        if not stat.S_ISDIR(info.st_mode) or not _platform.private_path(self.directory, info):
+            raise Error('PROFILE_PERMISSIONS', 'The profile directory must be private and owned by the current account.')
 
     def read(self):
         fields, raw = dict.fromkeys(FIELDS, ''), None
@@ -96,13 +91,12 @@ class PersonalProfile:
             self.check_directory()
             safe_path(self.path)
             try:
-                descriptor = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                descriptor = _platform.private_fd(self.path, 'PROFILE_PERMISSIONS')
             except FileNotFoundError:
                 descriptor = None
             if descriptor is not None:
                 with os.fdopen(descriptor, 'rb') as handle:
                     info = os.fstat(handle.fileno())
-                    self.check_file(info)
                     if info.st_size > MAX_PROFILE:
                         raise Error('INPUT_TOO_LARGE', 'The personal profile exceeds 64 KiB.')
                     raw = handle.read(MAX_PROFILE + 1)
@@ -119,9 +113,8 @@ class PersonalProfile:
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.check_directory()
         path = safe_path(self.directory / 'profile.lock')
-        descriptor = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        descriptor = _platform.private_fd(path, 'PROFILE_PERMISSIONS', create_lock=True)
         with os.fdopen(descriptor, 'a+') as handle:
-            self.check_file(os.fstat(handle.fileno()))
             deadline = time.monotonic() + 3
             while True:
                 try:

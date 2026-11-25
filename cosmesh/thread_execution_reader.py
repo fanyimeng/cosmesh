@@ -6,6 +6,7 @@ personal sync, contacts a Hub, probes project directories or rewrites bindings.
 import socket
 
 from .personal_protocol import digest, packed, read_json
+from .source_paths import manifest_path
 from .thread_protocol import identifier
 
 
@@ -42,6 +43,13 @@ def binding_rows(wb,tid,state,known):
                     continue
                 row = {'device': group.get('device'), 'replica': replica,
                        'kind': kind, 'binding': binding}
+                workdir = binding.get('workdir')
+                wire = manifest_path(workdir)
+                if wire != workdir:
+                    # Never replace an accepted event or change its content-derived ID.
+                    if digest(packed(row).encode()) in known:
+                        continue
+                    row['binding'] = dict(binding, workdir=wire)
                 rows[digest(packed(row).encode())] = row
     return rows
 

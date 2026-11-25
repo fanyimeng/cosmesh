@@ -28,7 +28,10 @@ cosmesh_temp=$(mktemp -d)
 trap 'rm -rf "$cosmesh_temp"' EXIT HUP INT TERM
 # The existing SSH transport uses this user's small server-side identity entry.
 cosmesh_releases=${cosmesh_source%/*}/releases
-ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=8 "$cosmesh_host" "python3 '$cosmesh_source/bootstrap.py' ensure --releases-dir '$cosmesh_releases'"
+if ! cosmesh_remote_result=$(ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=8 "$cosmesh_host" "python3 '$cosmesh_source/bootstrap.py' ensure --releases-dir '$cosmesh_releases'"); then
+    echo "$cosmesh_remote_result" >&2
+    fail 'Server setup failed.'
+fi
 ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=8 "$cosmesh_host" "cat '$cosmesh_source/local-first.tar.gz'" > "$cosmesh_temp/package.tar.gz"
 tar -xzf "$cosmesh_temp/package.tar.gz" -C "$cosmesh_temp"
 cosmesh_python=''
@@ -51,4 +54,4 @@ fi
 command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1 || fail 'Git is required. Ask your Agent to install Git, then rerun this installer.'
 set --
 [ -z "$cosmesh_service" ] || set -- --service "$cosmesh_service"
-"$cosmesh_python" "$cosmesh_temp/local-first/local_bootstrap.py" --prefix "$cosmesh_prefix" --skills-dir "$cosmesh_skills" --ssh "$cosmesh_host" --source "$cosmesh_source" "$@"
+COSMESH_BOOTSTRAP_HUMAN=1 "$cosmesh_python" "$cosmesh_temp/local-first/local_bootstrap.py" --prefix "$cosmesh_prefix" --skills-dir "$cosmesh_skills" --ssh "$cosmesh_host" --source "$cosmesh_source" "$@"

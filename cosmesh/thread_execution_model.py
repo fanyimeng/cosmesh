@@ -7,6 +7,8 @@ import ntpath
 import posixpath
 import re
 
+from .source_paths import display_path
+
 
 FORMAT = 'thread.execution.v2'
 _AGENT_ALIASES = {'deepseek harness': 'dsh', 'deepseek-harness': 'dsh', 'open code': 'opencode'}
@@ -46,6 +48,7 @@ def normalize_workdir(value):
         raise ValueError('A working directory must be a non-empty string or null.')
     if '\x00' in value:
         raise ValueError('A working directory cannot contain NUL.')
+    value = display_path(value)
     return ntpath.normpath(value) if _WINDOWS_PATH.match(value) else posixpath.normpath(value)
 
 

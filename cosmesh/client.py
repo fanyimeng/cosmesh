@@ -20,10 +20,10 @@ def hub(service=None, dry_run=False):
     prefix = Path(prefix)
     from .store import safe_path, atomic
     path = safe_path(prefix / 'client.json')
-    import fcntl
+    from . import _fcntl as fcntl
     with (prefix / '.lock').open('a+') as lock:
         fcntl.lockf(lock, fcntl.LOCK_EX)
-        saved = json.loads(path.read_text()) if path.is_file() else {}
+        saved = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         selected = saved.get('default_hub')
         if service is not None:
             from .access import discovery
@@ -43,7 +43,7 @@ def config():
     prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
     if not prefix or not (Path(prefix) / 'client.json').is_file():
         raise Error('UPDATE_SOURCE_REQUIRED', 'Run the local-first installer once to configure updates.')
-    saved = json.loads((Path(prefix) / 'client.json').read_text())
+    saved = json.loads((Path(prefix) / 'client.json').read_text(encoding="utf-8"))
     if not all(saved.get(k) for k in ('ssh', 'source', 'skills')):
         raise Error('UPDATE_SOURCE_REQUIRED', 'Run the local-first installer once to configure updates.')
     return Path(prefix), saved
@@ -66,6 +66,10 @@ def fetch(cfg, file):
 
 
 def check():
+    if sys.platform == 'win32':
+        return {'installed_version': __version__, 'available_version': None, 'update_available': None,
+                'execution': 'local', 'automatic_updates': False, 'update_source': 'offline_release',
+                'hint': 'Use client update --release DIR --dry-run to inspect an unpacked Windows release.'}
     _, cfg = config()
     channel = json.loads(fetch(cfg, 'stable-local.json'))
     return {'installed_version': __version__, 'available_version': channel['version'],
@@ -73,7 +77,28 @@ def check():
             'execution': 'local', 'automatic_updates': False}
 
 
+def update_release(release, dry_run=False):
+    prefix = os.environ.get('COSMESH_INSTALL_PREFIX')
+    if not prefix or not (Path(prefix) / 'manager.py').is_file():
+        raise Error('NOT_MANAGED_INSTALL', 'Run the installed CosMesh command to apply an offline release.')
+    args = [sys.executable, '-I', '-X', 'utf8', str(Path(prefix) / 'manager.py'), 'upgrade',
+            '--prefix', prefix, '--release', str(Path(release).resolve()), '--json']
+    if dry_run:
+        args.append('--dry-run')
+    result = subprocess.run(args, capture_output=True, text=True, encoding='utf-8')
+    try:
+        receipt = json.loads(result.stdout)
+    except ValueError:
+        raise Error('UPDATE_FAILED', 'The offline installer returned no valid receipt.', result.stderr[-1800:]) from None
+    if result.returncode or not receipt['ok']:
+        detail = receipt.get('error') or {}
+        raise Error(detail.get('code', 'UPDATE_FAILED'), detail.get('message', 'Offline update failed.'))
+    return receipt['data']
+
+
 def update():
+    if sys.platform == 'win32':
+        raise Error('UPDATE_SOURCE_REQUIRED', 'Use client update --release DIR with the unpacked Windows release.')
     prefix, cfg = config()
     script = fetch(cfg, 'install.sh')
     with tempfile.TemporaryDirectory(prefix='cosmesh-update-') as folder:
@@ -81,11 +106,11 @@ def update():
         file.write_bytes(script)
         env = dict(os.environ, COSMESH_BOOTSTRAP_PYTHON=sys.executable)
         r = subprocess.run(['sh', str(file), cfg['ssh'], '--prefix', str(prefix), '--dest', cfg['skills'],
-                            '--source', cfg['source']], env=env, capture_output=True, text=True)
+                            '--source', cfg['source']], env=env, capture_output=True, text=True, encoding='utf-8')
     if r.returncode:
         raise Error('UPDATE_FAILED', 'Local update stopped; documents are preserved.', (r.stderr or r.stdout)[-1800:])
-    state = json.loads((prefix / 'state.json').read_text())
-    saved = json.loads((prefix / 'client.json').read_text())
-    return {'updated': True, 'version': state['current'], 'execution': 'local', 'data_unchanged': True,
+    state = json.loads((prefix / 'state.json').read_text(encoding="utf-8"))
+    saved = json.loads((prefix / 'client.json').read_text(encoding="utf-8"))
+    return {'updated': state['current'] != __version__, 'version': state['current'], 'execution': 'local', 'data_unchanged': True,
             'mesh': saved.get('mesh_setup'), 'update_notice':(saved.get('mesh_setup') or {}).get('update_notice'), 'retired_skills':state.get('retired_skills',{}),
             'session_hint':'请新开 Agent 会话加载统一 CosMesh Skill。'}

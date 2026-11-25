@@ -3,7 +3,7 @@
 No model, polling, network, or shared-home database. A bounded one-shot worker
 coalesces committed changes; readers recover cold, stale, and damaged caches.
 """
-import fcntl
+from . import _fcntl as fcntl
 import hashlib
 import json
 import os
@@ -16,6 +16,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import _platform
 from .errors import Error
 from .store import Store, atomic, safe_path
 from .threads import Workbench, now
@@ -40,12 +41,12 @@ def snippet(text, chars):
 def cache_root(wb, create=True):
     # tempfile is host-local on supported installations; do not put SQLite in
     # the workbench or a shared home. The directory is private even for Mesh.
-    parent = safe_path(os.environ.get('COSMESH_PAGE_CACHE', str(Path(tempfile.gettempdir()).resolve() / ('cosmesh-pages-' + str(os.geteuid())))))
+    parent = safe_path(os.environ.get('COSMESH_PAGE_CACHE', str(Path(tempfile.gettempdir()).resolve() / ('cosmesh-pages-' + _platform.cache_user()))))
     if parent == wb.base.root or wb.base.root in parent.parents:
         raise Error('PATH_INVALID', 'Keep derived status pages outside the source workbench.')
     if create: parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     for path in (parent, parent / digest(str(wb.base.root))[:32]):
-        if path.exists() and (path.is_symlink() or path.stat().st_uid != os.geteuid() or path.stat().st_mode & 0o077):
+        if path.exists() and (path.is_symlink() or not _platform.private_path(path)):
             raise Error('AUTH_DENIED', 'Status-page caches must be private and owned by this account.')
     root = parent / digest(str(wb.base.root))[:32]
     if create: root.mkdir(mode=0o700, exist_ok=True)
@@ -55,7 +56,7 @@ def cache_root(wb, create=True):
 @contextmanager
 def database(root):
     path = safe_path(root / 'index.sqlite3')
-    if path.exists() and (path.stat().st_uid != os.geteuid() or path.stat().st_mode & 0o077):
+    if path.exists() and not _platform.private_path(path):
         raise Error('AUTH_DENIED', 'The derived index must be private.')
     fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600); os.close(fd)
     con = sqlite3.connect(str(path), timeout=2)
@@ -101,7 +102,7 @@ def stamp(wb):
     """Cheap committed-version checks; no snapshots, bound paths or network."""
     if hasattr(wb,'public_tokens'):return wb.public_tokens
     client = wb.read_client()
-    config = json.loads(wb.base.path('.cosmesh/config.json').read_text())
+    config = json.loads(wb.base.path('.cosmesh/config.json').read_text(encoding="utf-8"))
     sources = {}
     for repo in ['local', *sorted(client['spaces'])]:
         if repo != 'local' and not REPO.fullmatch(repo):
@@ -111,7 +112,7 @@ def stamp(wb):
         store.path('.git')
         if store.pending.exists() or store.path('.cosmesh/conflict.json').exists():
             raise Error('STORE_BUSY', 'A source operation needs recovery before reading status pages.')
-        sources[repo] = {'head': store.head, 'config': digest(store.path('.cosmesh/config.json').read_text()),
+        sources[repo] = {'head': store.head, 'config': digest(store.path('.cosmesh/config.json').read_text(encoding="utf-8")),
                          'client': store.client()}
     knowledge = wb.base.path('.cosmesh/knowledge/snapshot.json')
     # Directory/knowledge changes matter without a Thread HEAD change.

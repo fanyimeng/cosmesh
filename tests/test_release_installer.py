@@ -1,9 +1,12 @@
 import base64
 import json
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tools import release_installer as release
 
@@ -15,6 +18,53 @@ class ReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.prefix = self.root/'app'
         self.prefix.mkdir()
+
+    def test_clean_interpreter_starts_manager_without_installed_cosmesh(self):
+        manager = self.root / 'install.py'
+        shutil.copy2(release.__file__, manager)
+        reply = subprocess.run([sys.executable, '-I', '-S', '-B', manager, '--help'],
+                               cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(reply.returncode, 0, reply.stderr)
+        self.assertIn('rollback', reply.stdout)
+
+    def test_windows_wrappers_follow_the_manager_and_runtime_layout(self):
+        with patch.object(release.sys, 'platform', 'win32'):
+            changes = release.wrappers(self.prefix, Path(sys.executable), b'manager')
+            self.assertEqual([path.name for path, _, _ in changes], ['manager.py', 'cosmesh.cmd', 'cosbase.cmd'])
+            self.assertEqual(release.runtime_python(self.prefix), self.prefix / 'Scripts/python.exe')
+            for path, content, _ in changes[1:]:
+                command = content.decode('ascii')
+                self.assertIn('"%~dp0..\\manager.py" launch ' + path.stem + ' %*', command)
+                self.assertIn('-I -X utf8', command)
+
+    def test_windows_bundle_checks_interpreter_and_posix_manifest_names(self):
+        pkg = self.root / 'offline'
+        wheels = pkg / 'wheels'
+        wheels.mkdir(parents=True)
+        (pkg / 'install.py').write_bytes(b'manager')
+        (wheels / 'app.whl').write_bytes(b'wheel')
+        meta = {'format': 1, 'product': 'cosmesh', 'version': '0.6.2', 'schema_write': [1, 2, 3],
+                'platform': 'win32', 'python': '3.12', 'machine': 'AMD64',
+                'release_id': 'cosmesh-0.6.2-win32-AMD64-py312', 'wheel': 'wheels/app.whl',
+                'wheels': ['wheels/app.whl'],
+                'files': {'install.py': release.digest(b'manager'), 'wheels/app.whl': release.digest(b'wheel')}}
+        (pkg / 'release.json').write_bytes(json.dumps(meta, indent=2).replace('\n', '\r\n').encode())
+        with patch.object(sys, 'platform', 'win32'), patch.object(sys, 'version_info', (3, 12)), \
+                patch('sysconfig.get_platform', return_value='win-amd64') as platform_tag, \
+                patch.object(release.shutil, 'which', return_value='git.exe'):
+            self.assertEqual(release.bundle(pkg)[1]['release_id'], meta['release_id'])
+            platform_tag.return_value = 'win32'
+            with self.assertRaises(release.Failure) as failure:
+                release.bundle(pkg)
+            self.assertEqual(failure.exception.code, 'PLATFORM_MISMATCH')
+
+    def test_windows_install_path_rejects_junctions(self):
+        path = Mock()
+        with patch.object(release.os, 'name', 'nt'):
+            path.lstat.return_value.st_file_attributes = 0x410  # REPARSE_POINT | DIRECTORY
+            self.assertTrue(release.redirected(path))
+            path.lstat.return_value.st_file_attributes = 0x10
+            self.assertFalse(release.redirected(path))
 
     def test_switch_failure_rolls_back_skills_and_state(self):
         skill = self.root/'skills/cosbase/SKILL.md'

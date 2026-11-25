@@ -1,15 +1,29 @@
 """Selected-Thread private manifests. No repository configuration crosses devices."""
 import json
 import re
-from pathlib import Path
 
 from .errors import Error
 from .personal_protocol import check_id, digest, packed, validate_snapshot
 from .protocol import decode
+from .source_paths import absolute_source_path
 from .thread_protocol import content_version, identifier, validate
 
 FORMAT = 'thread.personal.v1'
 MAPS = ('documents', 'history', 'operations', 'bindings', 'assets')
+DELTA_FORMAT = 'thread.delta.v1'
+MAX_DELTA = 96 * 1024
+
+
+def manifest_delta(base, current):
+    changes = {}
+    for field in MAPS:
+        before, after = base[field], current[field]
+        if before.keys() - after.keys():
+            return None
+        added = {key: value for key, value in after.items() if key not in before or before[key] != value}
+        if added:
+            changes[field] = added
+    return changes
 
 
 def empty(tid):
@@ -88,7 +102,7 @@ def validate_bindings(bindings, tid):
             if not isinstance(binding[field], str) or not binding[field].strip() or len(binding[field]) > 500:
                 raise Error('SCHEMA_INVALID', 'Invalid Agent or host label.')
         path = binding['workdir']
-        if path is not None and (not isinstance(path, str) or not Path(path).is_absolute() or '\x00' in path or len(path) > 4096):
+        if path is not None and not absolute_source_path(path):
             raise Error('PATH_INVALID', 'Invalid destination directory.')
         if row['kind'] == 'project_bindings':
             if binding.get('kind') not in {'project', 'workspace', 'directory'} or not isinstance(binding.get('name'), str) or not binding['name'].strip() or type(binding.get('removed')) is not bool:

@@ -5,3 +5,4 @@ pycparser==2.23
 typing_extensions==4.16.0
 pypdf==6.21.4
 websocket-client==1.8.0
+tzdata==2025.2; sys_platform == "win32"

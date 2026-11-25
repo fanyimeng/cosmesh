@@ -48,7 +48,9 @@ def execute(args, root):
         wb.load()
         if verb=='personal' and getattr(args,'off',False):
             from .collector import enable_sync,owned
+            from .workspace_progress import pause
             tid=owned(wb,args.id);enable_sync(wb,tid,False)
+            pause(wb,tid)
             return {'thread':tid,'personal_sync':'off','previous_snapshot_retained':True},wb.base.head
         if verb == 'locations' and not wb.base.path('.cosmesh/personal-v1/state.json').exists():
             item = wb.find(args.id, 'thread'); tid = item['doc']['meta']['id']
@@ -100,6 +102,13 @@ def execute(args, root):
         if verb in {'personal','fetch'}:
             from .collector import enable_sync
             enable_sync(wb,result['thread'],True)
+        if verb in {'fetch', 'personal', 'sync'}:
+            from .workspace_progress import after_personal
+            try:
+                after_personal(wb, personal, result['thread'], verb)
+            except (Error, OSError) as exc:
+                # Keep the confirmed personal sync receipt when grant discovery is offline.
+                result['workspace_progress'] = {'discovery_pending': True, 'error': getattr(exc, 'code', 'IO_ERROR')}
         if getattr(args, 'brief', False):
             result = brief_receipt(result)
         return result, wb.base.head

@@ -5,6 +5,7 @@ import sqlite3
 from contextlib import closing
 from uuid import uuid4
 
+from . import delivery_workspace as workspace
 from .errors import Error
 from .personal_protocol import HASH, check_id, content_reason, digest, integer, packed, private_dir
 from .personal_relay import Relay
@@ -43,7 +44,7 @@ class Deliveries:
         with self.hub.locked("deliveries-v1"), closing(sqlite3.connect(str(path))) as db:
             path.chmod(0o600)
             db.row_factory = sqlite3.Row
-            db.executescript(SCHEMA)
+            db.executescript(SCHEMA + workspace.SCHEMA)
             with db:
                 return self.run(db, payload, self.enable_search(db))
 
@@ -91,6 +92,9 @@ class Deliveries:
                 )
             ],
         )
+        access = workspace.link(db, row["seq"], self.account)
+        if access:
+            result["workspace"] = {"thread": access["work"], "revision": access["revision"]}
         if detail:
             result.update(
                 body=row["body"], files=json.loads(row["files"]), sources=json.loads(row["sources"])
@@ -124,22 +128,35 @@ class Deliveries:
                 raise Error("INPUT_INVALID", "Invalid fixed source.")
             identifier(source["record"], "E")
             check_id(source["version"], HASH)
-        fingerprint = digest(
-            packed([origin, title, body, files, sources, targets, p.get("parent")]).encode()
-        )
+        signature = [origin, title, body, files, sources, targets, p.get("parent")]
+        sharing = p["method"] == "delivery_workspace_send"
+        if sharing:
+            if not origin or type(p.get("grant")) is not bool:
+                raise Error("INPUT_INVALID", "Choose a source work and an explicit workspace grant decision.")
+            signature.extend([workspace.PROTOCOL, check_id(p.get("snapshot"), HASH), p["grant"], p.get("allow_new")])
+        fingerprint = digest(packed(signature).encode())
         old = db.execute(
-            "SELECT id,fingerprint,revoked FROM deliveries WHERE sender=? AND key=?",
+            "SELECT seq,id,fingerprint,revoked FROM deliveries WHERE sender=? AND key=?",
             (self.account, key),
         ).fetchone()
         if old:
             if old["fingerprint"] != fingerprint:
                 raise Error("IDEMPOTENCY_CONFLICT", "This key identifies a different delivery.")
-            return {
+            receipt = {
                 "id": old["id"],
                 "accepted": True,
                 "replayed": True,
                 "revoked": bool(old["revoked"]),
             }
+            if sharing:
+                saved = workspace.link(db, old["seq"], self.account)
+                active = db.execute("SELECT g.person FROM workspace_grants g JOIN mailbox m ON m.person=g.person "
+                                    "WHERE g.owner=? AND g.work=? AND g.since_seq<=m.seq AND m.seq=? AND m.incoming=1 "
+                                    "ORDER BY g.person", (self.account, origin, old["seq"])).fetchall()
+                if active and not old["revoked"]:
+                    receipt["workspace"] = {"thread": saved["work"], "revision": saved["revision"],
+                                            "active_recipients": [r[0] for r in active]}
+            return receipt
         recipients = sorted({self.member(t) for t in targets})
         if self.account in recipients:
             raise Error("INPUT_INVALID", "Save your own note with thread note ID --body TEXT.")
@@ -177,7 +194,7 @@ class Deliveries:
             (self.account, origin),
         ).fetchone()[0]
         size = total + len(body.encode()) + len(title.encode())
-        if total > PUBLIC["batch"] or size + used > PUBLIC["retained"]:
+        if total > PUBLIC["batch"] or size + used + workspace.usage(db, self.account, origin) > PUBLIC["retained"]:
             raise Error("STORAGE_QUOTA", "Delivery exceeds the sharing quota.")
         mid = "M-" + uuid4().hex
         seq = db.execute(
@@ -211,12 +228,19 @@ class Deliveries:
                 "INSERT INTO mailbox VALUES(?,?,?,?,?,?)",
                 (account, seq, incoming, work, "linked" if work else "pending", not incoming),
             )
-        return {"id": mid, "accepted": True, "replayed": False}
+        receipt = {"id": mid, "accepted": True, "replayed": False}
+        if sharing:
+            receipt["workspace"] = workspace.attach(self, db, p, seq, recipients)
+        return receipt
 
     def run(self, db, p, indexed):
         method = p["method"]
-        if method == "delivery_send":
+        if method.startswith("delivery_workspace_"):
+            workspace.validate_request(p)
+        if method in ("delivery_send", "delivery_workspace_send"):
             return self.send(db, p, indexed)
+        if method.startswith("delivery_workspace_"):
+            return workspace.dispatch(self, db, p)
         if method == "delivery_mark_many":
             ids=p.get("ids")
             if not isinstance(ids,list) or not 1<=len(ids)<=100 or not all(isinstance(mid,str) for mid in ids) or type(p.get("seen")) is not bool:

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import queue
 import select
 import shlex
 import socket
@@ -13,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 from .errors import Error
@@ -25,6 +27,32 @@ class Frames:
     """Buffered JSON control frames; never used on a Git binary stream."""
     def __init__(self, channel):
         self.channel, self.buffer = channel, bytearray()
+        self.queue = None
+
+    def _receive(self, remaining):
+        if sys.platform != 'win32' or isinstance(self.channel, socket.socket):
+            if not select.select([self.channel], [], [], remaining)[0]:
+                raise Error('SYNC_NETWORK', 'Control channel timed out.')
+            return (self.channel.recv(65536) if isinstance(self.channel, socket.socket)
+                    else os.read(self.channel.fileno(), 65536))
+        # Windows select() only accepts sockets, so a worker thread waits on the
+        # pipe instead; closing the channel unblocks it with an empty read.
+        if self.queue is None:
+            self.queue = queue.Queue()
+            def pump():
+                while True:
+                    try:
+                        data = os.read(self.channel.fileno(), 65536)
+                    except (OSError, ValueError):
+                        data = b''
+                    self.queue.put(data)
+                    if not data:
+                        return
+            threading.Thread(target=pump, daemon=True).start()
+        try:
+            return self.queue.get(timeout=remaining)
+        except queue.Empty:
+            raise Error('SYNC_NETWORK', 'Control channel timed out.') from None
 
     def read(self, timeout=90):
         deadline = time.monotonic() + timeout
@@ -39,9 +67,8 @@ class Frames:
                 return value
             if len(self.buffer) > LIMIT: raise Error('INPUT_TOO_LARGE', 'Control frame exceeds its limit.')
             remaining = deadline-time.monotonic()
-            if remaining <= 0 or not select.select([self.channel], [], [], remaining)[0]:
-                raise Error('SYNC_NETWORK', 'Control channel timed out.')
-            data = self.channel.recv(65536) if isinstance(self.channel, socket.socket) else os.read(self.channel.fileno(), 65536)
+            if remaining <= 0: raise Error('SYNC_NETWORK', 'Control channel timed out.')
+            data = self._receive(remaining)
             if not data:
                 if not self.buffer: return None
                 raise Error('SYNC_NETWORK', 'Control channel closed within a frame.')
@@ -57,6 +84,10 @@ def send_frame(channel, value):
 
 def control_options(arguments):
     """Pass all options explicitly; never read keys or edit the user's SSH config."""
+    if sys.platform == 'win32':
+        # Windows OpenSSH implements no ControlMaster/ControlPath, so there is no
+        # control socket to create, cache or protect: every call is its own process.
+        return []
     pool = _current.get()
     key = tuple(arguments)
     if pool is not None and key in pool.options: return pool.options[key]
@@ -103,7 +134,7 @@ class Control:
             self.pool.stats['local_channels'] += 1
         else:
             from .sync import system_ssh
-            source = (Path(__file__).parent/'resources/community_rpc.py').read_text()
+            source = (Path(__file__).parent/'resources/community_rpc.py').read_text(encoding="utf-8")
             command = shlex.join(['python3', '-c', source, self.config['discovery'], '--stream'])
             self.errors = tempfile.TemporaryFile()
             self.process = subprocess.Popen(system_ssh(self.config['host'])+[command], stdin=subprocess.PIPE,

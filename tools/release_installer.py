@@ -3,13 +3,14 @@
 
 import argparse
 import base64
-import fcntl
+import errno
 import hashlib
 import json
 import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -33,17 +34,26 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def redirected(path):
+    if os.name != "nt":
+        return path.is_symlink()
+    try:
+        return bool(path.lstat().st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+
+
 def canonical(path):
     path = Path(os.path.abspath(Path(path).expanduser()))
     for component in (path,) + tuple(path.parents):
-        if component.is_symlink() and str(component) not in ("/tmp", "/var"):
+        if redirected(component) and str(component) not in ("/tmp", "/var"):
             raise Failure("PATH_CONFLICT", "路径包含符号链接，请选择真实目录：" + str(component))
     return path.resolve()
 
 
 def atomic(path, data, mode=0o600):
     path = Path(path)
-    if path.is_symlink():
+    if redirected(path):
         raise Failure("PATH_CONFLICT", "保留已有符号链接：" + str(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".cosmesh-write-", dir=str(path.parent))
@@ -65,7 +75,7 @@ def json_bytes(data):
 
 def read_bytes(path):
     path = Path(path)
-    if path.is_symlink():
+    if redirected(path):
         raise Failure("PATH_CONFLICT", "保留已有符号链接：" + str(path))
     return path.read_bytes() if path.exists() else None
 
@@ -74,21 +84,31 @@ def clean_env():
     env = dict(os.environ)
     for name in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "__PYVENV_LAUNCHER__"):
         env.pop(name, None)
-    env.update(PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1", PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_NO_CACHE_DIR="1")
+    env.update(PYTHONUTF8="1", PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1", PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_NO_CACHE_DIR="1")
     return env
 
 
 def checked(command, env=None):
     result = subprocess.run([str(x) for x in command], text=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, env=env or clean_env())
+                            stderr=subprocess.PIPE, encoding="utf-8", errors="replace", env=env or clean_env())
     if result.returncode:
         raise Failure("INSTALL_FAILED", (result.stderr or result.stdout).strip()[-4000:])
     return result.stdout.strip()
 
 
+def runtime_python(runtime):
+    return runtime / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+
+
+def command_path(prefix, name):
+    return prefix / "bin" / (name + ".cmd" if sys.platform == "win32" else name)
+
+
 def base_interpreter():
     candidates = [Path(sys.base_prefix) / "bin" / ("python%d.%d" % sys.version_info[:2]),
                   Path(sys.base_prefix) / "bin/python3", Path(sys.executable).resolve()]
+    if sys.platform == "win32":
+        candidates.insert(0, Path(sys.base_prefix) / "python.exe")
     for candidate in candidates:
         if candidate.is_file():
             probe = checked([candidate, "-I", "-c", "import sys; print(sys.prefix == sys.base_prefix)"])
@@ -108,7 +128,7 @@ def bundle(path):
         raise Failure("INVALID_RELEASE", "发布文件清单为空。")
     for name, checksum in paths.items():
         relative = Path(name)
-        if relative.is_absolute() or ".." in relative.parts or (root / relative).is_symlink():
+        if relative.is_absolute() or ".." in relative.parts or redirected(root / relative):
             raise Failure("INVALID_RELEASE", "发布文件路径无效。")
         location = root / relative
         if not location.resolve().is_relative_to(root) or digest(location.read_bytes()) != checksum:
@@ -121,9 +141,17 @@ def bundle(path):
     if meta.get("python") != "%d.%d" % sys.version_info[:2] or meta.get("platform") != sys.platform:
         raise Failure("PLATFORM_MISMATCH", "此发布包需要 %s / Python %s。" % (meta.get("platform"), meta.get("python")))
     import platform
-    if meta.get("machine") != platform.machine():
-        raise Failure("PLATFORM_MISMATCH", "此发布包需要架构 " + str(meta.get("machine")))
-    expected_id = "cosmesh-%s-%s-%s-py%d%d" % (meta["version"], sys.platform, platform.machine(), *sys.version_info[:2])
+    import sysconfig
+    machine = meta.get("machine")
+    # A 32-bit or emulated interpreter may report the host CPU architecture.
+    # Use the interpreter's actual wheel platform for this Windows x64 build.
+    if sys.platform == "win32" and machine == "AMD64":
+        compatible = sys.implementation.name == "cpython" and sysconfig.get_platform().lower() == "win-amd64"
+    else:
+        compatible = machine == platform.machine()
+    if not compatible:
+        raise Failure("PLATFORM_MISMATCH", "此发布包需要相应架构的 Python：" + str(machine))
+    expected_id = "cosmesh-%s-%s-%s-py%d%d" % (meta["version"], sys.platform, machine, *sys.version_info[:2])
     if meta.get("release_id") != expected_id or meta.get("schema_write") not in ([1], [1, 2], [1, 2, 3]):
         raise Failure("INVALID_RELEASE", "发布标识或数据格式声明无效。")
     if not shutil.which("git"):
@@ -162,16 +190,34 @@ def locked(prefix, create=False, wait_seconds=0):
     if json.loads(read_bytes(marker)) != MARKER:
         raise Failure("PREFIX_CONFLICT", "此目录不属于 CosMesh 安装器。")
     lock_path = prefix / ".lock"
-    if lock_path.is_symlink():
+    if redirected(lock_path):
         raise Failure("PATH_CONFLICT", "安装锁是符号链接。")
-    with lock_path.open("a+") as handle:
+    # The manager runs before the application wheel exists. Use the OS primitive
+    # directly here; the application locks this same byte in client.hub().
+    if sys.platform == "win32":
+        import msvcrt
+        def acquire(handle):
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        def release(handle):
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        def acquire(handle):
+            fcntl.lockf(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        def release(handle):
+            fcntl.lockf(handle, fcntl.LOCK_UN)
+    with lock_path.open("a+b") as handle:
         import time
         deadline = time.monotonic() + wait_seconds
         while True:
             try:
-                fcntl.lockf(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquire(handle)
                 break
-            except BlockingIOError:
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
                 if time.monotonic() >= deadline:
                     raise Failure("INSTALL_BUSY", "另一个安装 / 升级进程正在使用此目录。")
                 time.sleep(.025)
@@ -179,7 +225,7 @@ def locked(prefix, create=False, wait_seconds=0):
             recover(prefix)
             yield
         finally:
-            fcntl.lockf(handle, fcntl.LOCK_UN)
+            release(handle)
 
 
 def recover(prefix):
@@ -236,12 +282,12 @@ def skill_changes(prefix, state, version, names=None, skills_dir=None):
     result, records = [], dict(existing)
     for name in selected:
         target = canonical(destination / name / "SKILL.md") if names is not None else Path(existing[name]["path"])
-        if target.parent.is_symlink():
+        if redirected(target.parent):
             raise Failure("SKILL_CONFLICT", "保留已有 Skill 链接：" + str(target.parent))
         content = (prefix / "versions" / version / "skills" / name / "SKILL.md").read_bytes()
         local_entry = ("\n\n## 本机用户安装入口\n\n本文命令中的 `%s` 使用以下绝对路径调用：\n\n`%s`\n\n"
                        "该入口由发布安装器管理，自动选择已安装版本；无需进入源码目录或激活开发虚拟环境。\n" %
-                       (name, str(prefix / "bin" / name)))
+                       (name, str(command_path(prefix, name))))
         content += local_entry.encode()
         current = read_bytes(target)
         owned = existing.get(name)
@@ -269,7 +315,7 @@ def preflight_skills(state, names=None, skills_dir=None):
 def prepare(prefix, release, meta):
     version = meta["version"]
     home = prefix / "versions" / version
-    if home.is_symlink():
+    if redirected(home):
         raise Failure("PATH_CONFLICT", "版本目录是符号链接。")
     if home.exists():
         saved = json.loads(read_bytes(home / "release.json"))
@@ -286,23 +332,34 @@ def prepare(prefix, release, meta):
             atomic(home / "skills" / name / "SKILL.md", wheel.read("cosmesh/skills/" + name + "/SKILL.md"))
     runtime = home / "runtime"
     checked([base_interpreter(), "-m", "venv", runtime])
-    python = runtime / "bin/python"
+    python = runtime_python(runtime)
     checked([python, "-I", "-m", "pip", "--isolated", "install", "--prefix", runtime,
              "--no-index", "--no-deps", "--no-compile",
              *[release / item for item in meta["wheels"]]])
     actual = checked([python, "-I", "-c", "import cosmesh; print(cosmesh.__version__)"])
     if actual != version:
         raise Failure("VERSION_MISMATCH", "运行环境中的版本与发布清单不符。")
-    checked([runtime / "bin/cosmesh", "capabilities", "--json"])
+    checked([python, "-I", "-X", "utf8", "-m", "cosmesh", "capabilities", "--json"])
     atomic(home / "ready.json", json_bytes({"version": version, "manifest_sha256": meta["manifest_sha256"]}))
 
 
 def wrappers(prefix, interpreter, manager):
     changes = [(prefix / "manager.py", manager, 0o700)]
     for name in NAMES:
-        script = "#!/bin/sh\nexec %s %s launch %s \"$@\"\n" % (
-            shlex.quote(str(interpreter)), shlex.quote(str(prefix / "manager.py")), name)
-        changes.append((prefix / "bin" / name, script.encode(), 0o700))
+        if sys.platform == "win32":
+            # ASCII-only entry also works under non-UTF-8 Windows code pages.
+            # Resolve the manager relative to this file (prefix may contain Unicode).
+            script = ('@echo off\r\nsetlocal DisableDelayedExpansion\r\n'
+                      'where py.exe >nul 2>nul\r\n'
+                      'if errorlevel 1 goto python\r\n'
+                      'py.exe -%d.%d -I -X utf8 "%%~dp0..\\manager.py" launch %s %%*\r\n'
+                      'exit /b %%errorlevel%%\r\n:python\r\n'
+                      'python.exe -I -X utf8 "%%~dp0..\\manager.py" launch %s %%*\r\n'
+                      'exit /b %%errorlevel%%\r\n') % (*sys.version_info[:2], name, name)
+        else:
+            script = "#!/bin/sh\nexec %s %s launch %s \"$@\"\n" % (
+                shlex.quote(str(interpreter)), shlex.quote(str(prefix / "manager.py")), name)
+        changes.append((command_path(prefix, name), script.encode(), 0o700))
     return changes
 
 
@@ -325,7 +382,7 @@ def unified_plan(prefix, state, version, names, skills_dir):
     if 'cosbase' in existing:
         folder = canonical(Path(existing['cosbase']['path']).parent)
         for file in folder.rglob('*'):
-            if file.is_symlink():
+            if redirected(file):
                 raise Failure('SKILL_CONFLICT', '保留旧 Skill 中的符号链接，请检查：' + str(file))
     return names, skills_dir
 
@@ -393,7 +450,7 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
         next_state["versions"][meta["version"]] = {"manifest_sha256": meta["manifest_sha256"], "schema_write": meta["schema_write"]}
         interpreter = base_interpreter()
         switch_files(prefix, wrappers(prefix, interpreter, (release / "install.py").read_bytes()) + changes, next_state)
-    plan["commands"] = {name: str(prefix / "bin" / name) for name in skill_names(meta["version"])}
+    plan["commands"] = {name: str(command_path(prefix, name)) for name in skill_names(meta["version"])}
     plan["retired_skills"] = next_state.get("retired_skills", {})
     old_skill = Path(skills_dir or Path.home()/'.agents/skills') / 'cosbase' / 'SKILL.md'
     if old_skill.exists() and 'cosbase' not in (state or {}).get('skills', {}):
@@ -408,9 +465,9 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
                 if text and re.search(r'(?<![0-9.])' + re.escape(meta['version']) + r'(?![0-9.])', text.splitlines()[0]):
                     notice = text
     if notice:
-        plan['update_notice'] = {'version':meta['version'], 'document':notice,
-            'read_hint':'升级已完成。请向用户完整展示此更新说明，保留醒目标题和符号；说明本次新增能力、主动开启的共享边界、原数据保留，以及新开 Agent 会话。',
-            'reopen':'cosmesh guide show upgrade --json'}
+        plan['update_notice'] = {'kind': action, 'version': meta['version'], 'document': notice,
+            'read_hint': ('首次安装完成。' if action == 'install' else '升级完成。') + '请向用户展示下方简明使用说明。',
+            'reopen': 'cosmesh guide show upgrade'}
     return plan
 
 
@@ -495,7 +552,7 @@ def uninstall(prefix, dry_run=False):
                 pass
         for version in state["versions"]:
             shutil.rmtree(prefix / "versions" / version)
-        for path in (prefix / "bin/cosmesh", prefix / "bin/cosbase", prefix / "manager.py", prefix / "state.json", prefix / "client.json"):
+        for path in (command_path(prefix, "cosmesh"), command_path(prefix, "cosbase"), prefix / "manager.py", prefix / "state.json", prefix / "client.json"):
             path.unlink(missing_ok=True)
         # Unknown files in the prefix are left in place.
         for directory in (prefix / "bin", prefix / "versions"):
@@ -532,10 +589,15 @@ def launch(prefix, name, arguments):
             return 2
     with locked(prefix, wait_seconds=3):
         state = load_state(prefix, required=True)
-        executable = prefix / "versions" / state["current"] / "runtime/bin/python"
+        runtime = prefix / "versions" / state["current"] / "runtime"
+        executable = runtime_python(runtime)
     env = clean_env()
     env["COSMESH_INSTALL_PREFIX"] = str(prefix)
     code = 'from cosmesh.cli import main; raise SystemExit(main(product=%r))' % name
+    if sys.platform == "win32":
+        # Windows has no execve that replaces this process, so run the client as
+        # a child and hand its exit status back to the caller.
+        return subprocess.run([str(executable), '-I', '-X', 'utf8', '-c', code, *arguments], env=env).returncode
     os.execve(str(executable), [str(executable), '-I', '-c', code, *arguments], env)
 
 
@@ -547,8 +609,12 @@ def emit(data, error, machine):
         print("操作未完成 [%s]：%s" % (error.code, error.message), file=sys.stderr)
     elif data.get("action") in ("install", "upgrade", "rollback"):
         verb = {"install": "安装", "upgrade": "升级", "rollback": "回滚"}[data["action"]]
-        print(("预览：" if data.get("dry_run") else "已完成：") + verb + " CosMesh " + data["to"])
-        if data.get("from"):
+        same_version = data.get("from") == data["to"]
+        if same_version and not data.get("dry_run"):
+            print("已核验当前版本 CosMesh " + data["to"])
+        else:
+            print(("预览：" if data.get("dry_run") else "已完成：") + verb + " CosMesh " + data["to"])
+        if data.get("from") and not same_version:
             print("版本变化：%s → %s" % (data["from"], data["to"]))
         if data.get("commands"):
             print("程序入口：" + data["commands"]["cosmesh"])

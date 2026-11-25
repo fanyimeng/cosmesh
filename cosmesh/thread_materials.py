@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from uuid import uuid4
 
+from . import _platform
 from .errors import Error
 from .knowledge_protocol import MAX_FILE,MAX_TOTAL,attachment_reason,attachment_suffix_reason
 from .material_links import filename,html_ready,link,parse,relative_links
@@ -44,7 +45,7 @@ def selection(args):
     if args.materials:
         path=Path(args.materials).expanduser()
         if path.stat().st_size>1024*1024:raise Error('INPUT_TOO_LARGE','Keep the private file selection below 1 MiB.')
-        value=json.loads(path.read_text())
+        value=json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value,dict) or set(value)-{'format','files','code'} or value.get('format')!=1 or not isinstance(value.get('files',[]),list):
             raise Error('INPUT_INVALID','Use format=1, files and optional code in the private material selection.')
         for f in value.get('files',[]):
@@ -131,9 +132,9 @@ def index_body(files,skipped,missing,code):
 
 def ensure_private_state(wb):
     exclude=wb.base.path('.git/info/exclude');entry='.cosmesh/share-materials/'
-    if entry not in exclude.read_text().splitlines():atomic(exclude,exclude.read_text()+'\n'+entry+'\n')
+    if entry not in exclude.read_text(encoding="utf-8").splitlines():atomic(exclude,exclude.read_text(encoding="utf-8")+'\n'+entry+'\n')
     path=wb.base.path(entry);path.mkdir(mode=0o700,exist_ok=True)
-    if path.stat().st_mode&0o077 or path.stat().st_uid!=os.geteuid():raise Error('AUTH_DENIED','Share continuation receipts must be private.')
+    if not _platform.private_path(path):raise Error('AUTH_DENIED','Share continuation receipts must be private.')
     return path
 
 
@@ -194,7 +195,7 @@ def publish(wb,args,key=None,dry_run=False):
               'resources':args.resource,'code':code,'skipped':skipped,'missing':missing,'summary_only':args.summary_only,'generation':getattr(wb,'generation',None)}
     fingerprint=digest(identity);token=digest(key) if key else fingerprint
     directory=ensure_private_state(wb);receipt=directory/(token+'.json')
-    prior=json.loads(receipt.read_text()) if receipt.exists() else {}
+    prior=json.loads(receipt.read_text(encoding="utf-8")) if receipt.exists() else {}
     if prior and prior['fingerprint']!=fingerprint:raise Error('IDEMPOTENCY_CONFLICT','This share key identifies a different material selection.')
     if prior.get('result'):return {**prior['result'],'replayed':True}
     kb.refresh();refs=[];published=[]
@@ -220,7 +221,7 @@ def publish(wb,args,key=None,dry_run=False):
             if prior.get('operation_value'):
                 value=prior['operation_value'];operation=prior['operation']
             elif latest.exists():
-                old=kb.doc(json.loads(latest.read_text())['id'])
+                old=kb.doc(json.loads(latest.read_text(encoding="utf-8"))['id'])
                 if old['meta']['maintainer']==wb.user:
                     value.update(id=old['meta']['id'],expect=kb.ref(old['meta']['id'])['version']);operation='resource_revise'
             state={'fingerprint':fingerprint,'knowledge_id':value['id'],'operation':operation,'operation_value':value}

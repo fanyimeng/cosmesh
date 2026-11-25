@@ -1,6 +1,6 @@
 """Explicit component installation with immutable bundles and resumable host changes."""
 from contextlib import contextmanager
-import fcntl
+from . import _fcntl as fcntl
 import hashlib
 import json
 import os
@@ -29,7 +29,7 @@ def state_path(root, profile):
 def read_state(path):
     if not path.exists():
         return {'schema': 1, 'components': {}}
-    state = json.loads(path.read_text())
+    state = json.loads(path.read_text(encoding="utf-8"))
     if state.get('schema') != 1 or not isinstance(state.get('components'), dict):
         raise Error('COMPONENT_STATE', 'Unknown component state; preserve it before repair.')
     return state
@@ -59,7 +59,7 @@ def same(left, right):
 def release_info(args, root, item):
     cached = safe_path(root / 'catalog.json')
     if cached.is_file():
-        item = artifacts.merge_catalog(item, json.loads(cached.read_text()))
+        item = artifacts.merge_catalog(item, json.loads(cached.read_text(encoding="utf-8")))
     if (args.component_command in ('install', 'update') and not getattr(args, 'offline', False)
             and not getattr(args, 'artifact', None) and not getattr(args, 'dry_run', False)):
         from .client import config, fetch

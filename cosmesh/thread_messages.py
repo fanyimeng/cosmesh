@@ -153,7 +153,7 @@ class Messages:
             row,sha=sources[rid];source={'repo':row['migrated']['repo'],'id':rid,'version':content_version(doc)}
             candidates['M-'+old_digest(source)]={'source':source,'sender':doc['meta']['author'],'recipients':sorted(recipients),'created_at':doc['meta']['created_at']}
         legacy=self.hub.root/'mail/deliveries.json'
-        if legacy.is_file():candidates.update(json.loads(legacy.read_text()).get('events',{}))
+        if legacy.is_file():candidates.update(json.loads(legacy.read_text(encoding="utf-8")).get('events',{}))
         count=0
         for mid,event in sorted(candidates.items(),key=lambda item:(item[1].get('created_at',''),item[0])):
             ref=event.get('source',{});rid=ref.get('id')
@@ -172,7 +172,7 @@ class Messages:
                        (mid,m['thread'],row['owner_account'],sha,rid,ref['version'],sender,packed(sorted(recipients.values())),kind,'M-'+old_digest(parent) if parent else None,event['created_at']))
             for account,pid in recipients.items():
                 seen=self.hub.root/('mail/seen-'+old_digest(account)+'.json')
-                saved=json.loads(seen.read_text()).get('states',{}) if seen.is_file() else {}
+                saved=json.loads(seen.read_text(encoding="utf-8")).get('states',{}) if seen.is_file() else {}
                 if mid in saved:db.execute('INSERT OR IGNORE INTO seen VALUES(?,?,?,?)',(pid,mid,int(saved[mid]),now()))
             count+=1
         db.execute("INSERT INTO metadata VALUES('legacy_import',?)",(str(count),))

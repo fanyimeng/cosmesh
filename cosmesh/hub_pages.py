@@ -1,5 +1,5 @@
 """Prepare public conversation documents on writes; RPC reads files only."""
-import fcntl
+from . import _fcntl as fcntl
 import hashlib
 import json
 import os

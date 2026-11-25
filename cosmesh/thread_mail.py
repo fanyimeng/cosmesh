@@ -1,6 +1,6 @@
 """Private delivery/read receipts over accepted ordinary Thread interactions."""
 import base64
-import fcntl
+from . import _fcntl as fcntl
 import hashlib
 import json
 import os
@@ -78,7 +78,7 @@ def rebuild(hub, wb, users, generation):
     with locked(hub) as path:
         filename = path / 'deliveries.json'
         first = not filename.is_file()
-        state = json.loads(filename.read_text()) if not first else {'format': 1, 'sequence': 0, 'events': {}}
+        state = json.loads(filename.read_text(encoding="utf-8")) if not first else {'format': 1, 'sequence': 0, 'events': {}}
         state.setdefault('epoch', uuid4().hex)
         baseline = path / 'baseline.json'
         if not baseline.is_file():
@@ -87,7 +87,7 @@ def rebuild(hub, wb, users, generation):
                 history = ['M-' + digest(wb.ref(item)) for item in wb.catalog.values()
                            if item['doc']['meta']['kind'] == 'entry' and recipients(wb,item)]
             atomic(baseline, packed({'historical_ids': history}))
-        historical = set(json.loads(baseline.read_text())['historical_ids'])
+        historical = set(json.loads(baseline.read_text(encoding="utf-8"))['historical_ids'])
         changed = state.get('source_token') != wb.public_tokens['mesh']
         if changed:
             for item in sorted(wb.catalog.values(), key=lambda x: (x['doc']['meta']['created_at'], x['repo'], x['doc']['meta']['id'])):
@@ -149,11 +149,11 @@ def fetch(hub, payload, actor):
         raise Error('INPUT_INVALID', 'Use inbox/outbox, a boolean unread filter and limit 1–100.')
     with locked(hub) as path:
         filename = path / 'deliveries.json'
-        if not filename.is_file() or not json.loads(filename.read_text()).get('source_token'):
+        if not filename.is_file() or not json.loads(filename.read_text(encoding="utf-8")).get('source_token'):
             from .hub_pages import schedule
             schedule(hub)
             return {'ready': False, 'reason': 'preparing'}
-        ledger = json.loads(filename.read_text())
+        ledger = json.loads(filename.read_text(encoding="utf-8"))
         from datetime import datetime
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
         try:
@@ -161,7 +161,7 @@ def fetch(hub, payload, actor):
         except (ValueError, TypeError, ZoneInfoNotFoundError):
             raise Error('INPUT_INVALID', 'Use an available IANA timezone.')
         seenfile = path / ('seen-' + digest(actor) + '.json')
-        seen = json.loads(seenfile.read_text()) if seenfile.is_file() else {'states': {}}
+        seen = json.loads(seenfile.read_text(encoding="utf-8")) if seenfile.is_file() else {'states': {}}
         peer = None
         if payload.get('peer'):
             from .knowledge import select_user
@@ -200,7 +200,7 @@ def fetch(hub, payload, actor):
             entry['recipient_names'] = [names.get(u, u) for u in entry['recipients']]
             entry['local_time'] = datetime.fromisoformat(entry['created_at']).astimezone(zone).strftime('%Y-%m-%d %H:%M')
         dirty = hub.root / 'views/dirty.json'
-        current = not dirty.is_file() or json.loads(dirty.read_text())['generation'] == ledger['generation']
+        current = not dirty.is_file() or json.loads(dirty.read_text(encoding="utf-8"))['generation'] == ledger['generation']
         if not current:
             from .hub_pages import schedule
             schedule(hub)
@@ -228,7 +228,7 @@ def mark(hub, payload, actor):
         filename = path / 'deliveries.json'
         if not filename.is_file():
             raise Error('NOT_FOUND', 'The mailbox is not prepared yet.')
-        ledger = json.loads(filename.read_text())
+        ledger = json.loads(filename.read_text(encoding="utf-8"))
         if any(not isinstance(mid, str) for mid in payload['ids']):
             raise Error('INPUT_INVALID', 'Message IDs must be strings.')
         ids = list(dict.fromkeys(payload['ids']))
@@ -236,7 +236,7 @@ def mark(hub, payload, actor):
             if not isinstance(mid, str) or mid not in ledger['events'] or not visible(hub, ledger['events'][mid], actor, 'inbox'):
                 raise Error('NOT_FOUND', 'Only your available received messages can be marked.')
         filename = path / ('seen-' + digest(actor) + '.json')
-        state = json.loads(filename.read_text()) if filename.is_file() else {'format': 1, 'states': {}}
+        state = json.loads(filename.read_text(encoding="utf-8")) if filename.is_file() else {'format': 1, 'states': {}}
         state['states'].update({mid: payload['seen'] for mid in ids}); state['at'] = now()
         atomic(filename, packed(state))
         return {'marked': ids, 'seen': payload['seen'], 'private': True}
@@ -264,7 +264,7 @@ def execute(wb, args):
     payload = {'method': 'thread_mail', 'folder': folder, 'limit': getattr(args, 'limit', 10),
                'before': getattr(args, 'before', None), 'unread': getattr(args, 'unread', False),
                'peer': getattr(args, 'contact', None), 'thread': getattr(args, 'thread', None),
-               'timezone': json.loads(wb.base.path('.cosmesh/config.json').read_text())['timezone']}
+               'timezone': json.loads(wb.base.path('.cosmesh/config.json').read_text(encoding="utf-8"))['timezone']}
     if command == 'mail':
         payload['id'] = args.id
     actor = wb.client.get('actor'); connection = wb.client.get('connection')
@@ -272,7 +272,7 @@ def execute(wb, args):
         raise Error('HUB_CONNECTION_REQUIRED', 'Discover your existing Mesh connection before using mail.')
     path = cache_root(wb) / ('mail-' + digest([actor, connection, payload]) + '.json')
     stamp = wb.path.stat().st_mtime_ns
-    cached = json.loads(path.read_text()) if path.is_file() else None
+    cached = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
     offline = getattr(args, 'offline', False)
     if cached and (offline or (not getattr(args, 'require_fresh', False) and cached['source_stamp'] == stamp)):
         value = cached['data']; value['freshness']['validation'] = 'cached'; return value

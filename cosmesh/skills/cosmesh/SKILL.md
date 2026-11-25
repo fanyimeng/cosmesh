@@ -3,7 +3,7 @@ name: cosmesh
 description: 查找与接续本人的 Thread、收集项目变化、向指定联系人投递资料并处理收件。
 ---
 
-用户要求升级时，执行 `cosmesh client update --json`，向用户展示回执中的 `update_notice.document`。同版检查无新提示时直接报告版本。
+首次安装或升级成功后，把回执中的 `update_notice.document` 正文展示给用户，包括第一次建工作、共享选择和收件入口。配置了稳定渠道的客户端用 `cosmesh client update --json` 升级，Windows 离线包用 `cosmesh client update --release DIR --json`。同版检查直接报告版本。用户随时可用 `cosmesh guide show upgrade` 重看简明说明。
 
 ## 快速接续
 
@@ -21,6 +21,8 @@ description: 查找与接续本人的 Thread、收集项目变化、向指定联
 
 ## 给人发、收和归档
 
-`thread send [ID] --to ACCOUNT --body TEXT` 可重复指定 `--record ID` 和 `--attach FILE`。按用户要求选取内容和收件人。需要审阅时使用 `--dry-run`，随后带 `--expect PREVIEW` 发送；网络重试复用同一操作键或预览。成功回执已确认投递。
+从自己的 Thread 发消息或回复，先明确收件人和来源工作。用户已明确「共享这项工作的完整内容和后续进展」时，可用 `--share-workspace`；明确仅发消息时用 `--message-only`。仅说「发消息」且有来源 Thread 时，用 `thread mail sharing ID --to ACCOUNT --json` 核对。对新增收件人，用自然语言问「是否让 [收件人] 持续查看 [工作名] 的记录、历史、已登记文件和后续进展？也可以只发这条消息。」等用户选择后再发送。对已有授权的收件人可复用现有权限。缺少来源时，普通消息可直接投递；需要共享则先选本人的工作。选定后使用 `thread send ID --to ACCOUNT --body TEXT` 加上相应选项，`--record ID` 和 `--attach FILE` 可重复。审阅时加 `--dry-run`，发送时保留相同选项并加 `--expect PREVIEW`。重试沿用同一操作键或预览。普通旧 Hub 可仅发消息；用户选择共享时应报告所需能力。
 
 收消息用 `thread inbox --json`，只看未读可加 `--unread`。列表已有摘录和关联建议，确需全文时用 `thread mail show MID`，多个已读标记可以一次执行 `thread mail mark MID1 MID2 --seen`。用户选定后用 `thread mail file MID --thread ID` 或 `--defer`。`thread reply MID --body TEXT` 沿原往来回复，按人查询用 `thread chat --with ACCOUNT`，按工作查询用 `thread activity ID`。附件按需下载，发送人可撤回后续在线读取。
+
+来信带 workspace 时，用 `thread mail open MID` 看最新定义，`--records` 看工作进展，`--at-send` 固定到发件时。文件先 `--files`，用户需要落盘时用 `--download ASSET_ID --output NEW_PATH`。所有者撤权用 `thread mail unshare ID --from ACCOUNT`。共享进展从 `collect status --json` 查状态，`collect once --json` 立即补同步。

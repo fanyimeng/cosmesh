@@ -49,6 +49,7 @@ class Relay:
             'personal_thread_list':{'method'}, 'personal_work_list':{'method'},
             'personal_thread_head':{'method','thread'},
             'personal_thread_commit':{'method','thread','sha','expect'},
+            'personal_thread_delta':{'method','thread','sha','expect','changes'},
             'personal_execution_list':{'method'},
             'personal_execution_head':{'method','thread'},
             'personal_execution_commit':{'method','thread','sha','expect'},
@@ -94,8 +95,9 @@ class Relay:
             from .task_queue import dispatch
             return dispatch(self, db, method[len('personal_task_'):], p)
         if method=='personal_info':
-            return {'protocol':'personal.v1','thread_protocol':'thread.personal.v1','task_protocol':'thread.task.v1','execution_protocol':'thread.execution.v1','limits':self.policy,
+            return {'protocol':'personal.v1','thread_protocol':'thread.personal.v1','delta_protocol':'thread.delta.v1','task_protocol':'thread.task.v1','execution_protocol':'thread.execution.v1','limits':self.policy,
                     'access_protocol':'thread.access.v1' if self.hub.community() else None,
+                    'workspace_protocol':'workspace.v1' if self.hub.community() else None,
                     'unified':self.hub.settings().get('format')==2,
                     'stored_bytes':db.execute('SELECT COALESCE(SUM(size),0) FROM blobs').fetchone()[0],
                     'traffic_bytes':db.execute('SELECT COALESCE(SUM(bytes),0) FROM traffic').fetchone()[0]}
@@ -118,13 +120,15 @@ class Relay:
         if method in {'personal_thread_list','personal_execution_list'}:
             table='execution_heads' if method=='personal_execution_list' else 'thread_heads'
             return {'threads':[dict(r) for r in db.execute('SELECT * FROM '+table+' ORDER BY thread')], 'audience':'owner'}
-        if method in {'personal_thread_head','personal_thread_commit','personal_execution_head','personal_execution_commit'}:
+        if method in {'personal_thread_head','personal_thread_commit','personal_thread_delta','personal_execution_head','personal_execution_commit'}:
             from .thread_protocol import identifier
             tid=identifier(p['thread'],'W')
             table='execution_heads' if method.startswith('personal_execution_') else 'thread_heads'
             current=db.execute('SELECT sha FROM '+table+' WHERE thread=?',(tid,)).fetchone()
             head=current['sha'] if current else None
             if method.endswith('_head'): return {'thread':tid,'sha':head}
+            if method == 'personal_thread_delta':
+                return self.commit_delta(db, p, head)
         if method in {'personal_head','personal_commit'}:
             workspace=check_id(p['workspace'])
             current=db.execute('SELECT sha FROM heads WHERE workspace=?',(workspace,)).fetchone()
@@ -214,13 +218,54 @@ class Relay:
         db.execute('INSERT OR IGNORE INTO history VALUES(?,?,?)',(workspace,sha,time.time()))
         return {'workspace':workspace,'sha':sha,'accepted':True,'replayed':False}
 
-    def commit_thread(self,db,p,head,row,final):
+    def commit_delta(self, db, p, head):
+        from .store import atomic, safe_path
+        from .thread_personal_protocol import MAPS, MAX_DELTA
+        sha = check_id(p['sha'], HASH)
+        expected = check_id(p['expect'], HASH)
+        if sha == head:
+            return {'thread': p['thread'], 'sha': head, 'accepted': True, 'replayed': True}
+        if head != expected:
+            raise Error('PERSONAL_CONFLICT', 'Thread advanced; synchronize this Thread again.')
+        changes = p['changes']
+        if not isinstance(changes, dict) or set(changes) - set(MAPS) or not all(
+                isinstance(entries, dict) for entries in changes.values()):
+            raise Error('INPUT_INVALID', 'Invalid incremental Thread metadata.')
+        wire_size = len(packed(changes).encode())
+        if wire_size > MAX_DELTA:
+            raise Error('INPUT_TOO_LARGE', 'Incremental Thread metadata exceeds the single-request limit.')
+        base = json.loads(safe_path(self.blobs / expected).read_bytes())
+        for field, entries in changes.items():
+            base[field].update(entries)
+        raw = packed(base).encode()
+        size = len(raw)
+        if size > min(MAX_METADATA, self.policy['explicit_file']):
+            raise Error('INPUT_TOO_LARGE', 'The reconstructed Thread exceeds the metadata limit.')
+        if digest(raw) != sha:
+            raise Error('CHECKSUM_MISMATCH', 'The incremental update differs from the proposed snapshot.')
+        row = db.execute('SELECT size FROM blobs WHERE sha=?', (sha,)).fetchone()
+        if row is None:
+            used = db.execute('SELECT coalesce(sum(size),0) FROM blobs').fetchone()[0]
+            if used + size > self.policy['server_bytes']:
+                raise Error('STORAGE_QUOTA', 'Private relay storage quota reached.')
+        elif row['size'] != size:
+            raise Error('STATE_CONFLICT', 'Object size differs from the registered object.')
+        self.budget(db, wire_size)
+        final = safe_path(self.blobs / sha)
+        receipt = self.commit_thread(db, p, head, {'size': size}, final, raw=raw)
+        # Publish the immutable bytes before committing the head and blob ledger together.
+        # Replacing also repairs an orphaned object from a previously interrupted transaction.
+        atomic(final, raw.decode())
+        db.execute('INSERT OR REPLACE INTO blobs VALUES(?,?,?,1)', (sha, size, size))
+        return receipt
+
+    def commit_thread(self,db,p,head,row,final,raw=None):
         from .thread_personal_protocol import validate_manifest,protect_history
         if p['expect'] is not None: check_id(p['expect'],HASH)
         if head==p['sha']: return {'thread':p['thread'],'sha':head,'accepted':True,'replayed':True}
         if head!=p['expect']: raise Error('PERSONAL_CONFLICT','Thread advanced; synchronize this Thread again.')
         if row['size']>MAX_METADATA: raise Error('INPUT_TOO_LARGE','Thread manifest exceeds its limit.')
-        raw=final.read_bytes()
+        if raw is None: raw=final.read_bytes()
         if digest(raw)!=p['sha']: raise Error('CHECKSUM_MISMATCH','Thread manifest checksum differs.')
         value=json.loads(raw)
         model=validate_manifest(value,Store(self.root/'validation'))

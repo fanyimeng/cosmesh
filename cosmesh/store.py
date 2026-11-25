@@ -1,12 +1,15 @@
 """Owned Git stores with per-store locks and a recoverable write journal."""
 
-import fcntl
+from . import _fcntl as fcntl
+from . import _platform
 import hashlib
 import io
 import json
 import os
+import stat
 import subprocess
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,10 +19,37 @@ from .errors import Error
 from .protocol import HEX, decode
 
 
+def check_windows_path(path):
+    """Reject DOS device names and components that Win32 silently rewrites."""
+    drive = path.drive
+    if drive.startswith('\\\\.\\') or (drive.startswith('\\\\?\\') and
+            not (drive[4:].upper().startswith('UNC\\') or (len(drive) == 6 and drive[5] == ':'))):
+        raise Error("PATH_INVALID", "Select a filesystem path on a drive or a share.")
+    parts = path.parts[1:] if path.anchor else path.parts
+    for part in parts:
+        if part == '..':
+            continue
+        device = part.partition('.')[0].rstrip(' ').upper()
+        if (part.endswith(('.', ' ')) or any(c in '<>:"|?*' or ord(c) < 32 for c in part)
+                or device in {'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$'}
+                or (device[:3] in {'COM', 'LPT'} and len(device) == 4 and device[3] in '123456789¹²³')):
+            raise Error("PATH_INVALID", "Select an ordinary Windows file or directory name.")
+
+
 def safe_path(path):
-    path = Path(os.path.abspath(Path(path).expanduser()))
+    path = Path(path).expanduser()
+    if os.name == 'nt':
+        check_windows_path(path)
+    path = Path(os.path.abspath(path))
     for component in (path,) + tuple(path.parents):
-        if component.is_symlink():
+        if os.name == 'nt':
+            try:
+                info = component.lstat()
+            except FileNotFoundError:
+                continue
+            if info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                raise Error("PATH_INVALID", "Managed paths cannot traverse Windows reparse points.")
+        elif component.is_symlink():
             raise Error("PATH_INVALID", "Store and managed paths cannot contain symlinks.")
     return path
 
@@ -29,24 +59,62 @@ def atomic(path, text):
     fd, temporary = tempfile.mkstemp(prefix=".write-", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            if _platform.WINDOWS:
+                from ._win_private import trusted_fd
+                if not trusted_fd(handle.fileno()):
+                    raise Error("AUTH_DENIED", "Write managed data in a private Windows directory.")
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        _platform.replace_managed_file(temporary, path)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
 
 
+# Only an enclosing Store.locked context can lend its still-open handle to a
+# nested call on this thread. Every fresh context acquires an OS lock.
+_store_scopes = threading.local()
+
+
+@contextmanager
+def _store_lock(path):
+    scopes = getattr(_store_scopes, "active", None)
+    if scopes is None:
+        scopes = _store_scopes.active = set()
+    key = (os.getpid(), path)
+    if key in scopes:
+        yield
+        return
+    with path.open("a+") as handle:
+        deadline = time.monotonic() + _platform.LOCK_DEADLINE
+        while True:
+            try:
+                fcntl.lockf(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise Error("STORE_BUSY", "Another process is using this store; retry later.")
+                time.sleep(.05)
+        scopes.add(key)
+        try:
+            yield
+        finally:
+            scopes.remove(key)
+            fcntl.lockf(handle, fcntl.LOCK_UN)
+
+
 class Store:
     def __init__(self, root):
         self.root = safe_path(root)
+        if _platform.WINDOWS and self.root.exists() and not _platform.private_path(self.root):
+            raise Error("AUTH_DENIED", "Use a private Windows store owned by your account.")
         self.internal = self.root / ".cosmesh"
         self.pending = self.internal / "pending.json"
 
     def path(self, relative):
-        parts = Path(relative).parts
-        if not parts or Path(relative).is_absolute() or ".." in parts:
+        path = Path(relative)
+        if not path.parts or path.anchor or ".." in path.parts:
             raise Error("PATH_INVALID", "Managed paths must stay inside the store.")
         return safe_path(self.root / relative)
 
@@ -56,9 +124,11 @@ class Store:
         env.update(extra_env or {})
         try:
             result = subprocess.run(
-                ["git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false",
+                ["git", "-c", "core.hooksPath=" + os.devnull, "-c", "commit.gpgsign=false",
+                 "-c", "core.autocrlf=false", "-c", "core.safecrlf=false",
                  "-c", "user.name=CosMesh Local", "-c", "user.email=local@cosmesh.invalid",
                  "-C", str(self.root), *args], input=input, text=not binary,
+                encoding=None if binary else "utf-8",
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=60)
         except FileNotFoundError:
             raise Error("DEPENDENCY_MISSING", "Git is required.")
@@ -79,24 +149,12 @@ class Store:
             raise Error("NOT_INITIALIZED", "No initialized local store at " + str(self.root), "Run init with an explicit --root.")
         self.client()
         lock_path = self.path(".cosmesh/lock")
-        with lock_path.open("a+") as handle:
-            deadline = time.monotonic() + 3
-            while True:
-                try:
-                    fcntl.lockf(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise Error("STORE_BUSY", "Another process is using this store; retry later.")
-                    time.sleep(.05)
-            try:
-                self.recover()
-                if self.git("status", "--porcelain", "--untracked-files=all"):
-                    raise Error("STORE_DIRTY", "The managed store has uncommitted changes.",
-                                "Preserve and inspect manual changes before retrying; the CLI does not overwrite them.")
-                yield self
-            finally:
-                fcntl.lockf(handle, fcntl.LOCK_UN)
+        with _store_lock(lock_path):
+            self.recover()
+            if self.git("status", "--porcelain", "--untracked-files=all"):
+                raise Error("STORE_DIRTY", "The managed store has uncommitted changes.",
+                            "Preserve and inspect manual changes before retrying; the CLI does not overwrite them.")
+            yield self
 
     def snapshot(self, revision=None, allow_tree=False):
         revision = revision or self.head
@@ -150,7 +208,7 @@ class Store:
         path = self.path(".cosmesh/client.json")
         if not path.exists():
             return {}
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise Error("SCHEMA_INVALID", "Invalid local client metadata.")
         return value
@@ -158,7 +216,7 @@ class Store:
     def save_client(self, value):
         value = dict(value)
         exclude = self.path(".git/info/exclude")
-        previous = exclude.read_text() if exclude.exists() else ""
+        previous = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
         additions = [line for line in (".cosmesh/client.json", ".cosmesh/conflict.json") if line not in previous.splitlines()]
         if additions:
             atomic(exclude, previous.rstrip() + "\n" + "\n".join(additions) + "\n")
@@ -178,7 +236,7 @@ class Store:
         if not self.pending.exists():
             diagnostic = self.path(".cosmesh/conflict.json")
             if diagnostic.exists():
-                value = json.loads(diagnostic.read_text())
+                value = json.loads(diagnostic.read_text(encoding="utf-8"))
                 if value.get("state") == "merging":
                     if self.git("rev-parse", "--verify", "MERGE_HEAD", check=False).returncode == 0:
                         if self.head != value["local_revision"]:
@@ -189,7 +247,7 @@ class Store:
             return
         safe_path(self.pending)
         try:
-            journal = json.loads(self.pending.read_text())
+            journal = json.loads(self.pending.read_text(encoding="utf-8"))
             for path in journal["after"]:
                 self.path(path)
             head = self.head
@@ -204,7 +262,7 @@ class Store:
             # Roll back only files that still match this transaction, preserving manual edits.
             for path, after in journal["after"].items():
                 location = self.path(path)
-                actual = location.read_text() if location.exists() else None
+                actual = location.read_text(encoding="utf-8") if location.exists() else None
                 if actual not in (journal["before"][path], after):
                     raise Error("RECOVERY_REQUIRED", "A pending file was manually changed: " + path)
             for path, before in journal["before"].items():
@@ -244,7 +302,11 @@ class Store:
         if dry_run:
             return {"root": str(self.root), "config": config, "dry_run": True}, None
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(self.root, 0o700)
+        if _platform.WINDOWS:
+            if not _platform.private_path(self.root):
+                raise Error("AUTH_DENIED", "Use a private Windows directory before initializing this store.")
+        else:
+            os.chmod(self.root, 0o700)
         self.git("init", "-q")
         self.git("symbolic-ref", "HEAD", "refs/heads/main")
         self.internal.mkdir(mode=0o700)

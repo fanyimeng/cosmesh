@@ -75,6 +75,33 @@ class ThreadPersonalTests(unittest.TestCase):
             self.hub.spaces({'method': 'list_threads'}, 'bob')
         self.assertEqual(exc.exception.code, 'COMMAND_RETIRED')
 
+    def test_windows_source_metadata_and_file_restore(self):
+        from cosmesh.source_paths import manifest_path
+        windows_dir = r'C:\研究\project'
+        windows_file = windows_dir + r'\data.csv'
+        with self.use(self.a) as p:
+            path = self.file('data.csv')
+            aid = p.add(self.t, path, relative_path='data/data.csv')['id']
+            p.push([aid])  # Stage real bytes before substituting the source OS's location.
+            p.state['assets'][aid]['path'] = windows_file
+            p.wb.client['bindings'].append({'agent': 'codex', 'host': 'win-test', 'thread': self.t,
+                                            'workdir': windows_dir, 'session_id': 'win-session'})
+            p.wb.save_client(); p.save()
+            result = p.synchronize(self.t, files=True)
+            manifest = p.view(self.t)
+            self.assertEqual(manifest['assets'][aid]['path'], manifest_path(windows_file))
+            self.assertEqual(next(iter(manifest['bindings'].values()))['binding']['workdir'], manifest_path(windows_dir))
+            self.assertEqual(p.asset(aid)['path'], windows_file)
+            self.assertEqual(p.synchronize(self.t)['accepted_snapshot'], result['accepted_snapshot'])
+        with self.use(self.b) as p:
+            target = self.root / 'restored-files'
+            result = p.restore(self.t, str(target), 'codex', files=True)
+            self.assertEqual(result['files']['state'], 'complete')
+            self.assertEqual((target / 'data/data.csv').read_bytes(), path.read_bytes())
+            self.assertFalse(any(r['host'] == 'win-test' for r in p.wb.client['bindings']))
+            self.assertEqual({r['binding']['host'] for r in p.locations(self.t)['locations']
+                              if r['binding']['workdir'] == manifest_path(windows_dir)}, {'win-test'})
+
     def test_history_bidirectional_offline_append_and_small_file_lazy_fetch(self):
         with self.use(self.a) as p:
             old = p.wb.ref(p.wb.find(self.t))

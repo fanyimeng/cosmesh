@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .errors import Error
+from .source_paths import manifest_path
 from .store import atomic, safe_path
 from .transfer_policy import effective
 from .personal_protocol import (CHUNK, DEFAULTS, HASH, MAX_METADATA, check_id,
@@ -23,7 +24,7 @@ def initialize(wb, device=None):
         # The installation-independent data directory is shared by local Agents.
         parent=Path(os.environ.get('COSMESH_DATA_DIR',str(Path.home()/'.local/share/cosmesh')))
         devices=private_dir(parent/'personal-device-v1')
-        import fcntl
+        from . import _fcntl as fcntl
         with (devices/'lock').open('a+') as lock:
             fcntl.lockf(lock,fcntl.LOCK_EX)
             value=read_json(devices/'identity.json')
@@ -32,8 +33,8 @@ def initialize(wb, device=None):
             device=value['id']
     check_id(device)
     exclude=wb.base.path('.git/info/exclude')
-    if '.cosmesh/personal-v1/' not in exclude.read_text().splitlines():
-        atomic(exclude,exclude.read_text()+'\n.cosmesh/personal-v1/\n')
+    if '.cosmesh/personal-v1/' not in exclude.read_text(encoding="utf-8").splitlines():
+        atomic(exclude,exclude.read_text(encoding="utf-8")+'\n.cosmesh/personal-v1/\n')
     private_dir(directory);private_dir(directory/'cache');private_dir(directory/'staging')
     state={'format':1,'workspace':uuid4().hex,'replica':uuid4().hex,'device':device,
            'connection':None,'actor':None,'base':None,'assets':{},'bindings':{},'policy':dict(DEFAULTS)}
@@ -105,8 +106,9 @@ class Personal:
             relative_path=portable_path(relative_path)
         path=Path(path).expanduser().absolute()
         info=path.stat()
+        location = manifest_path(str(path))
         existing=next((key for key,row in self.state['assets'].items() if row['thread']==tid and
-                       row['device']==self.state['device'] and row['path']==str(path)),None)
+                       row['device']==self.state['device'] and manifest_path(row['path'])==location),None)
         aid=existing or uuid4().hex
         if existing and self.state['assets'][aid]['science']!=science:
             self.state['assets'][aid]['science']=science

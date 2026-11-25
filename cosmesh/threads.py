@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+from . import _platform
 from .errors import Error
 from .protocol import encode, decode, public, USER
 from .store import Store, atomic, safe_path
@@ -36,7 +37,7 @@ def initialize(root, user, tz='Asia/Shanghai', dry_run=False):
         'timezone': tz, 'mode': 'local_unverified', 'scope': 'base'}, dry_run)
     if not dry_run:
         exclude = store.path('.git/info/exclude')
-        atomic(exclude, exclude.read_text() + '\n.cosmesh/thread-client.json\n.cosmesh/mesh/\n.cosmesh/knowledge/\n')
+        atomic(exclude, exclude.read_text(encoding="utf-8") + '\n.cosmesh/thread-client.json\n.cosmesh/mesh/\n.cosmesh/knowledge/\n')
     return result, revision
 
 
@@ -52,9 +53,9 @@ class Workbench:
     def read_client(self):
         if not self.path.exists():
             return {'spaces': {}, 'bindings': []}
-        if self.path.is_symlink() or self.path.stat().st_uid != os.geteuid() or self.path.stat().st_mode & 0o077:
+        if self.path.is_symlink() or not _platform.private_path(self.path):
             raise Error('AUTH_DENIED', 'Workbench execution metadata must be private and owned by this account.')
-        value = json.loads(self.path.read_text())
+        value = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(value, dict) or not isinstance(value.get('spaces'), dict) or not isinstance(value.get('bindings'), list):
             raise Error('SCHEMA_INVALID', 'Invalid workbench metadata.')
         return value
@@ -407,7 +408,7 @@ class Workbench:
         else:
             store.root.parent.mkdir(parents=True, exist_ok=True)
             # Older failed clones left an unborn Git directory. Preserve it before retrying.
-            if (store.root.is_dir() and not store.root.is_symlink() and store.root.stat().st_uid == os.geteuid()
+            if (store.root.is_dir() and not store.root.is_symlink() and _platform.private_path(store.root, owner_only=True)
                     and {p.name for p in store.root.iterdir()} == {'.git'}
                     and not store.path('.git').is_symlink()
                     and store.git('rev-parse', '--verify', 'HEAD', check=False).returncode != 0):

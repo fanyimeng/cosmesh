@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 
+from . import _platform
 from .errors import Error
 from .store import atomic
 from .threads import now
@@ -11,11 +12,11 @@ from .threads import now
 def private_root(wb):
     directory = '.cosmesh/project-updates/'
     exclude = wb.base.path('.git/info/exclude')
-    if directory not in exclude.read_text().splitlines():
-        atomic(exclude, exclude.read_text() + '\n' + directory + '\n')
+    if directory not in exclude.read_text(encoding="utf-8").splitlines():
+        atomic(exclude, exclude.read_text(encoding="utf-8") + '\n' + directory + '\n')
     path = wb.base.path(directory)
     path.mkdir(mode=0o700, exist_ok=True)
-    if path.is_symlink() or path.stat().st_uid != os.geteuid() or path.stat().st_mode & 0o077:
+    if path.is_symlink() or not _platform.private_path(path):
         raise Error('AUTH_DENIED', 'Project update checkpoints must be private.')
     return path
 

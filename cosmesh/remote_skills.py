@@ -43,8 +43,8 @@ sh ~/.agents/skills/{name}/scripts/run.sh guide search '用法' --json
 私人 Thread、Profile、反馈队列与业务副本均位于服务器账号 home；需要已有 SSH 连接。已有本地资料保持原位，迁移由用户明确选择。doctor 检查服务器环境时不将其结果当作本地 Agent 的 Skill 发现验证；新会话的发现、自然语言触发和真实调用分别验收。
 '''
         files = {
-            'SKILL.md': (source(name) / 'SKILL.md').read_text() + entry,
-            'scripts/run.sh': (RESOURCES / 'remote-run.sh').read_text(),
+            'SKILL.md': (source(name) / 'SKILL.md').read_text(encoding="utf-8") + entry,
+            'scripts/run.sh': (RESOURCES / 'remote-run.sh').read_text(encoding="utf-8"),
             'connection': host + '\n' + prefix + '\n' + bootstrap + '\n',
             'version': __version__ + '\n',
         }
@@ -56,4 +56,4 @@ sh ~/.agents/skills/{name}/scripts/run.sh guide search '用法' --json
                 raise Error('INTERNAL_ERROR', 'Export delimiter collision.')
             generated.append('cat > "$cosmesh_stage/new-%s/%s" <<\'%s\'\n%s%s\n' %
                              (name, file, marker, text, marker))
-    return (RESOURCES / 'remote-payload.sh').read_text().replace('# GENERATED_FILES', '\n'.join(generated))
+    return (RESOURCES / 'remote-payload.sh').read_text(encoding="utf-8").replace('# GENERATED_FILES', '\n'.join(generated))

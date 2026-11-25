@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 
+from . import _platform
 from .errors import Error
 from .protocol import decode, encode, identifier, version
 from .store import Store
@@ -35,10 +36,10 @@ class LegacySources:
             store = None
             try:
                 store = Store(root)
-                if store.root.stat().st_uid != os.geteuid():
+                if not _platform.private_path(store.root, owner_only=True):
                     raise Error('AUTH_DENIED', 'Use an owned local Base or Mesh replica.')
                 git = store.path('.git')
-                if not git.is_dir() or git.stat().st_uid != os.geteuid():
+                if not git.is_dir() or not _platform.private_path(git, owner_only=True):
                     raise Error('PATH_INVALID', 'Use an owned managed Git directory.')
                 revision = store.head
                 config = json.loads(store.git('show', revision+':.cosmesh/config.json'))

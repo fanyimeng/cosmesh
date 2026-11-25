@@ -8,6 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import _platform
 from .errors import Error
 from .hub import REPO, view
 from .store import Store, atomic, safe_path
@@ -50,7 +51,7 @@ def transport(value):
     value["port"] = int(value["port"])
     for key in ("identity", "known_hosts"):
         path = safe_path(value[key])
-        if not path.is_file() or path.stat().st_uid != os.getuid() or path.stat().st_mode & 0o077:
+        if not path.is_file() or not _platform.private_path(path):
             raise Error("PATH_INVALID", "SSH identity and known_hosts must be private files owned by this user.")
         value[key] = str(path)
     return value
@@ -78,7 +79,7 @@ def remote_status(config):
     else:
         command = ssh_args(config) + ['-l', config['login'], config['host'], 'cosmesh-status', config['repo']]
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         raise Error("SYNC_NETWORK", "Cannot contact the pinned SSH Hub; local commits are preserved.")
     if result.returncode:

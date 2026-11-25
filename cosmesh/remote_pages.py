@@ -13,12 +13,12 @@ def contact(wb,args):
     if not connection:return None,False
     actor=wb.client.get('actor')
     if not actor:return None,False
-    config=json.loads(wb.base.path('.cosmesh/config.json').read_text())
+    config=json.loads(wb.base.path('.cosmesh/config.json').read_text(encoding="utf-8"))
     payload={'method':'thread_chat_ready','peer':args.contact,'rounds':args.rounds,'before':args.before,
              'date':args.date,'include_progress':args.include_progress,'timezone':config['timezone']}
     root=cache_root(wb);path=root/('remote-contact-'+digest([actor,connection,payload])+'.json')
     stamp=wb.path.stat().st_mtime_ns
-    cached=json.loads(path.read_text()) if path.is_file() else None
+    cached=json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
     if cached and not getattr(args,'require_fresh',False) and cached['source_stamp']==stamp:
         return cached['data'],False
     if getattr(args,'offline',False):return None,False

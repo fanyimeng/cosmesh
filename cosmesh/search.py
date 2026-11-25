@@ -306,7 +306,7 @@ class Search:
                 if offline:raise Error('CONTENT_NOT_CACHED','Fetch this source text while connected.')
                 first=self.kb.rpc({'method':'community_get','sha256':entry['text_sha256'],'offset':0})
                 self.kb.download(entry['text_sha256'],first['size'])
-            text=path.read_text();location={'field':'text','file':file,'sha256':entry['text_sha256']}
+            text=path.read_text(encoding="utf-8");location={'field':'text','file':file,'sha256':entry['text_sha256']}
         incoming=[]
         for item,relation,target in self.wb._incoming.get((repo,identifier),[]):
             if item['repo']=='local' and repo!='local':continue
@@ -350,7 +350,7 @@ def execute(args):
     if args.scope=='base' and fresh:raise Error('INPUT_INVALID','Private Base search is local; omit --require-fresh.')
     explicit=getattr(args,'root',None);root=workspace_root(explicit);store=Store(root)
     config_path=store.path('.cosmesh/config.json')
-    schema=json.loads(config_path.read_text()).get('schema_version') if config_path.is_file() else None
+    schema=json.loads(config_path.read_text(encoding="utf-8")).get('schema_version') if config_path.is_file() else None
     if explicit and schema is None:raise Error('NOT_INITIALIZED','Select an existing Thread workbench or old Base/Mesh store.')
     roots=list(args.legacy_root)
     if args.no_legacy and (roots or schema==1):raise Error('INPUT_INVALID','Do not combine --no-legacy with an old store.')

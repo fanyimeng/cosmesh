@@ -2,12 +2,16 @@
 import ctypes
 import json
 import os
-import pwd
+try:
+    import pwd
+except ImportError:  # Windows: no POSIX account database.
+    pwd = None
 import socket
 import stat
 import struct
 from pathlib import Path
 
+from . import _platform
 from .errors import Error
 from .protocol import USER
 from .store import safe_path
@@ -16,11 +20,17 @@ DEFAULT_DISCOVERY = '/srv/cosmesh/service.json'
 
 
 def system_user(uid=None):
+    if _platform.WINDOWS:
+        if uid is not None:
+            raise Error('IDENTITY_UNSUPPORTED', 'POSIX UID lookups require a POSIX host.')
+        # The native name is a local label. Document IDs are validated when a
+        # store is initialized and the remote Hub supplies its own verified actor.
+        return {'uid': None, 'user': _platform.account_name()}
     uid = os.geteuid() if uid is None else uid
     if type(uid) is not int or uid < 0:
         raise Error('AUTH_DENIED', 'Invalid system UID.')
     try:
-        name = pwd.getpwuid(uid).pw_name
+        name = pwd.getpwuid(uid).pw_name if pwd is not None else _platform.account_name()
     except KeyError:
         raise Error('AUTH_DENIED', 'This UID has no system account.')
     if not USER.fullmatch(name):
@@ -43,10 +53,12 @@ def peer_identity(connection):
 
 
 def discovery(path=None):
+    if _platform.WINDOWS:
+        raise Error('PLATFORM_UNSUPPORTED', 'Connect to the POSIX Hub over SSH from Windows.')
     path = safe_path(path or os.environ.get('COSMESH_SERVICE', DEFAULT_DISCOVERY))
     if not path.is_file():
         raise Error('SERVICE_UNAVAILABLE', 'No local service discovery at ' + str(path))
-    value = json.loads(path.read_text())
+    value = json.loads(path.read_text(encoding="utf-8"))
     owner = value.get('owner_uid')
     if type(owner) is not int or value.get('format') != 1 or not isinstance(value.get('endpoint'), str):
         raise Error('SYNC_PROTOCOL', 'Invalid service discovery.')

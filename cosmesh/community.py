@@ -296,7 +296,7 @@ class Community:
             if path.exists():return {'complete':True,'sha256':sha}
             # Per-account temporary paths; final blobs are immutable content-addressed files.
             temp=safe_path(self.root/'uploads'/(digest(account.encode())+'-'+sha))
-            import fcntl
+            from . import _fcntl as fcntl
             with temp.open('a+b') as handle:
                 os.chmod(temp,0o600);fcntl.lockf(handle,fcntl.LOCK_EX)
                 handle.seek(0,2);length=handle.tell()

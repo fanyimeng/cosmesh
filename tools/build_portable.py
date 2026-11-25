@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,6 +13,15 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def pinned_project(row):
+    # A platform marker may contain a second comparison operator.
+    pin = row.partition(';')[0].strip()
+    matched = re.fullmatch(r'([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+-]+)', pin)
+    if not matched:
+        raise ValueError('Expected an exactly pinned release requirement: ' + row)
+    return matched.groups()
 
 
 def main():
@@ -40,7 +50,7 @@ def main():
         lock = []
         for row in (ROOT / 'requirements-release.txt').read_text().splitlines():
             if not row.strip():continue
-            name, ver = row.split('==')
+            name, ver = pinned_project(row)
             with urllib.request.urlopen('https://pypi.org/pypi/%s/%s/json' % (name, ver), timeout=30) as response:
                 metadata = json.load(response)
             hashes = sorted({url['digests']['sha256'] for url in metadata['urls'] if url['packagetype'] == 'bdist_wheel'})
