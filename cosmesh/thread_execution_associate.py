@@ -143,7 +143,8 @@ def preview(wb, tid, host=None, journal=None):
             kind = 'workspace' if agent == 'dsh' else 'project'
             try:
                 registration = bind_project(wb, tid, agent, project['name'], project['id'], kind=kind,
-                                            host=machine, workdir=project.get('path') or workdir, observation=observed, dry_run=True)
+                                            host=machine, workdir=project.get('path') or workdir, observation=observed,
+                                            dry_run=True, guidance=False)
             except Error as exc:
                 candidates.append({'status': 'conflict', 'reason': exc.message,
                                    'device': {'id': row.get('device'), 'host': machine}, 'agent': agent})
@@ -223,7 +224,7 @@ def confirm(wb, tid, candidate_id, expect, host, key=None, journal=None):
         registration = bind_project(wb, tid, candidate['agent'], candidate['project']['name'],
                                     candidate['project']['id'], kind=candidate['project']['kind'],
                                     host=candidate['device']['host'], workdir=candidate['project_workdir'],
-                                    observation=host, dry_run=True)
+                                    observation=host, dry_run=True, guidance=False)
         session = wb.bind(tid, candidate['agent'], candidate['workdir'], candidate['session_id'],
                           candidate['device']['host'], dry_run=True)['binding']
         changed = False
@@ -246,4 +247,12 @@ def confirm(wb, tid, candidate_id, expect, host, key=None, journal=None):
                                     'evidence': candidate['evidence'][0]['code']},
                     'records_created': 0}
 
-    return wb._commit(wb.base, 'associate', payload, build, key or 'associate-' + candidate_id[:32])
+    receipt = wb._commit(wb.base, 'associate', payload, build, key or 'associate-' + candidate_id[:32])
+    from .agent_projects import for_registration
+    association = receipt['association']
+    project = next((row for row in active(wb, tid) if row.get('project_id') == association['project_id']
+                    and row['agent'] == association['agent']
+                    and row['host'].casefold() == association['device']['host'].casefold()), None)
+    if project:
+        receipt['project_guidance'] = for_registration(wb, project)
+    return receipt

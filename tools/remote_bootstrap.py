@@ -91,6 +91,7 @@ def main(argv=None):
         number = lambda s: tuple(map(int, s.split('.')))
         action = 'unchanged'
         notice = None
+        guidance = None
         if args.action == 'ensure' and (current is None or number(current) < number(available)):
             action = 'install' if current is None else 'upgrade'
             command = [sys.executable, str(selected / 'install.py'), action, '--prefix', str(prefix), '--json']
@@ -105,17 +106,21 @@ def main(argv=None):
                 raise Failure('Server installation was preserved: ' + (reply.get('error') or {}).get('message', 'installer failed'))
             current = installed(prefix)
             notice = reply['data'].get('update_notice')
+            guidance = reply['data'].get('project_guidance')
         data = {'action': action, 'installed_version': current, 'available_version': available,
                 'local_skill_version': args.local_skill_version,
                 'server_update_available': current is None or number(current) < number(available),
                 'skill_update_available': args.local_skill_version is not None and args.local_skill_version != current,
                 'prefix': str(prefix), 'data_unchanged': True, 'automatic_updates': False}
         if notice: data['update_notice'] = notice
+        if guidance is not None: data['project_guidance'] = guidance
         if args.action == 'ensure' and os.environ.get('COSMESH_BOOTSTRAP_HUMAN') == '1':
             label = {'install': '首次安装完成', 'upgrade': '已更新', 'unchanged': '当前版本'}[action]
             print(f'CosMesh {current} · {label}')
             if notice:
                 print(notice['document'].rstrip())
+            if guidance and not guidance['complete']:
+                print('项目说明有待处理项。用 cosmesh thread project-guidance 查看并重试。')
         else:
             print(json.dumps({'ok': True, 'data': data, 'error': None}, ensure_ascii=False))
         return 0

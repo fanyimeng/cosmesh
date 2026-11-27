@@ -3,13 +3,17 @@ name: cosmesh
 description: 查找与接续本人的 Thread、收集项目变化、向指定联系人投递资料并处理收件。
 ---
 
-首次安装或升级成功后，把回执中的 `update_notice.document` 正文展示给用户，包括第一次建工作、共享选择和收件入口。配置了稳定渠道的客户端用 `cosmesh client update --json` 升级，Windows 离线包用 `cosmesh client update --release DIR --json`。同版检查直接报告版本。用户随时可用 `cosmesh guide show upgrade` 重看简明说明。
+用户说“安装／升级 CosMesh”时，检查现有程序位置和软件源，按当前平台继续。首次安装、服务器引导和 Windows 离线包的取包方式见 `cosmesh guide show install`，公开源码中的教程在 `cosmesh/manual/install.md`。首次安装或升级成功后，核验已安装的 CLI 和托管 Skill，向用户展示回执中的 `update_notice.document`。配置了稳定渠道的客户端用 `cosmesh client update --json` 升级，Windows 离线包用 `cosmesh client update --release DIR --json`。同版检查直接报告版本。用户随时可用 `cosmesh guide show upgrade` 重看简明说明。
 
 ## 快速接续
 
 已知 Thread ID 或本机唯一名称，直接 `cosmesh thread continue ID --ready --json`。刚从另一设备回来、需要最新进展时，已开启个人同步的 Thread 加上 `--require-fresh`。这一次读取给出目标、交接摘要、最近进展和本机登记位置。能据此工作就开始。需要精确原文时按回执中的来源用 `thread read ID@VERSION --repo REPO`；需要其他设备或完整位置时用 `thread locations ID`。
 
 只知道当前目录或真实项目 ID 时用 `thread locate --workdir DIR` 或 `--project-id ID`。只知道工作名、或新设备还没有这项工作，用 `thread find 名称`；明确只找本机可加 `--offline`，要求 Hub 最新可加 `--require-fresh`。恢复用 `thread fetch ID --workdir DIR --agent AGENT --files`，沿用原 ID。回执分别给出记录、文件与位置的结果。项目绑定需要真实原生 ID；目录登记用 `--kind directory`。DSH 是否已创建会话以宿主回执为准。
+
+## 已绑定项目的工作约定
+
+实质性工作开始时，按项目 `AGENTS.md` 读取本次工作的 Thread。用 `cosmesh thread locate --workdir DIR --bound-projects --json` 核对正式绑定，`DIR` 取这份项目指引所在的目录。目录绑定多项工作时按任务和既有项目约定选择；仍有歧义就问用户。出现有意义的进展或收尾时，将结论、证据入口、未决事项和下一步简记到选定 Thread。原有本地文档、资料范围、同步与分享规则一并遵循。安装或升级检查本机的既有绑定，新的本地目录绑定也会补充说明。用 `cosmesh thread project-guidance --dry-run` 检查，`cosmesh thread project-guidance` 重试；向用户报告未处理的路径及原因。
 
 ## 工作中
 

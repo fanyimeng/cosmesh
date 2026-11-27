@@ -18,6 +18,11 @@ def main():
     with tarfile.open(args.archive) as tar:
         info = json.load(tar.extractfile('local-first/portable.json'))
         script = tar.extractfile('local-first/local-install.sh').read()
+        tutorial = None
+        if 'INSTALL.md' in info.get('files', {}):
+            tutorial = tar.extractfile('local-first/INSTALL.md').read()
+            if hashlib.sha256(tutorial).hexdigest() != info['files']['INSTALL.md']:
+                raise ValueError('Installation tutorial differs from the portable manifest.')
     version = info['version']
     if not manager.VERSION.fullmatch(version):
         raise ValueError('Invalid release version.')
@@ -32,6 +37,8 @@ def main():
         manager.atomic(agent / 'install-ssh.sh', previous.read_bytes(), mode=0o644)
     manager.atomic(agent / 'local-first.tar.gz', raw, mode=0o644)
     manager.atomic(agent / 'install.sh', script, mode=0o644)
+    if tutorial is not None:
+        manager.atomic(agent / 'INSTALL.md', tutorial, mode=0o644)
     channel = {'format': 1, 'version': version, 'execution': 'local',
                'archive': str(target), 'sha256': hashlib.sha256(raw).hexdigest()}
     manager.atomic(agent / 'stable-local.json', manager.json_bytes(channel), mode=0o644)

@@ -113,4 +113,6 @@ def update():
     saved = json.loads((prefix / 'client.json').read_text(encoding="utf-8"))
     return {'updated': state['current'] != __version__, 'version': state['current'], 'execution': 'local', 'data_unchanged': True,
             'mesh': saved.get('mesh_setup'), 'update_notice':(saved.get('mesh_setup') or {}).get('update_notice'), 'retired_skills':state.get('retired_skills',{}),
+            **({'project_guidance':saved['mesh_setup']['project_guidance']}
+               if 'project_guidance' in (saved.get('mesh_setup') or {}) else {}),
             'session_hint':'请新开 Agent 会话加载统一 CosMesh Skill。'}

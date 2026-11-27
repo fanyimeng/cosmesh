@@ -47,8 +47,8 @@ def verify(prefix, tests, folder):
         require(reply.get('ok') is True, str(reply.get('error')))
         return reply['data']
 
-    require(state['current'] == '0.7.0' and python.is_file(), 'Unexpected candidate runtime')
-    require('0.7.0' in run([str(wrapper), '--version']), 'Version wrapper failed')
+    require(python.is_file(), 'Missing selected candidate runtime')
+    require(run([str(wrapper), '--version']).strip() == state['current'], 'Version wrapper failed')
     bad = subprocess.run([str(wrapper), 'candidate-invalid-command', '--json'], cwd=folder,
                          env=env, capture_output=True, timeout=30)
     require(bad.returncode != 0 and json.loads(bad.stdout.decode('utf-8')).get('ok') is False,

@@ -123,6 +123,8 @@ def main():
     saved = json.loads((prefix / 'client.json').read_text(encoding='utf-8'))
     if result.get('update_notice'):
         mesh['update_notice'] = result['update_notice']  # 0.3 clients return this existing field after upgrading.
+    if result.get('project_guidance') is not None:
+        mesh['project_guidance'] = result['project_guidance']
     saved['mesh_setup'] = mesh
     manager.atomic(prefix / 'client.json', manager.json_bytes(saved))
     if os.environ.get('COSMESH_BOOTSTRAP_HUMAN') == '1':
@@ -131,6 +133,8 @@ def main():
         print('程序入口：' + str(manager.command_path(prefix, 'cosmesh')))
         if migrated:
             print('原托管 Skill 备份于 ' + str(backup))
+        if (result.get('project_guidance') or {}).get('complete') is False:
+            print('项目说明有待处理项。用 cosmesh thread project-guidance 查看并重试。')
     else:
         print(json.dumps({'ok': True, 'data': result, 'execution': 'local', 'mesh': mesh,
                          'migrated_skill_backup': str(backup) if migrated else None}, ensure_ascii=False))

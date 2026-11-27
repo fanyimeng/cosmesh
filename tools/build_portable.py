@@ -11,6 +11,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -47,6 +48,10 @@ def main():
         shutil.copy2(ROOT / 'tools/release_installer.py', content / 'install.py')
         shutil.copy2(ROOT / 'tools/local_bootstrap.py', content / 'local_bootstrap.py')
         shutil.copy2(ROOT / 'cosmesh/resources/local-install.sh', content / 'local-install.sh')
+        with zipfile.ZipFile(content / wheel.name) as application:
+            guide_member = 'cosmesh/manual/install.md'
+            if guide_member in application.namelist():
+                (content / 'INSTALL.md').write_bytes(application.read(guide_member))
         lock = []
         for row in (ROOT / 'requirements-release.txt').read_text().splitlines():
             if not row.strip():continue

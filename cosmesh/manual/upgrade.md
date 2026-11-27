@@ -1,11 +1,9 @@
-# CosMesh 0.7.0｜从一封来信查看整项工作的进展
+# CosMesh 0.7.1｜新会话接着做，阶段成果记回原 Thread
 
-本版新增 Windows 客户端。发信时可让指定收件人持续只读查看来源工作的定义、记录、历史和已登记文件。工作区共享需要收发端和 Hub 都支持 0.7。
+本次更新会为本机已绑定的项目补充 `AGENTS.md` 接续说明，以后新绑定目录也会补上。新开 Agent 会话时，直接说“接着做这个项目”，Agent 会先读相应 Thread，完成有意义的阶段工作后记下结果和下一步。已有项目约定继续生效。同一目录关联多项工作时，Agent 按当前任务选 Thread，有歧义再请你指定。
 
-1. **开始工作。** 首次运行 `cosmesh thread init`，再用 `cosmesh thread create --title "项目名"` 建一项工作。把下文的 ID 换成返回的 W-ID。已有工作用 `cosmesh thread find "项目名"` 查找，再用 `cosmesh thread continue ID --ready` 接续。
-2. **连接和记录。** 离线安装后，使用维护者给的连接信息运行 `cosmesh thread discover --ssh SSH别名 --service 服务文件路径`；首次在 Hub 上发言用 `cosmesh user set-name "姓名"` 登记。用 `cosmesh thread note ID --body "完成了什么，下一步做什么"` 记进展。用 `cosmesh thread personal ID --files` 同步到本人 Hub，另一台设备可用 `cosmesh thread fetch ID --workdir 目录 --agent codex --files` 接续。
-3. **发送与授权。** `cosmesh thread send ID --to 账号 --body "请查看进展"` 会在终端提示共享工作区、仅发消息或取消。已授权账号可以复用权限。脚本和 Agent 经确认后用 `--share-workspace` 或 `--message-only`。授权只涉及所选工作；设备和会话绑定归本人。
-4. **同步进展。** 共享后，本机写入的记录会合并同步。持续收集项目目录先用 `cosmesh collect add ID 目录 --personal` 登记，在该机运行 `cosmesh collect watch` 发现外部文件变化。`cosmesh collect status` 查看积压，`cosmesh collect once` 在恢复联网后立即补同步。
-5. **读取和撤权。** `cosmesh thread inbox` 列出消息；把消息 ID 代入 `cosmesh thread mail open MID --records` 看最新进展，加 `--at-send` 看发送时版本。用 `--files` 列文件，或用 `--download 文件ID --output 新路径` 下载。发件人可用 `cosmesh thread mail unshare ID --from 账号` 撤回在线访问。
+- **已有工作。** 请 Agent 核对升级回执。用 `cosmesh thread project-guidance --dry-run` 查看本机项目说明，`cosmesh thread project-guidance` 可补做或重试。使用旧离线入口升级后，启动新版 CLI 并用 `self status` 核实安装。
+- **第一次使用。** 请 Agent 用 `cosmesh thread init` 初始化，再用 `cosmesh thread create --title "项目名"` 建工作。已有 Thread 可用 `cosmesh thread find "项目名"` 查找；绑定目录后从 `cosmesh thread continue ID --ready` 接续。
+- **发送与收件。** 从自己的 Thread 发信时可选择共享整项工作或仅发这条消息。指定后分别使用 `--share-workspace` 或 `--message-only`。`cosmesh thread inbox` 看来信，`cosmesh thread mail open MID --records` 看获准的进展，加 `--at-send` 看发送时版本。
 
-重看本说明用 `cosmesh guide show upgrade`，详细用法见 `cosmesh guide show usage`。使用托管 Skill 的用户请新开 Agent 会话。已配置稳定渠道的客户端用 `cosmesh client update` 更新；Windows 用户解压新离线包后运行 `cosmesh client update --release 包目录`。
+重看本提示用 `cosmesh guide show upgrade`，复制安装或升级请求用 `cosmesh guide show install`。更新托管 Skill 后，新开 Agent 会话加载新版。

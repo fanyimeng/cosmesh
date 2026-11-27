@@ -775,7 +775,8 @@ def main(argv=None, product="cosmesh"):
                 return 1
         data, revision = execute(args, product)
         if (args.action.startswith(('thread.', 'personal.', 'collect.')) and not getattr(args, 'dry_run', False)
-                and args.action not in {'collect.once', 'collect.status', 'collect.watch'}):
+                and args.action not in {'collect.once', 'collect.status', 'collect.watch', 'thread.project-guidance'}
+                and not (args.action == 'thread.locate' and args.bound_projects)):
             from .workspace_progress import after_command
             after_command(args)
         if args.action in {'library.add','library.revise','library.sync','library.transfer','library.reindex','user.set_name','user.manage'}:
@@ -862,6 +863,8 @@ def main(argv=None, product="cosmesh"):
             print(data['update_notice']['document'].rstrip())
         else:
             print('当前版本 CosMesh ' + (data.get('version') or data['to']))
+        if (data.get('project_guidance') or (data.get('mesh') or {}).get('project_guidance') or {}).get('complete') is False:
+            print('项目说明有待处理项。用 cosmesh thread project-guidance 查看并重试。')
         if 'mesh' in data and not (data['mesh'] or {}).get('ok'):
             print('Hub 连接待确认。联网后运行 cosmesh thread discover。')
         return 0

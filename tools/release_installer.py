@@ -408,6 +408,57 @@ def retire_base(prefix, state, next_state):
     return changes
 
 
+def activated_guidance(prefix, state, retry=False, inspect_only=False):
+    """Called with the manager lock after the active revision is durable."""
+    version = state["current"]
+    if tuple(map(int, version.split("."))) < (0, 7, 1):
+        return None
+    data_dir = os.environ.get("COSMESH_DATA_DIR")
+    standard_prefixes = {Path.home() / ".local/opt/cosmesh"}
+    if sys.platform == "win32" and os.environ.get("LOCALAPPDATA"):
+        standard_prefixes.add(Path(os.environ["LOCALAPPDATA"]) / "CosMesh")
+    if not data_dir and prefix not in standard_prefixes:
+        return {"complete": True, "status": "skipped", "reason": "separate_installation",
+                "retry": "cosmesh thread project-guidance --root WORKBENCH"}
+    root = Path(data_dir or Path.home() / ".local/share/cosmesh").expanduser().absolute() / "work"
+    # Linux workbenches and installation prefixes can be shared across hosts.
+    import socket
+    host = socket.gethostname().casefold()
+    key = digest(json_bytes([host, str(root), version]))
+    ledger = state.get("project_guidance", {})
+    previous = ledger.get(key)
+    if previous and (not retry or previous["result"]["complete"]):
+        return previous["result"]
+    if inspect_only:
+        return None
+    retry_command = "cosmesh thread project-guidance"
+    try:
+        if not (root / ".cosmesh/thread-client.json").exists():
+            result = {"complete": True, "dry_run": False, "counts": {}, "directories": []}
+        else:
+            python = runtime_python(prefix / "versions" / version / "runtime")
+            env = clean_env()
+            env["COSMESH_INSTALL_PREFIX"] = str(prefix)
+            raw = checked([python, "-I", "-X", "utf8", "-m", "cosmesh", "thread", "project-guidance",
+                           "--offline", "--root", root, "--json"], env=env)
+            result = json.loads(raw)["data"]
+            if not isinstance(result, dict) or not isinstance(result.get("complete"), bool):
+                raise ValueError("Missing local guidance receipt.")
+    except (Failure, OSError, ValueError, KeyError) as exc:
+        result = {"complete": False, "reason": getattr(exc, "code", type(exc).__name__),
+                  "message": str(exc)}
+    if not result["complete"]:
+        result["retry"] = retry_command
+    state.setdefault("project_guidance", {})[key] = {
+        "host": host, "version": version, "workbench": str(root), "result": result}
+    try:
+        atomic(prefix / "state.json", json_bytes(state))
+    except OSError as exc:
+        # The version switch is already committed. Its first launch can retry.
+        return dict(result, complete=False, reason="RECEIPT_NOT_SAVED", message=str(exc), retry=retry_command)
+    return result
+
+
 def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry_run=False, verbose=False):
     release, meta = bundle(release_path)
     state = load_state(prefix) if prefix.exists() else None
@@ -450,6 +501,9 @@ def apply_release(prefix, release_path, action, names=None, skills_dir=None, dry
         next_state["versions"][meta["version"]] = {"manifest_sha256": meta["manifest_sha256"], "schema_write": meta["schema_write"]}
         interpreter = base_interpreter()
         switch_files(prefix, wrappers(prefix, interpreter, (release / "install.py").read_bytes()) + changes, next_state)
+        guidance = activated_guidance(prefix, next_state, retry=True)
+        if guidance is not None:
+            plan["project_guidance"] = guidance
     plan["commands"] = {name: str(command_path(prefix, name)) for name in skill_names(meta["version"])}
     plan["retired_skills"] = next_state.get("retired_skills", {})
     old_skill = Path(skills_dir or Path.home()/'.agents/skills') / 'cosbase' / 'SKILL.md'
@@ -521,10 +575,11 @@ def manage_skills(prefix, names, skills_dir=None, dry_run=False):
                 "host_discovery": "not_verified", "natural_language_trigger": "not_verified"}
 
 
-def status(prefix):
+def status(prefix, dry_run=False):
     with locked(prefix):
         state = load_state(prefix, required=True)
-        return {"mode": "managed_release", "prefix": str(prefix), "version": state["current"],
+        guidance = activated_guidance(prefix, state, inspect_only=dry_run)
+        return {**({"project_guidance": guidance} if guidance is not None else {}),"mode": "managed_release", "prefix": str(prefix), "version": state["current"],
                 "previous": state.get("previous"), "installed_versions": list(state["versions"]),
                 "skills": state["skills"], "data_location": "Independent document stores; unchanged by install, upgrade, rollback or uninstall."}
 
@@ -589,6 +644,13 @@ def launch(prefix, name, arguments):
             return 2
     with locked(prefix, wait_seconds=3):
         state = load_state(prefix, required=True)
+        # Older managers activate the new wheel without a post-switch hook. A
+        # normal private client launch completes that upgrade on this device.
+        if (name == "cosmesh" and arguments and arguments[0] in {"thread", "client", "guide", "doctor", "--version"}
+                and "--dry-run" not in arguments and "--bound-projects" not in arguments
+                and not any(arg == "--root" or arg.startswith("--root=") for arg in arguments)
+                and arguments[:2] != ["thread", "project-guidance"]):
+            activated_guidance(prefix, state)
         runtime = prefix / "versions" / state["current"] / "runtime"
         executable = runtime_python(runtime)
     env = clean_env()
@@ -619,10 +681,15 @@ def emit(data, error, machine):
         if data.get("commands"):
             print("程序入口：" + data["commands"]["cosmesh"])
             print("查看安装：" + data["commands"]["cosmesh"] + " self status")
+        guidance = data.get("project_guidance") or {}
+        if guidance.get("complete") is False:
+            print("项目说明有待处理项。查看：cosmesh self status --json；重试：cosmesh thread project-guidance")
         print("用户文档独立保留。")
         if data.get("update_notice"): print("\n" + data["update_notice"]["document"])
     elif data.get("mode") == "managed_release":
         print("CosMesh " + data["version"] + " · 用户发布版")
+        if (data.get("project_guidance") or {}).get("complete") is False:
+            print("项目说明有待处理项。查看：cosmesh self status --json；重试：cosmesh thread project-guidance")
         print("安装目录：" + data["prefix"])
         print("可用版本：" + ", ".join(data["installed_versions"]))
         print("上一版本：" + str(data.get("previous") or "无"))
@@ -665,7 +732,7 @@ def main(argv=None, fixed_prefix=None):
             names = None if args.skills is None else [] if args.skills == "none" else list(NAMES) if args.skills == "both" else [args.skills]
             result = apply_release(prefix, release, args.action, names, args.skills_dir, args.dry_run, verbose=not args.json)
         elif args.action == "status":
-            result = status(prefix)
+            result = status(prefix, args.dry_run)
         elif args.action == "rollback":
             result = rollback(prefix, args.version, args.dry_run)
         elif args.action == "skills":

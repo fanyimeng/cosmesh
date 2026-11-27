@@ -51,6 +51,7 @@ class AssociateTests(unittest.TestCase):
             self.w.load(); head, client = self.w.base.head, self.w.path.read_bytes()
             before = signature(self.w, self.tid)
         result = self.preview(self.host())
+        self.assertFalse((self.root/'AGENTS.md').exists())
         self.assertEqual(result['status'], 'confirmation_required')
         candidate = result['candidates'][0]
         self.assertEqual(candidate['project']['id'], 'project-one')
@@ -67,6 +68,7 @@ class AssociateTests(unittest.TestCase):
                               '--confirm', candidate['candidate_id'],
                               '--expect', result['execution_revision'], '--idempotency-key', 'associate-one')
         self.assertEqual(confirmed['status'], 'applied')
+        self.assertEqual(confirmed['project_guidance']['status'], 'created')
         self.assertEqual(confirmed['thread'], self.tid)
         self.assertEqual(confirmed['association']['project_id'], 'project-one')
         self.assertEqual(confirmed['association']['session_id'], 'session-one')

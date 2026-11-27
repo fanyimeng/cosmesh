@@ -199,6 +199,16 @@ $cm = Join-Path $prefix 'bin\cosmesh.cmd'
 
 同版重复检查只返回当前状态。如已安装同版号的 0.7.0 预览包，请把正式程序装进独立前缀；原资料可用原数据目录或 `--root` 接续。新开 Agent 会话可加载更新的托管 Skill。
 """
+        with zipfile.ZipFile(wheel) as application:
+            guide_member = 'cosmesh/manual/install.md'
+            if guide_member in application.namelist():
+                (payload / 'INSTALL.md').write_bytes(application.read(guide_member))
+                instructions = (
+                    '# CosMesh %s · %s / %s / Python %d.%d\n\n'
+                    '打开 [INSTALL.md](INSTALL.md)，选择“首次安装”或“已有安装”，将对应的一段话贴给当前 Agent。'
+                    '本目录是已经解压的固定包，可直接把它交给 Agent。\n'
+                    % (version, target_platform, machine, *python_version)
+                )
         (payload/'README.md').write_text(instructions,encoding='utf-8')
         changelog=(ROOT/'CHANGELOG.md').read_text(encoding='utf-8')
         notes=re.search(r'^## '+re.escape(version)+r'\n(.*?)(?=^## |\Z)',changelog,re.MULTILINE|re.DOTALL)

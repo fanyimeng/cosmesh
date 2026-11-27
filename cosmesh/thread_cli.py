@@ -37,10 +37,12 @@ def add_commands(commands, command, body):
     command(group, 'status', 'thread.status')
     p = command(group, 'locate', 'thread.locate');p.add_argument('--workdir');p.add_argument('--session-id');p.add_argument('--host')
     p.add_argument('--agent');p.add_argument('--project-id');p.add_argument('--project-name')
+    p.add_argument('--bound-projects', action='store_true', help='List only exact active project bindings on this device')
     p = command(group,'bind-project','thread.bind-project');p.add_argument('id');p.add_argument('--agent',required=True)
     p.add_argument('--project-name');p.add_argument('--project-id');p.add_argument('--host');p.add_argument('--workdir')
     p.add_argument('--kind',choices=('project','workspace','directory'),default='project')
     p.add_argument('--host-file');p.add_argument('--remove',action='store_true')
+    command(group, 'project-guidance', 'thread.project-guidance')
     p = command(group, 'associate', 'thread.associate'); p.add_argument('id', nargs='?')
     p.add_argument('--missing', action='store_true'); p.add_argument('--host-file'); p.add_argument('--journal')
     p.add_argument('--confirm', metavar='CANDIDATE_ID'); p.add_argument('--expect', metavar='EXECUTION_REVISION')
@@ -196,6 +198,24 @@ def execute(args):
     if verb == 'discover' and not root.exists():
         initialize(root, system_user()['user'])
     wb = Workbench(root)
+    if verb == 'locate' and args.bound_projects:
+        if not args.workdir or any((args.session_id, args.project_id, args.project_name, args.host, args.agent)):
+            raise Error('INPUT_INVALID', 'Use --bound-projects with only the actual local --workdir.')
+        from .agent_projects import locate_bound
+        args._thread_sync_state = {'state': 'local_only', 'identity_verified': False}
+        if not wb.path.exists():
+            return {'candidates': []}, None
+        with wb.base.locked():
+            wb.load()
+            return locate_bound(wb, args.workdir), wb.base.head
+    if verb == 'project-guidance':
+        from .agent_projects import backfill
+        args._thread_sync_state = {'state': 'local_only', 'identity_verified': False}
+        if not wb.path.exists():
+            return dict(complete=True, dry_run=dry, directories=[], counts={}), None
+        with wb.base.locked():
+            wb.load()
+            return backfill(wb, dry), wb.base.head
     if verb=='read':
         if dry:raise Error('INPUT_INVALID','Source reads do not use --dry-run.')
         from .thread_protocol import reference

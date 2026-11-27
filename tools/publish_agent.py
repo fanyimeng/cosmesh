@@ -32,7 +32,7 @@ def main():
         raise ValueError('The agent directory must be maintainer-controlled.')
     channel = root / 'releases/stable-linux.json'
     previous = {}
-    for path in (agent / 'install.sh', agent / 'bootstrap.py', channel):
+    for path in (agent / 'install.sh', agent / 'bootstrap.py', agent / 'INSTALL.md', channel):
         raw = release_installer.read_bytes(path)
         if raw is not None:
             previous[path.name] = raw
@@ -45,6 +45,8 @@ def main():
     for name in ('install.sh', 'bootstrap.py'):
         destination = 'install-ssh.sh' if name == 'install.sh' and (agent / 'stable-local.json').exists() else name
         release_installer.atomic(agent / destination, (release / 'agent' / name).read_bytes(), mode=0o644)
+    if 'INSTALL.md' in meta['files']:
+        release_installer.atomic(agent / 'INSTALL.md', (release / 'INSTALL.md').read_bytes(), mode=0o644)
     archive = release.parent / (meta['release_id'] + '.zip')
     os.chmod(archive, 0o644)
     data = {k: meta[k] for k in ('version', 'release_id', 'platform', 'machine', 'python')}

@@ -9,7 +9,7 @@ from .errors import Error
 TOPICS = {
     'usage':'工作、收集和收件', 'personal':'个人接续', 'sharing':'选定内容投递', 'chat':'按人交互与收件',
     'components':'组件安装与管理','dsh':'DSH 宿主适配','upgrade':'本版更新与快速上手',
-    'architecture':'工作与权限','threads':'执行位置','files':'模块职责','profile':'私人档案','operations':'安装和运维','feedback':'开发反馈',
+    'architecture':'工作与权限','threads':'执行位置','files':'模块职责','profile':'私人档案','install':'请 Agent 安装或升级','operations':'安装和运维','feedback':'开发反馈',
 }
 
 

@@ -16,6 +16,11 @@ def brief_receipt(result):
         receipt['external_references'] = len(missing)
     if result.get('destination'):
         receipt['destination'] = result['destination']
+    if result.get('project_guidance'):
+        receipt['project_guidance'] = result['project_guidance']
+        if result['project_guidance']['status'] == 'pending':
+            receipt.update(complete=False, status='partial', issues=[
+                {'file': 'AGENTS.md', 'reason': result['project_guidance']['reason']}])
     if files is None or (restoring and not files.get('requested')):
         return receipt
     rows = files['files']
@@ -26,8 +31,8 @@ def brief_receipt(result):
                         'skipped': len(issues)}
     if issues:
         receipt.update(complete=False, status='partial',
-                       issues=[{'file': r.get('relative_path') or r.get('name'), 'reason': r['reason']}
-                               for r in issues[:5]])
+                       issues=receipt.get('issues', []) + [
+                           {'file': r.get('relative_path') or r.get('name'), 'reason': r['reason']} for r in issues[:5]])
     return receipt
 
 

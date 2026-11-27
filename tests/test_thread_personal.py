@@ -45,9 +45,10 @@ class ThreadPersonalTests(unittest.TestCase):
         with self.use(self.b) as p:
             local = p.wb.create('keep local', 'destination private')['id']; p.wb.load()
             config = dict(p.wb.config)
-            for _ in range(2):
+            for expected_guidance in ('created', 'unchanged'):
                 result = p.restore(self.t, str(destination), 'codex', 'native-project', 'Project B')
                 self.assertFalse(result['new_thread_created'])
+                self.assertEqual(result['project_guidance']['status'], expected_guidance)
             self.assertEqual(p.wb.config, config)
             self.assertEqual(p.wb.find(local)['doc']['body'], 'destination private')
             self.assertEqual(sum(d['doc']['meta']['kind'] == 'thread' for d in p.wb.catalog.values()), 2)

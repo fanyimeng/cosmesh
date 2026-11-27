@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Add project instructions when binding a local work directory. During installation or a version upgrade, check existing bindings on this device. Existing project rules are preserved. In directories with multiple bound Threads, agents select the one that matches the current task.
+- Add `thread project-guidance --dry-run` for preview and `thread project-guidance` for retries. The installation tutorial includes requests users can paste into an agent for macOS, Linux and Windows.
+
 ## 0.7.0
 
 Includes an offline Windows x64 / Python 3.12 client, named-recipient read access to the source Thread of a message, fixed and latest workspace revisions, and incremental work progress synchronization. The workspace actions require a compatible Hub.

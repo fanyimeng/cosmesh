@@ -1,25 +1,20 @@
-# CosMesh 0.7.0
+# CosMesh 0.7.1
 
 Keep records and registered files together in a Thread. When sending a message you can give named recipients ongoing read access to that work. Recipients can browse the latest progress or open the version you sent.
 
-## Install and update
+## Install or update with your agent
 
-On macOS or Linux, use the installation command supplied by your Hub maintainer. Existing stable-channel installations use `cosmesh client update`. For an offline package, unpack it and run `python3 install.py install --skills cosmesh`. To upgrade an existing installation run `python3 install.py upgrade` in the new package directory, keeping any custom `--prefix`.
+Paste one of these requests into Codex, OpenCode or DSH on the device where you work.
 
-The Windows client targets Windows 11 x64 with 64-bit CPython 3.12 and Git for Windows. Hub connections use OpenSSH. To get the offline package, replace HUB with your SSH alias and /path/to/releases with the release directory supplied by your maintainer. Run these commands in PowerShell.
+> Install CosMesh and its managed skill for my account. Use my Hub invitation or the offline package I provide. For local-only use, get a stable version from https://github.com/fanyimeng/cosmesh. Check this device's platform and any existing installation, then verify the CLI version and skill.
 
-```powershell
-scp HUB:/path/to/releases/cosmesh-0.7.0-win32-AMD64-py312.zip .
-Expand-Archive .\cosmesh-0.7.0-win32-AMD64-py312.zip -DestinationPath .
-Set-Location .\cosmesh-0.7.0-win32-AMD64-py312
-$prefix = Join-Path $env:LOCALAPPDATA 'CosMesh'
-py -3.12 -I -X utf8 .\install.py install --prefix "$prefix" --skills cosmesh
-& "$prefix\bin\cosmesh.cmd" guide show upgrade
-```
+> Update CosMesh and its managed skill to the stable release using my existing installation and software source. Verify the version, check which bound projects received the new instructions, and tell me if any project needs attention.
 
-For subsequent Windows updates, unpack the new package and run the installed `cosmesh.cmd client update --release DIR`. If you installed the earlier 0.7.0 preview, use a separate program prefix for the release and keep the data directory or `--root` for the work you want to continue. Native Windows validation of NTFS permissions and two-account OpenSSH operation remains pending.
+On macOS and Linux, use the Hub maintainer’s install script or a matching fixed package. An agent already running on the Hub’s Linux server uses that server’s bootstrap program. On Windows 11 x64, get the ZIP named in the maintainer’s `stable-windows.json`, verify the archive hash and use 64-bit CPython 3.12 and Git for Windows. The installed Windows launcher updates from an unpacked package. Local-only users can build from a published GitHub tag. [Installation tutorial](cosmesh/manual/install.md)
 
-First installation and version upgrades display the short usage guide. Reopen it with `cosmesh guide show upgrade`. Use the Windows launcher above wherever an example uses cosmesh.
+Starting with 0.7.1, binding a local project directory adds instructions to its `AGENTS.md`. Installation and version upgrades also check existing bindings on this device. Agents read the relevant Thread before starting work and append material progress. In a directory linked to several Threads, the agent selects the one for the task or asks which one to use. Existing project rules continue to apply. [Quick start](cosmesh/manual/upgrade.md)
+
+## Working with a Thread
 
 ```sh
 cosmesh thread find Agenda

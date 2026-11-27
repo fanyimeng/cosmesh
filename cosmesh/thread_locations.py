@@ -40,9 +40,10 @@ class ThreadLocations:
         if workdir:
             path.mkdir(mode=0o700, parents=True, exist_ok=True)
             self.wb.bind(tid, agent, str(path), session_id)
-            from .agent_projects import bind
-            bind(self.wb, tid, agent, project_name or path.name, project_id,
-                 kind='project' if project_name or project_id else 'directory', workdir=str(path))
+            from .agent_projects import bind, for_registration
+            destination = bind(self.wb, tid, agent, project_name or path.name, project_id,
+                               kind='project' if project_name or project_id else 'directory',
+                               workdir=str(path), guidance=False)
             self.wb.load()
             # Registration is an explicit part of restoring here; send this Thread only.
             result = self.synchronize(tid)
@@ -53,6 +54,10 @@ class ThreadLocations:
             result['files'] = materialize(self, self.view(tid), path)
         else:
             result['files'] = {'requested': False, 'state': 'not_requested', 'files': []}
+        if workdir:
+            # Apply after the user's registered files have been restored. An
+            # incoming AGENTS.md may already cover all or part of the guidance.
+            result['project_guidance'] = for_registration(self.wb, destination['project'])
         result['restoration'] = {'records': 'restored', 'files': result['files']['state'],
                                  'execution': 'registered_only' if workdir else 'not_registered'}
         result['assets'] = self.asset_status(self.view(tid))

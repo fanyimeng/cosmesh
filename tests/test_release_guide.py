@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
+from cosmesh import __version__
 from cosmesh.cli import main
 from cosmesh.guide import show
 from tools import release_installer as release
@@ -31,7 +32,7 @@ class ReleaseGuideTests(unittest.TestCase):
         (package / "install.py").write_bytes(Path(release.__file__).read_bytes())
         with zipfile.ZipFile(package / "cosmesh.whl", "w") as wheel:
             wheel.writestr("cosmesh/manual/upgrade.md", self.document)
-        meta = dict(version="0.7.0", wheel="cosmesh.whl", manifest_sha256="a" * 64, schema_write=[1, 2, 3])
+        meta = dict(version=__version__, wheel="cosmesh.whl", manifest_sha256="a" * 64, schema_write=[1, 2, 3])
 
         def apply(action, dry_run=False):
             return release.apply_release(prefix, package, action, [], self.root / "skills", dry_run)
@@ -46,11 +47,11 @@ class ReleaseGuideTests(unittest.TestCase):
             output = io.StringIO()
             with redirect_stdout(output):
                 release.emit(same, None, False)
-            self.assertIn("已核验当前版本 CosMesh 0.7.0", output.getvalue())
+            self.assertIn(f"已核验当前版本 CosMesh {__version__}", output.getvalue())
             self.assertNotIn("版本变化", output.getvalue())
             state = release.load_state(prefix)
-            state["versions"]["0.6.2"] = state["versions"].pop("0.7.0")
-            state["current"] = "0.6.2"
+            state["versions"]["0.7.0"] = state["versions"].pop(__version__)
+            state["current"] = "0.7.0"
             release.atomic(prefix / "state.json", release.json_bytes(state))
             self.assertNotIn("update_notice", apply("upgrade", True))
             updated = apply("upgrade")
@@ -68,7 +69,7 @@ class ReleaseGuideTests(unittest.TestCase):
                 self.assertEqual(notice["reopen"], "cosmesh guide show upgrade")
 
     def test_reopen_and_offline_update_in_plain_and_json_modes(self):
-        receipt = dict(to="0.7.0", update_notice=dict(kind="upgrade", version="0.7.0", document=self.document))
+        receipt = dict(to=__version__, update_notice=dict(kind="upgrade", version=__version__, document=self.document))
         with patch.dict(os.environ, COSMESH_DATA_DIR=str(self.root)):
             for argv in (["guide", "show", "upgrade"], ["client", "update", "--release", str(self.root)]):
                 with patch("cosmesh.client.update_release", return_value=receipt):
@@ -87,13 +88,13 @@ class ReleaseGuideTests(unittest.TestCase):
         prefix = self.root / "app"
         prefix.mkdir()
         # The application manager, gateway and saved client are independent roles.
-        first = dict(to="0.7.0", update_notice=dict(kind="install", document=self.document))
+        first = dict(to=__version__, update_notice=dict(kind="install", document=self.document))
         argv = ["bootstrap", "--prefix", str(prefix), "--skills-dir", str(self.root / "skills"),
                 "--ssh", "test-hub", "--source", "/srv/team/agent"]
         check = type("Reply", (), {"stdout": '{"ok":true}', "stderr": "", "returncode": 0})()
         with patch.object(sys, "argv", argv), patch.dict(os.environ, COSMESH_BOOTSTRAP_HUMAN="1"), \
                 patch.object(module, "materialize", return_value=self.root / "bundle"), \
-                patch.object(module.manager, "apply_release", side_effect=[first, {"to": "0.7.0"}]), \
+                patch.object(module.manager, "apply_release", side_effect=[first, {"to": __version__}]), \
                 patch.object(module.subprocess, "run", return_value=check):
             for index in range(2):
                 output = io.StringIO()
@@ -109,17 +110,17 @@ class ReleaseGuideTests(unittest.TestCase):
         command = ["ensure", "--prefix", str(prefix), "--releases-dir", str(self.root)]
         reply = json.dumps({"ok": True, "data": {"update_notice": {"document": self.document}}})
         checked = type("Reply", (), {"stdout": reply, "returncode": 0})()
-        with patch.object(remote_bootstrap, "release", return_value=(self.root, "0.7.0")), \
+        with patch.object(remote_bootstrap, "release", return_value=(self.root, __version__)), \
                 patch.object(remote_bootstrap.subprocess, "run", return_value=checked):
-            for installed in (None, "0.6.2", "0.7.0"):
+            for installed in (None, "0.7.0", __version__):
                 for human in (False, True):
-                    readings = [installed] if installed == "0.7.0" else [installed, "0.7.0"]
+                    readings = [installed] if installed == __version__ else [installed, __version__]
                     output = io.StringIO()
                     with patch.dict(os.environ, COSMESH_BOOTSTRAP_HUMAN="1" if human else "0"), \
                             patch.object(remote_bootstrap, "installed", side_effect=readings), redirect_stdout(output):
                         self.assertEqual(remote_bootstrap.main(command), 0)
                     if human:
-                        self.assertEqual(output.getvalue().count(self.document.rstrip()), int(installed != "0.7.0"))
+                        self.assertEqual(output.getvalue().count(self.document.rstrip()), int(installed != __version__))
                     else:
                         result = json.loads(output.getvalue())["data"]
-                        self.assertEqual("update_notice" in result, installed != "0.7.0")
+                        self.assertEqual("update_notice" in result, installed != __version__)
